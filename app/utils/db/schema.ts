@@ -103,10 +103,44 @@ export const knowledge = sqliteTable("knowledge", {
     .$defaultFn(() => new Date()),
 });
 
+// COURSES TABLE
+export const courses = sqliteTable("courses", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => uuidv4()),
+  name: text("name").notNull(),
+  description: text("description"),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  
+  // File storage fields
+  originalFileName: text("original_file_name").notNull(),
+  originalFileContent: text("original_file_content").notNull(),
+  fileType: text("file_type").notNull(), // 'gpx' or 'tcx'
+  geoJsonData: text("geojson_data", { mode: "json" }).notNull(),
+  
+  // Course metrics
+  totalDistance: integer("total_distance"), // in meters
+  elevationGain: integer("elevation_gain"), // in meters
+  elevationLoss: integer("elevation_loss"), // in meters
+  raceDate: integer("race_date", { mode: "timestamp" }), // optional race date
+  
+  // Timestamps
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
 // TYPE
 export type InsertUserSettings = InferInsertModel<typeof userSettings>;
 export type InsertGlobalSettings = InferInsertModel<typeof globalSettings>;
+export type InsertCourse = InferInsertModel<typeof courses>;
 
 export type SelectUserSettings = InferSelectModel<typeof userSettings>;
 export type SelectGlobalSettings = InferSelectModel<typeof globalSettings>;
 export type SelectKnowledge = InferSelectModel<typeof knowledge>;
+export type SelectCourse = InferSelectModel<typeof courses>;

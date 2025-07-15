@@ -8,6 +8,14 @@ const pages = {
     url: "/home", // Use a consistent URL for the home page, not the real path
     icon: "lucide:home",
   },
+  courses: {
+    name: "courses",
+    action: () => {
+      navigateTo("/courses");
+    },
+    url: "/courses",
+    icon: "lucide:map",
+  },
   settings: {
     name: "settings",
     action: () => {
