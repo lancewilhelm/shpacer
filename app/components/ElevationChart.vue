@@ -105,7 +105,7 @@ function processGeoJsonData() {
     const stats = getElevationStats(elevationPoints);
     console.log('Elevation Profile Debug:', {
       totalPoints: elevationPoints.length,
-      totalDistanceKm: (stats.totalDistance / 1000).toFixed(1),
+      totalDistanceKm: (stats.totalDistance / 1000).toFixed(2),
       firstPoint: elevationPoints[0],
       lastPoint: elevationPoints[elevationPoints.length - 1],
       originalFeatureCount: combinedGeoJson.features.length

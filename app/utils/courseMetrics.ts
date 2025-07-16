@@ -130,13 +130,13 @@ export function formatDistance(meters: number, unit: 'kilometers' | 'miles' = 'k
       const feet = meters * 3.28084;
       return `${Math.round(feet)}ft`;
     } else {
-      return `${miles.toFixed(1)}mi`;
+      return `${miles.toFixed(2)}mi`;
     }
   } else {
     if (meters < 1000) {
       return `${meters}m`;
     } else {
-      return `${(meters / 1000).toFixed(1)}km`;
+      return `${(meters / 1000).toFixed(2)}km`;
     }
   }
 }
@@ -152,6 +152,6 @@ export function formatElevation(meters: number, unit: 'meters' | 'feet' = 'meter
     const feet = meters * 3.28084;
     return `${Math.round(feet)}ft`;
   } else {
-    return `${meters}m`;
+    return `${Math.round(meters)}m`;
   }
 }

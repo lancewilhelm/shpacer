@@ -268,7 +268,7 @@ export function extractElevationProfile(
   
   console.log('Final elevation points created:', validatedPoints.length);
   console.log('Total track distance:', validatedPoints[validatedPoints.length - 1]?.distance || 0, 'meters');
-  console.log('Total track distance (km):', ((validatedPoints[validatedPoints.length - 1]?.distance || 0) / 1000).toFixed(1));
+  console.log('Total track distance (km):', ((validatedPoints[validatedPoints.length - 1]?.distance || 0) / 1000).toFixed(2));
   
   return validatedPoints;
 }

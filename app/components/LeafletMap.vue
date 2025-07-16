@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { formatDistance, formatElevation } from '~/utils/courseMetrics';
+
 // Only import Leaflet on client side to avoid SSR issues
 let L: typeof import("leaflet") | null = null;
 if (import.meta.client) {
@@ -35,6 +37,8 @@ const emit = defineEmits<{
   'map-hover': [event: { lat: number; lng: number; distance: number }];
   'map-leave': [];
 }>();
+
+const userSettingsStore = useUserSettingsStore();
 
 // Generate unique map ID
 const mapId = `map-${Math.random().toString(36).substr(2, 9)}`;
@@ -305,8 +309,8 @@ function updateElevationHoverMarker() {
 
     // Add tooltip with elevation info
     elevationHoverMarker.bindTooltip(
-      `Distance: ${(props.elevationHoverPoint.distance / 1000).toFixed(1)}km<br/>` +
-      `Elevation: ${props.elevationHoverPoint.elevation.toFixed(0)}m`,
+      `Distance: ${formatDistance(props.elevationHoverPoint.distance, userSettingsStore.settings.units.distance)}<br/>` +
+      `Elevation: ${formatElevation(props.elevationHoverPoint.elevation, userSettingsStore.settings.units.elevation)}`,
       {
         permanent: false,
         direction: 'top',
