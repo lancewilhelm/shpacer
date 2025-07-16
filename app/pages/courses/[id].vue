@@ -221,6 +221,23 @@ const geoJsonData = computed(() => {
   if (!course.value?.geoJsonData) return [];
   return [course.value.geoJsonData as GeoJSON.FeatureCollection];
 });
+
+// Elevation chart interaction state
+const elevationHoverPoint = ref<{
+  lat: number;
+  lng: number;
+  distance: number;
+  elevation: number;
+} | null>(null);
+
+// Handle elevation chart hover events
+function handleElevationHover(event: { lat: number; lng: number; distance: number; elevation: number }) {
+  elevationHoverPoint.value = event;
+}
+
+function handleElevationLeave() {
+  elevationHoverPoint.value = null;
+}
 </script>
 
 <template>
@@ -437,29 +454,44 @@ const geoJsonData = computed(() => {
           </div>
         </div>
 
-        <!-- Map Section -->
-        <div class="flex-1 p-4">
-          <div class="h-full rounded-lg overflow-hidden">
-            <ClientOnly>
-              <LeafletMap
-                :geo-json-data="geoJsonData"
-                :center="[0, 0]"
-                :zoom="10"
-              />
-              <template #fallback>
-                <div
-                  class="w-full h-full bg-(--sub-alt-color) rounded-lg flex items-center justify-center"
-                >
-                  <div class="text-center">
-                    <Icon
-                      name="svg-spinners:6-dots-scale"
-                      class="text-(--main-color) scale-200 mb-2"
-                    />
-                    <p class="text-(--sub-color)">Loading map...</p>
+        <!-- Content Section -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+          <!-- Elevation Chart Section -->
+          <div class="p-4 border-b border-(--sub-color)">
+            <h2 class="text-lg font-semibold text-(--main-color) mb-3">Elevation Profile</h2>
+            <ElevationChart
+              :geo-json-data="geoJsonData"
+              :height="200"
+              @elevation-hover="handleElevationHover"
+              @elevation-leave="handleElevationLeave"
+            />
+          </div>
+
+          <!-- Map Section -->
+          <div class="flex-1 p-4">
+            <div class="h-full rounded-lg overflow-hidden">
+              <ClientOnly>
+                <LeafletMap
+                  :geo-json-data="geoJsonData"
+                  :center="[0, 0]"
+                  :zoom="10"
+                  :elevation-hover-point="elevationHoverPoint"
+                />
+                <template #fallback>
+                  <div
+                    class="w-full h-full bg-(--sub-alt-color) rounded-lg flex items-center justify-center"
+                  >
+                    <div class="text-center">
+                      <Icon
+                        name="svg-spinners:6-dots-scale"
+                        class="text-(--main-color) scale-200 mb-2"
+                      />
+                      <p class="text-(--sub-color)">Loading map...</p>
+                    </div>
                   </div>
-                </div>
-              </template>
-            </ClientOnly>
+                </template>
+              </ClientOnly>
+            </div>
           </div>
         </div>
       </div>

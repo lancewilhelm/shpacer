@@ -15,6 +15,12 @@ interface Props {
     open?: boolean;
   }>;
   geoJsonData?: GeoJSON.FeatureCollection[];
+  elevationHoverPoint?: {
+    lat: number;
+    lng: number;
+    distance: number;
+    elevation: number;
+  } | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -22,6 +28,7 @@ const props = withDefaults(defineProps<Props>(), {
   zoom: 13,
   markers: () => [],
   geoJsonData: () => [],
+  elevationHoverPoint: null,
 });
 
 // Generate unique map ID
@@ -29,6 +36,7 @@ const mapId = `map-${Math.random().toString(36).substr(2, 9)}`;
 
 let map: L.Map | null = null;
 const geoJsonLayers: L.GeoJSON[] = [];
+let elevationHoverMarker: L.CircleMarker | null = null;
 const showGeoJsonModal = ref(false);
 const selectedGeoJson = ref<GeoJSON.FeatureCollection | null>(null);
 const selectedFeatureIndex = ref<number>(-1);
@@ -265,11 +273,57 @@ onMounted(() => {
   }, 100);
 });
 
+// Function to handle elevation hover point
+function updateElevationHoverMarker() {
+  if (!map || !L) return;
+
+  // Remove existing marker
+  if (elevationHoverMarker) {
+    map.removeLayer(elevationHoverMarker);
+    elevationHoverMarker = null;
+  }
+
+  // Add new marker if point exists
+  if (props.elevationHoverPoint) {
+    elevationHoverMarker = L.circleMarker(
+      [props.elevationHoverPoint.lat, props.elevationHoverPoint.lng],
+      {
+        radius: 8,
+        fillColor: '#ff4444',
+        color: '#ffffff',
+        weight: 2,
+        opacity: 1,
+        fillOpacity: 0.8,
+      }
+    ).addTo(map);
+
+    // Add tooltip with elevation info
+    elevationHoverMarker.bindTooltip(
+      `Distance: ${(props.elevationHoverPoint.distance / 1000).toFixed(1)}km<br/>` +
+      `Elevation: ${props.elevationHoverPoint.elevation.toFixed(0)}m`,
+      {
+        permanent: false,
+        direction: 'top',
+        offset: [0, -10]
+      }
+    );
+  }
+}
+
 // Watch for changes in geoJsonData
 watch(
   () => props.geoJsonData,
   () => {
     addGeoJsonLayers();
+  },
+  { deep: true }
+);
+
+// Watch for changes in elevation hover point
+watch(
+  () => props.elevationHoverPoint,
+  () => {
+    updateElevationHoverMarker();
   },
   { deep: true }
 );
