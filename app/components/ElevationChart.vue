@@ -13,6 +13,7 @@
     >
       <div class="tooltip-distance">{{ tooltipData.distance }}</div>
       <div class="tooltip-elevation">{{ tooltipData.elevation }}</div>
+      <div class="tooltip-grade">{{ tooltipData.grade }}</div>
     </div>
     
     <div v-if="!hasElevationData" class="no-elevation-warning">
@@ -24,7 +25,7 @@
 
 <script setup lang="ts">
 import * as d3 from 'd3';
-import { extractElevationProfile, interpolateAtDistance, getElevationStats, type ElevationPoint } from '~/utils/elevationProfile';
+import { extractElevationProfile, interpolateAtDistance, getElevationStats, calculateGradeAtDistance, type ElevationPoint } from '~/utils/elevationProfile';
 import { formatDistance, formatElevation } from '~/utils/courseMetrics';
 import { useUserSettingsStore } from '~/stores/userSettings';
 
@@ -39,6 +40,7 @@ interface ElevationHoverEvent {
   lng: number;
   distance: number;
   elevation: number;
+  grade: number;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -60,7 +62,8 @@ const tooltipVisible = ref(false);
 const tooltipFromMap = ref(false); // Track if tooltip is from map hover
 const tooltipData = ref({
   distance: '',
-  elevation: ''
+  elevation: '',
+  grade: ''
 });
 
 // Chart state
@@ -99,18 +102,6 @@ function processGeoJsonData() {
   };
 
   elevationPoints = extractElevationProfile(combinedGeoJson); // Use all points for maximum accuracy
-  
-  // Debug logging for large files
-  if (elevationPoints.length > 0) {
-    const stats = getElevationStats(elevationPoints);
-    console.log('Elevation Profile Debug:', {
-      totalPoints: elevationPoints.length,
-      totalDistanceKm: (stats.totalDistance / 1000).toFixed(2),
-      firstPoint: elevationPoints[0],
-      lastPoint: elevationPoints[elevationPoints.length - 1],
-      originalFeatureCount: combinedGeoJson.features.length
-    });
-  }
 }
 
 // Initialize the D3 chart
@@ -315,10 +306,15 @@ function handleMouseMove(event: MouseEvent) {
   const interpolatedPoint = interpolateAtDistance(elevationPoints, distance);
   
   if (interpolatedPoint) {
+    // Calculate grade at this distance
+    const grade = calculateGradeAtDistance(elevationPoints, interpolatedPoint.distance);
+    const gradeFormatted = grade >= 0 ? `+${grade.toFixed(1)}%` : `${grade.toFixed(1)}%`;
+    
     // Update tooltip data
     tooltipData.value = {
       distance: formatDistance(interpolatedPoint.distance, userSettingsStore.settings.units.distance),
-      elevation: formatElevation(interpolatedPoint.elevation, userSettingsStore.settings.units.elevation)
+      elevation: formatElevation(interpolatedPoint.elevation, userSettingsStore.settings.units.elevation),
+      grade: gradeFormatted
     };
 
     // Position tooltip
@@ -345,7 +341,8 @@ function handleMouseMove(event: MouseEvent) {
       lat: interpolatedPoint.lat,
       lng: interpolatedPoint.lng,
       distance: interpolatedPoint.distance,
-      elevation: interpolatedPoint.elevation
+      elevation: interpolatedPoint.elevation,
+      grade: grade
     });
   }
 }
@@ -384,10 +381,15 @@ function updateMapHoverCrosshair() {
     const interpolatedPoint = interpolateAtDistance(elevationPoints, props.mapHoverDistance);
     
     if (interpolatedPoint) {
+      // Calculate grade at this distance
+      const grade = calculateGradeAtDistance(elevationPoints, interpolatedPoint.distance);
+      const gradeFormatted = grade >= 0 ? `+${grade.toFixed(1)}%` : `${grade.toFixed(1)}%`;
+      
       // Update tooltip data
       tooltipData.value = {
         distance: formatDistance(interpolatedPoint.distance, userSettingsStore.settings.units.distance),
-        elevation: formatElevation(interpolatedPoint.elevation, userSettingsStore.settings.units.elevation)
+        elevation: formatElevation(interpolatedPoint.elevation, userSettingsStore.settings.units.elevation),
+        grade: gradeFormatted
       };
 
       // Position tooltip at the map hover crosshair
@@ -512,6 +514,12 @@ onMounted(() => {
 .tooltip-elevation {
   color: var(--sub-color);
   font-size: 0.7rem;
+}
+
+.tooltip-grade {
+  color: var(--accent-color);
+  font-size: 0.7rem;
+  font-weight: 500;
 }
 
 .no-elevation-warning {

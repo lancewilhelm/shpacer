@@ -22,6 +22,7 @@ interface Props {
     lng: number;
     distance: number;
     elevation: number;
+    grade: number;
   } | null;
 }
 
@@ -308,9 +309,14 @@ function updateElevationHoverMarker() {
     ).addTo(map);
 
     // Add tooltip with elevation info
+    const gradeFormatted = props.elevationHoverPoint.grade >= 0 
+      ? `+${props.elevationHoverPoint.grade.toFixed(1)}%` 
+      : `${props.elevationHoverPoint.grade.toFixed(1)}%`;
+    
     elevationHoverMarker.bindTooltip(
       `Distance: ${formatDistance(props.elevationHoverPoint.distance, userSettingsStore.settings.units.distance)}<br/>` +
-      `Elevation: ${formatElevation(props.elevationHoverPoint.elevation, userSettingsStore.settings.units.elevation)}`,
+      `Elevation: ${formatElevation(props.elevationHoverPoint.elevation, userSettingsStore.settings.units.elevation)}<br/>` +
+      `Grade: ${gradeFormatted}`,
       {
         permanent: false,
         direction: 'top',

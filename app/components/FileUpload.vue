@@ -214,7 +214,7 @@ function copyGeoJsonToClipboard() {
     const jsonString = JSON.stringify(uploadedFile.value.geoJson, null, 2)
     navigator.clipboard.writeText(jsonString).then(() => {
       // Could add a toast notification here
-      console.log('GeoJSON copied to clipboard')
+      console.debug('GeoJSON copied to clipboard')
     }).catch(err => {
       console.error('Failed to copy GeoJSON:', err)
     })

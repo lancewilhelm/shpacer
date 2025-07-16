@@ -228,12 +228,13 @@ const elevationHoverPoint = ref<{
   lng: number;
   distance: number;
   elevation: number;
+  grade: number;
 } | null>(null);
 
 const mapHoverDistance = ref<number | null>(null);
 
 // Handle elevation chart hover events
-function handleElevationHover(event: { lat: number; lng: number; distance: number; elevation: number }) {
+function handleElevationHover(event: { lat: number; lng: number; distance: number; elevation: number; grade: number }) {
   elevationHoverPoint.value = event;
 }
 

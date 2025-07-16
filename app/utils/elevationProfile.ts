@@ -378,3 +378,109 @@ export function getElevationStats(elevationPoints: ElevationPoint[]) {
     elevationLoss
   };
 }
+
+/**
+ * Calculate grade percentage at a specific distance using a window of points
+ * @param elevationPoints Array of elevation points
+ * @param targetDistance Distance to calculate grade at
+ * @param windowDistance Distance window around target point (in meters)
+ * @returns Grade percentage (-100 to 100, where positive is uphill)
+ */
+export function calculateGradeAtDistance(
+  elevationPoints: ElevationPoint[],
+  targetDistance: number,
+  windowDistance: number = 50 // 50 meter window by default
+): number {
+  if (elevationPoints.length < 2) return 0;
+  
+  // Find points within the window around the target distance
+  const halfWindow = windowDistance / 2;
+  const startDistance = targetDistance - halfWindow;
+  const endDistance = targetDistance + halfWindow;
+  
+  // Find the points that bracket our window
+  let startPoint: ElevationPoint | null = null;
+  let endPoint: ElevationPoint | null = null;
+  
+  // Find the start point (interpolate if needed)
+  for (let i = 0; i < elevationPoints.length - 1; i++) {
+    const currentPoint = elevationPoints[i];
+    const nextPoint = elevationPoints[i + 1];
+    
+    if (!currentPoint || !nextPoint) continue;
+    
+    if (startDistance >= currentPoint.distance && startDistance <= nextPoint.distance) {
+      // Interpolate the start point
+      const ratio = (startDistance - currentPoint.distance) / (nextPoint.distance - currentPoint.distance);
+      startPoint = {
+        distance: startDistance,
+        elevation: currentPoint.elevation + ratio * (nextPoint.elevation - currentPoint.elevation),
+        lat: currentPoint.lat + ratio * (nextPoint.lat - currentPoint.lat),
+        lng: currentPoint.lng + ratio * (nextPoint.lng - currentPoint.lng),
+        originalIndex: -1
+      };
+      break;
+    }
+  }
+  
+  // Find the end point (interpolate if needed)
+  for (let i = 0; i < elevationPoints.length - 1; i++) {
+    const currentPoint = elevationPoints[i];
+    const nextPoint = elevationPoints[i + 1];
+    
+    if (!currentPoint || !nextPoint) continue;
+    
+    if (endDistance >= currentPoint.distance && endDistance <= nextPoint.distance) {
+      // Interpolate the end point
+      const ratio = (endDistance - currentPoint.distance) / (nextPoint.distance - currentPoint.distance);
+      endPoint = {
+        distance: endDistance,
+        elevation: currentPoint.elevation + ratio * (nextPoint.elevation - currentPoint.elevation),
+        lat: currentPoint.lat + ratio * (nextPoint.lat - currentPoint.lat),
+        lng: currentPoint.lng + ratio * (nextPoint.lng - currentPoint.lng),
+        originalIndex: -1
+      };
+      break;
+    }
+  }
+  
+  // Fall back to actual points if we can't interpolate
+  if (!startPoint) {
+    // Use the closest point at or before startDistance
+    for (let i = 0; i < elevationPoints.length; i++) {
+      const point = elevationPoints[i];
+      if (point && point.distance >= startDistance) {
+        startPoint = elevationPoints[Math.max(0, i - 1)] || point;
+        break;
+      }
+    }
+    if (!startPoint) startPoint = elevationPoints[0] || null;
+  }
+  
+  if (!endPoint) {
+    // Use the closest point at or after endDistance
+    for (let i = elevationPoints.length - 1; i >= 0; i--) {
+      const point = elevationPoints[i];
+      if (point && point.distance <= endDistance) {
+        endPoint = elevationPoints[Math.min(elevationPoints.length - 1, i + 1)] || point;
+        break;
+      }
+    }
+    if (!endPoint) endPoint = elevationPoints[elevationPoints.length - 1] || null;
+  }
+  
+  if (!startPoint || !endPoint || startPoint.distance === endPoint.distance) {
+    return 0;
+  }
+  
+  // Calculate grade: (rise / run) * 100
+  const rise = endPoint.elevation - startPoint.elevation;
+  const run = endPoint.distance - startPoint.distance;
+  
+  if (run === 0) return 0;
+  
+  const grade = (rise / run) * 100;
+  
+  // Clamp to reasonable range
+  return Math.max(-100, Math.min(100, grade));
+}

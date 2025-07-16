@@ -1,6 +1,5 @@
 import fuzzysort from "fuzzysort";
 import themesList from "~/assets/json/themes.json";
-import { userSettings } from "~/utils/db/schema";
 
 interface Theme {
   name: string;
