@@ -230,6 +230,8 @@ const elevationHoverPoint = ref<{
   elevation: number;
 } | null>(null);
 
+const mapHoverDistance = ref<number | null>(null);
+
 // Handle elevation chart hover events
 function handleElevationHover(event: { lat: number; lng: number; distance: number; elevation: number }) {
   elevationHoverPoint.value = event;
@@ -237,6 +239,15 @@ function handleElevationHover(event: { lat: number; lng: number; distance: numbe
 
 function handleElevationLeave() {
   elevationHoverPoint.value = null;
+}
+
+// Handle map hover events
+function handleMapHover(event: { lat: number; lng: number; distance: number }) {
+  mapHoverDistance.value = event.distance;
+}
+
+function handleMapLeave() {
+  mapHoverDistance.value = null;
 }
 </script>
 
@@ -462,6 +473,7 @@ function handleElevationLeave() {
             <ElevationChart
               :geo-json-data="geoJsonData"
               :height="200"
+              :map-hover-distance="mapHoverDistance"
               @elevation-hover="handleElevationHover"
               @elevation-leave="handleElevationLeave"
             />
@@ -476,6 +488,8 @@ function handleElevationLeave() {
                   :center="[0, 0]"
                   :zoom="10"
                   :elevation-hover-point="elevationHoverPoint"
+                  @map-hover="handleMapHover"
+                  @map-leave="handleMapLeave"
                 />
                 <template #fallback>
                   <div

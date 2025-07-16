@@ -31,15 +31,96 @@ const props = withDefaults(defineProps<Props>(), {
   elevationHoverPoint: null,
 });
 
+const emit = defineEmits<{
+  'map-hover': [event: { lat: number; lng: number; distance: number }];
+  'map-leave': [];
+}>();
+
 // Generate unique map ID
 const mapId = `map-${Math.random().toString(36).substr(2, 9)}`;
 
 let map: L.Map | null = null;
 const geoJsonLayers: L.GeoJSON[] = [];
 let elevationHoverMarker: L.CircleMarker | null = null;
-const showGeoJsonModal = ref(false);
-const selectedGeoJson = ref<GeoJSON.FeatureCollection | null>(null);
-const selectedFeatureIndex = ref<number>(-1);
+
+// Function to handle track hover and calculate distance along route
+function handleTrackHover(e: L.LeafletMouseEvent, geoJson: GeoJSON.FeatureCollection) {
+  const hoverLat = e.latlng.lat;
+  const hoverLng = e.latlng.lng;
+
+  // Find the closest point on the track and calculate cumulative distance
+  let closestDistance = Infinity;
+  let closestPointDistance = 0;
+  let cumulativeDistance = 0;
+
+  // Extract coordinates from the GeoJSON
+  const extractCoordinates = (geometry: GeoJSON.Geometry): number[][] => {
+    const coords: number[][] = [];
+    
+    if (geometry.type === 'LineString') {
+      coords.push(...geometry.coordinates);
+    } else if (geometry.type === 'MultiLineString') {
+      for (const line of geometry.coordinates) {
+        coords.push(...line);
+      }
+    } else if (geometry.type === 'Point') {
+      coords.push(geometry.coordinates as number[]);
+    }
+    
+    return coords;
+  };
+
+  // Process all features in the GeoJSON
+  for (const feature of geoJson.features) {
+    const coordinates = extractCoordinates(feature.geometry);
+    
+    for (let i = 0; i < coordinates.length; i++) {
+      const coord = coordinates[i];
+      if (!coord || coord.length < 2) continue;
+      
+      const [lon, lat] = coord;
+      if (typeof lon !== 'number' || typeof lat !== 'number') continue;
+
+      // Calculate distance from hover point to this coordinate
+      const distance = Math.sqrt(
+        Math.pow(lat - hoverLat, 2) + Math.pow(lon - hoverLng, 2)
+      );
+
+      // If this is the closest point so far
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestPointDistance = cumulativeDistance;
+      }
+
+      // Calculate cumulative distance for next iteration
+      if (i > 0) {
+        const prevCoord = coordinates[i - 1];
+        if (prevCoord && prevCoord.length >= 2) {
+          const [prevLon, prevLat] = prevCoord;
+          if (typeof prevLon === 'number' && typeof prevLat === 'number') {
+            // Haversine formula for accurate distance
+            const R = 6371000; // Earth's radius in meters
+            const dLat = (lat - prevLat) * Math.PI / 180;
+            const dLon = (lon - prevLon) * Math.PI / 180;
+            const a = 
+              Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(prevLat * Math.PI / 180) * Math.cos(lat * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            cumulativeDistance += R * c;
+          }
+        }
+      }
+    }
+  }
+
+  // Emit the hover event with the calculated distance
+  emit('map-hover', {
+    lat: hoverLat,
+    lng: hoverLng,
+    distance: closestPointDistance
+  });
+}
 
 // Function to add GeoJSON layers
 function addGeoJsonLayers() {
@@ -53,23 +134,38 @@ function addGeoJsonLayers() {
 
   // Add new GeoJSON layers
   props.geoJsonData.forEach((geoJson, index) => {
-    const layer = L.geoJSON(geoJson, {
+    // Create the visible track layer
+    const visibleLayer = L.geoJSON(geoJson, {
       style: {
         color: getTrackColor(index),
-        weight: 3,
+        weight: 3, // Visual weight
         opacity: 0.8,
         fillOpacity: 0.1,
       },
+    }).addTo(map!);
+
+    // Create an invisible buffer layer for easier hovering
+    const bufferLayer = L.geoJSON(geoJson, {
+      style: {
+        color: 'transparent',
+        weight: 15, // Large invisible buffer for hover detection
+        opacity: 0,
+        fillOpacity: 0,
+      },
       onEachFeature: (feature, layer) => {
-        // Add popup with track information
-        if (feature.properties) {
-          const popupContent = createPopupContent(feature.properties, index);
-          layer.bindPopup(popupContent);
-        }
+        // Add hover events for track interaction
+        layer.on('mousemove', (e: L.LeafletMouseEvent) => {
+          handleTrackHover(e, geoJson);
+        });
+
+        layer.on('mouseout', () => {
+          emit('map-leave');
+        });
       },
     }).addTo(map!);
 
-    geoJsonLayers.push(layer);
+    geoJsonLayers.push(visibleLayer);
+    geoJsonLayers.push(bufferLayer);
   });
 
   // Fit bounds to show all tracks
@@ -96,101 +192,11 @@ function getTrackColor(index: number): string {
   return colors[index % colors.length] || "#ff0000";
 }
 
-// Function to create popup content from feature properties
-function createPopupContent(
-  properties: Record<string, unknown>,
-  geoJsonIndex: number
-): string {
-  let content = '<div class="track-popup">';
-
-  if (properties.name && typeof properties.name === "string") {
-    content += `<h3 style="margin: 0 0 8px 0; font-weight: bold;">${properties.name}</h3>`;
-  }
-
-  if (
-    (properties.desc || properties.description) &&
-    typeof (properties.desc || properties.description) === "string"
-  ) {
-    content += `<p style="margin: 0 0 8px 0;">${
-      properties.desc || properties.description
-    }</p>`;
-  }
-
-  if (
-    properties.time &&
-    (typeof properties.time === "string" || typeof properties.time === "number")
-  ) {
-    content += `<p style="margin: 0; font-size: 0.9em; color: #666;"><strong>Time:</strong> ${new Date(
-      properties.time
-    ).toLocaleString()}</p>`;
-  }
-
-  if (properties.distance && typeof properties.distance === "number") {
-    content += `<p style="margin: 0; font-size: 0.9em; color: #666;"><strong>Distance:</strong> ${(
-      properties.distance / 1000
-    ).toFixed(2)} km</p>`;
-  }
-
-  // Add a button to view GeoJSON
-  content += `<div style="margin-top: 8px; text-align: center;">
-    <button 
-      onclick="window.viewGeoJsonFromMap(${geoJsonIndex})"
-      style="
-        background: #3b82f6; 
-        color: white; 
-        border: none; 
-        padding: 4px 8px; 
-        border-radius: 4px; 
-        cursor: pointer;
-        font-size: 12px;
-      "
-    >
-      View GeoJSON
-    </button>
-  </div>`;
-
-  content += "</div>";
-  return content;
-}
-
-function viewGeoJsonFromMap(geoJsonIndex: number) {
-  if (props.geoJsonData[geoJsonIndex]) {
-    selectedGeoJson.value = props.geoJsonData[geoJsonIndex];
-    selectedFeatureIndex.value = geoJsonIndex;
-    showGeoJsonModal.value = true;
-  }
-}
-
-function closeGeoJsonModal() {
-  showGeoJsonModal.value = false;
-  selectedGeoJson.value = null;
-  selectedFeatureIndex.value = -1;
-}
-
-function copyGeoJsonToClipboard() {
-  if (selectedGeoJson.value) {
-    const jsonString = JSON.stringify(selectedGeoJson.value, null, 2);
-    navigator.clipboard
-      .writeText(jsonString)
-      .then(() => {
-        console.log("GeoJSON copied to clipboard");
-      })
-      .catch((err) => {
-        console.error("Failed to copy GeoJSON:", err);
-      });
-  }
-}
-
 onMounted(() => {
   if (!L) return; // Guard against SSR
   
   // Initialize the map
   map = L.map(mapId).setView(props.center, props.zoom);
-
-  // Expose viewGeoJsonFromMap function globally for popup button
-  (
-    window as typeof window & { viewGeoJsonFromMap: (index: number) => void }
-  ).viewGeoJsonFromMap = viewGeoJsonFromMap;
 
   // OSM tiles
   const osm = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -333,52 +339,9 @@ onUnmounted(() => {
     map.remove();
     map = null;
   }
-  // Clean up global function
-  if (typeof window !== "undefined") {
-    delete (
-      window as typeof window & { viewGeoJsonFromMap?: (index: number) => void }
-    ).viewGeoJsonFromMap;
-  }
 });
 </script>
 
 <template>
   <div :id="mapId" class="w-full h-full rounded-lg shadow-lg z-0" />
-
-  <!-- GeoJSON Modal -->
-  <ModalWindow :open="showGeoJsonModal" @close="closeGeoJsonModal">
-    <div class="max-w-4xl w-full">
-      <div class="flex items-center justify-between mb-4">
-        <div class="text-md font-semibold text-(--main-color)">
-          GeoJSON Data - Track {{ selectedFeatureIndex + 1 }}
-        </div>
-        <div class="flex items-center gap-2">
-          <button
-            class="px-3 py-1 bg-(--main-color) text-(--bg-color) rounded hover:opacity-80 transition-opacity text-sm"
-            @click="copyGeoJsonToClipboard"
-          >
-            <Icon
-              name="lucide:copy"
-              class="h-4 w-4 inline mr-1"
-            />
-            Copy
-          </button>
-          <button
-            class="text-(--sub-color) hover:text-(--main-color) transition-colors"
-            @click="closeGeoJsonModal"
-          >
-            <Icon name="heroicons:x-mark" class="h-5 w-5" />
-          </button>
-        </div>
-      </div>
-
-      <div
-        class="bg-(--bg-color) border border-(--sub-color) rounded-lg p-4 max-h-96 overflow-auto"
-      >
-        <pre class="text-sm text-(--main-color) whitespace-pre-wrap">{{
-          selectedGeoJson ? JSON.stringify(selectedGeoJson, null, 2) : ""
-        }}</pre>
-      </div>
-    </div>
-  </ModalWindow>
 </template>

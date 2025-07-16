@@ -1,6 +1,20 @@
 <template>
   <div class="elevation-chart-container">
     <div ref="chartContainer" class="elevation-chart" />
+    
+    <!-- Custom tooltip -->
+    <div 
+      ref="tooltip" 
+      class="elevation-tooltip"
+      :class="{ 
+        'tooltip-visible': tooltipVisible,
+        'tooltip-from-map': tooltipFromMap 
+      }"
+    >
+      <div class="tooltip-distance">{{ tooltipData.distance }}</div>
+      <div class="tooltip-elevation">{{ tooltipData.elevation }}</div>
+    </div>
+    
     <div v-if="!hasElevationData" class="no-elevation-warning">
       <Icon name="heroicons:exclamation-triangle" class="h-4 w-4" />
       <span>No elevation data available for this course</span>
@@ -17,6 +31,7 @@ import { useUserSettingsStore } from '~/stores/userSettings';
 interface Props {
   geoJsonData: GeoJSON.FeatureCollection[];
   height?: number;
+  mapHoverDistance?: number | null;
 }
 
 interface ElevationHoverEvent {
@@ -28,6 +43,7 @@ interface ElevationHoverEvent {
 
 const props = withDefaults(defineProps<Props>(), {
   height: 200,
+  mapHoverDistance: null,
 });
 
 const emit = defineEmits<{
@@ -37,6 +53,15 @@ const emit = defineEmits<{
 
 const userSettingsStore = useUserSettingsStore();
 const chartContainer = ref<HTMLElement>();
+const tooltip = ref<HTMLElement>();
+
+// Tooltip state
+const tooltipVisible = ref(false);
+const tooltipFromMap = ref(false); // Track if tooltip is from map hover
+const tooltipData = ref({
+  distance: '',
+  elevation: ''
+});
 
 // Chart state
 let svg: d3.Selection<SVGSVGElement, unknown, null, undefined> | null = null;
@@ -44,6 +69,7 @@ let xScale: d3.ScaleLinear<number, number> | null = null;
 let yScale: d3.ScaleLinear<number, number> | null = null;
 let elevationPoints: ElevationPoint[] = [];
 let crosshair: d3.Selection<SVGLineElement, unknown, null, undefined> | null = null;
+let mapHoverCrosshair: d3.Selection<SVGLineElement, unknown, null, undefined> | null = null;
 
 // Computed properties
 const hasElevationData = computed(() => {
@@ -72,7 +98,19 @@ function processGeoJsonData() {
     features: combinedFeatures
   };
 
-  elevationPoints = extractElevationProfile(combinedGeoJson);
+  elevationPoints = extractElevationProfile(combinedGeoJson); // Use all points for maximum accuracy
+  
+  // Debug logging for large files
+  if (elevationPoints.length > 0) {
+    const stats = getElevationStats(elevationPoints);
+    console.log('Elevation Profile Debug:', {
+      totalPoints: elevationPoints.length,
+      totalDistanceKm: (stats.totalDistance / 1000).toFixed(1),
+      firstPoint: elevationPoints[0],
+      lastPoint: elevationPoints[elevationPoints.length - 1],
+      originalFeatureCount: combinedGeoJson.features.length
+    });
+  }
 }
 
 // Initialize the D3 chart
@@ -219,6 +257,18 @@ function initChart() {
     .style('opacity', 0)
     .style('pointer-events', 'none');
 
+  // Add map hover crosshair line (initially hidden)
+  mapHoverCrosshair = g.append('line')
+    .attr('class', 'map-hover-crosshair')
+    .attr('x1', 0)
+    .attr('x2', 0)
+    .attr('y1', 0)
+    .attr('y2', innerHeight)
+    .style('stroke', 'var(--main-color)')
+    .style('stroke-width', 1)
+    .style('opacity', 0)
+    .style('pointer-events', 'none')
+
   // Add invisible overlay for mouse interactions
   g.append('rect')
     .attr('class', 'overlay')
@@ -250,7 +300,7 @@ function initChart() {
 
 // Handle mouse movement over the chart
 function handleMouseMove(event: MouseEvent) {
-  if (!xScale || !crosshair) return;
+  if (!xScale || !crosshair || !tooltip.value) return;
 
   const [mouseX] = d3.pointer(event);
   const distance = xScale.invert(mouseX);
@@ -265,6 +315,32 @@ function handleMouseMove(event: MouseEvent) {
   const interpolatedPoint = interpolateAtDistance(elevationPoints, distance);
   
   if (interpolatedPoint) {
+    // Update tooltip data
+    tooltipData.value = {
+      distance: formatDistance(interpolatedPoint.distance, userSettingsStore.settings.units.distance),
+      elevation: formatElevation(interpolatedPoint.elevation, userSettingsStore.settings.units.elevation)
+    };
+
+    // Position tooltip
+    const containerRect = chartContainer.value!.getBoundingClientRect();
+    const tooltipEl = tooltip.value;
+    const margin = { top: 20, right: 30, bottom: 40, left: 60 };
+    
+    // Calculate position relative to chart area
+    const chartX = mouseX + margin.left;
+    const chartY = margin.top + 10; // Fixed position near the top
+    
+    // Ensure tooltip doesn't go off-screen
+    const tooltipWidth = tooltipEl.offsetWidth;
+    const finalX = Math.min(chartX, containerRect.width - tooltipWidth - 10);
+    
+    tooltipEl.style.left = `${finalX}px`;
+    tooltipEl.style.top = `${chartY}px`;
+    
+    // Show tooltip
+    tooltipVisible.value = true;
+    tooltipFromMap.value = false; // This is from chart hover
+
     emit('elevation-hover', {
       lat: interpolatedPoint.lat,
       lng: interpolatedPoint.lng,
@@ -278,10 +354,72 @@ function handleMouseMove(event: MouseEvent) {
 function handleMouseLeave() {
   if (!crosshair) return;
 
-  // Hide crosshair
+  // Hide chart crosshair
   crosshair.style('opacity', 0);
+  
+  // Only hide tooltip if map crosshair is also not visible
+  if (!mapHoverCrosshair || mapHoverCrosshair.style('opacity') === '0') {
+    tooltipVisible.value = false;
+    tooltipFromMap.value = false;
+  } else {
+    // If map crosshair is still visible, mark tooltip as from map
+    tooltipFromMap.value = true;
+  }
 
   emit('elevation-leave');
+}
+
+// Update map hover crosshair position
+function updateMapHoverCrosshair() {
+  if (!mapHoverCrosshair || !xScale || !tooltip.value) return;
+
+  if (props.mapHoverDistance !== null && props.mapHoverDistance !== undefined) {
+    const x = xScale(props.mapHoverDistance);
+    mapHoverCrosshair
+      .attr('x1', x)
+      .attr('x2', x)
+      .style('opacity', 0.7); // Slightly less opacity to distinguish from chart hover
+
+    // Show tooltip for map hover as well
+    const interpolatedPoint = interpolateAtDistance(elevationPoints, props.mapHoverDistance);
+    
+    if (interpolatedPoint) {
+      // Update tooltip data
+      tooltipData.value = {
+        distance: formatDistance(interpolatedPoint.distance, userSettingsStore.settings.units.distance),
+        elevation: formatElevation(interpolatedPoint.elevation, userSettingsStore.settings.units.elevation)
+      };
+
+      // Position tooltip at the map hover crosshair
+      const containerRect = chartContainer.value!.getBoundingClientRect();
+      const tooltipEl = tooltip.value;
+      const margin = { top: 20, right: 30, bottom: 40, left: 60 };
+      
+      // Calculate position relative to chart area
+      const chartX = x + margin.left;
+      const chartY = margin.top + 10; // Fixed position near the top
+      
+      // Ensure tooltip doesn't go off-screen
+      const tooltipWidth = tooltipEl.offsetWidth;
+      const finalX = Math.min(chartX, containerRect.width - tooltipWidth - 10);
+      
+      tooltipEl.style.left = `${finalX}px`;
+      tooltipEl.style.top = `${chartY}px`;
+      
+      // Show tooltip with slightly less opacity to distinguish from chart hover
+      tooltipVisible.value = true;
+      tooltipFromMap.value = true; // This is from map hover
+    }
+  } else {
+    mapHoverCrosshair.style('opacity', 0);
+    
+    // Hide tooltip when not hovering over map
+    // Only hide if we're not currently hovering over the chart itself
+    if (!crosshair || crosshair.style('opacity') === '0') {
+      tooltipVisible.value = false;
+      tooltipFromMap.value = false;
+    }
+  }
 }
 
 // Resize handler
@@ -310,6 +448,11 @@ watch(() => userSettingsStore.settings.units, () => {
   }
 }, { deep: true });
 
+// Watch for map hover distance changes
+watch(() => props.mapHoverDistance, () => {
+  updateMapHoverCrosshair();
+});
+
 // Setup resize observer
 onMounted(() => {
   if (chartContainer.value) {
@@ -334,6 +477,41 @@ onMounted(() => {
 .elevation-chart {
   width: 100%;
   min-height: 200px;
+}
+
+.elevation-tooltip {
+  position: absolute;
+  background: var(--bg-color);
+  border: 1px solid var(--main-color);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 10;
+  min-width: 120px;
+}
+
+.elevation-tooltip.tooltip-visible {
+  opacity: 0.9;
+}
+
+.elevation-tooltip.tooltip-from-map {
+  opacity: 0.8;
+  border-style: dashed;
+}
+
+.tooltip-distance {
+  font-weight: 600;
+  color: var(--main-color);
+  margin-bottom: 2px;
+}
+
+.tooltip-elevation {
+  color: var(--sub-color);
+  font-size: 0.7rem;
 }
 
 .no-elevation-warning {
