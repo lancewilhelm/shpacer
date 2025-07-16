@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { formatDistance, formatElevation } from '~/utils/courseMetrics';
+import type { Waypoint } from '~/utils/waypoints';
+import { getWaypointColor } from '~/utils/waypoints';
 
 // Only import Leaflet on client side to avoid SSR issues
 let L: typeof import("leaflet") | null = null;
@@ -17,6 +19,8 @@ interface Props {
     open?: boolean;
   }>;
   geoJsonData?: GeoJSON.FeatureCollection[];
+  waypoints?: Waypoint[];
+  selectedWaypoint?: Waypoint | null;
   elevationHoverPoint?: {
     lat: number;
     lng: number;
@@ -31,12 +35,15 @@ const props = withDefaults(defineProps<Props>(), {
   zoom: 13,
   markers: () => [],
   geoJsonData: () => [],
+  waypoints: () => [],
+  selectedWaypoint: null,
   elevationHoverPoint: null,
 });
 
 const emit = defineEmits<{
   'map-hover': [event: { lat: number; lng: number; distance: number }];
   'map-leave': [];
+  'waypoint-click': [waypoint: Waypoint];
 }>();
 
 const userSettingsStore = useUserSettingsStore();
@@ -46,6 +53,7 @@ const mapId = `map-${Math.random().toString(36).substr(2, 9)}`;
 
 let map: L.Map | null = null;
 const geoJsonLayers: L.GeoJSON[] = [];
+const waypointMarkers: L.CircleMarker[] = [];
 let elevationHoverMarker: L.CircleMarker | null = null;
 
 // Function to handle track hover and calculate distance along route
@@ -147,6 +155,14 @@ function addGeoJsonLayers() {
         opacity: 0.8,
         fillOpacity: 0.1,
       },
+      pointToLayer: () => {
+        // Return null to prevent automatic point markers
+        return null as unknown as L.Layer;
+      },
+      filter: (feature) => {
+        // Only show LineString and MultiLineString, filter out Point features
+        return feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiLineString';
+      },
     }).addTo(map!);
 
     // Create an invisible buffer layer for easier hovering
@@ -156,6 +172,10 @@ function addGeoJsonLayers() {
         weight: 15, // Large invisible buffer for hover detection
         opacity: 0,
         fillOpacity: 0,
+      },
+      filter: (feature) => {
+        // Only show LineString and MultiLineString, filter out Point features
+        return feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiLineString';
       },
       onEachFeature: (feature, layer) => {
         // Add hover events for track interaction
@@ -195,6 +215,105 @@ function getTrackColor(index: number): string {
     "#80ff00",
   ];
   return colors[index % colors.length] || "#ff0000";
+}
+
+// Function to create custom waypoint icon
+function createWaypointIcon(waypoint: Waypoint, isSelected: boolean = false): L.DivIcon | null {
+  if (!L) return null;
+
+  const color = getWaypointColor(waypoint.type);
+  const size = isSelected ? 16 : 12;
+  const borderWidth = isSelected ? 3 : 2;
+
+  return L.divIcon({
+    html: `
+      <div style="
+        width: ${size * 2}px;
+        height: ${size * 2}px;
+        background-color: ${color};
+        border: ${borderWidth}px solid white;
+        border-radius: 50%;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+      ">
+        <div style="
+          width: ${size}px;
+          height: ${size}px;
+          background-color: white;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        ">
+          <div style="
+            width: ${size - 4}px;
+            height: ${size - 4}px;
+            background-color: ${color};
+            border-radius: 50%;
+          "></div>
+        </div>
+      </div>
+    `,
+    className: 'waypoint-marker',
+    iconSize: [size * 2, size * 2],
+    iconAnchor: [size, size],
+  });
+}
+
+// Function to add waypoint markers
+function addWaypointMarkers() {
+  if (!map || !L) return;
+
+  // Clear existing waypoint markers
+  waypointMarkers.forEach((marker) => {
+    map!.removeLayer(marker);
+  });
+  waypointMarkers.length = 0;
+
+  // Add new waypoint markers
+  props.waypoints.forEach((waypoint) => {
+    const isSelected = props.selectedWaypoint?.id === waypoint.id;
+    const icon = createWaypointIcon(waypoint, isSelected);
+    
+    if (!icon) return;
+
+    const marker = L.circleMarker(
+      [waypoint.lat, waypoint.lng],
+      {
+        radius: isSelected ? 10 : 8,
+        fillColor: getWaypointColor(waypoint.type),
+        color: '#ffffff',
+        weight: isSelected ? 3 : 2,
+        opacity: 1,
+        fillOpacity: 0.9,
+      }
+    ).addTo(map!);
+
+    // Add click handler
+    marker.on('click', () => {
+      emit('waypoint-click', waypoint);
+    });
+
+    // Add tooltip
+    marker.bindTooltip(
+      `<strong>${waypoint.name}</strong>${waypoint.description ? `<br/>${waypoint.description}` : ''}`,
+      {
+        permanent: isSelected, // Show permanently if selected
+        direction: 'top',
+        offset: [0, -10]
+      }
+    );
+
+    // If this waypoint is selected, open the tooltip
+    if (isSelected) {
+      marker.openTooltip();
+    }
+
+    waypointMarkers.push(marker);
+  });
 }
 
 onMounted(() => {
@@ -276,6 +395,9 @@ onMounted(() => {
   // Add GeoJSON layers
   addGeoJsonLayers();
 
+  // Add waypoint markers
+  addWaypointMarkers();
+
   // Force map to resize in case of layout issues
   setTimeout(() => {
     if (map) {
@@ -331,6 +453,24 @@ watch(
   () => props.geoJsonData,
   () => {
     addGeoJsonLayers();
+  },
+  { deep: true }
+);
+
+// Watch for changes in waypoints
+watch(
+  () => props.waypoints,
+  () => {
+    addWaypointMarkers();
+  },
+  { deep: true }
+);
+
+// Watch for changes in selected waypoint
+watch(
+  () => props.selectedWaypoint,
+  () => {
+    addWaypointMarkers();
   },
   { deep: true }
 );

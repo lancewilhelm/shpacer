@@ -28,11 +28,19 @@ import * as d3 from 'd3';
 import { extractElevationProfile, interpolateAtDistance, getElevationStats, calculateGradeAtDistance, type ElevationPoint } from '~/utils/elevationProfile';
 import { formatDistance, formatElevation } from '~/utils/courseMetrics';
 import { useUserSettingsStore } from '~/stores/userSettings';
+import { getWaypointColor } from '~/utils/waypoints';
 
 interface Props {
   geoJsonData: GeoJSON.FeatureCollection[];
   height?: number;
   mapHoverDistance?: number | null;
+  selectedWaypointDistance?: number | null;
+  waypoints?: Array<{
+    id: string;
+    name: string;
+    distance: number;
+    type: 'start' | 'finish' | 'waypoint' | 'poi';
+  }>;
 }
 
 interface ElevationHoverEvent {
@@ -46,11 +54,14 @@ interface ElevationHoverEvent {
 const props = withDefaults(defineProps<Props>(), {
   height: 200,
   mapHoverDistance: null,
+  selectedWaypointDistance: null,
+  waypoints: () => [],
 });
 
 const emit = defineEmits<{
   'elevation-hover': [event: ElevationHoverEvent];
   'elevation-leave': [];
+  'waypoint-click': [waypoint: { id: string; name: string; distance: number; type: 'start' | 'finish' | 'waypoint' | 'poi' }];
 }>();
 
 const userSettingsStore = useUserSettingsStore();
@@ -73,6 +84,7 @@ let yScale: d3.ScaleLinear<number, number> | null = null;
 let elevationPoints: ElevationPoint[] = [];
 let crosshair: d3.Selection<SVGLineElement, unknown, null, undefined> | null = null;
 let mapHoverCrosshair: d3.Selection<SVGLineElement, unknown, null, undefined> | null = null;
+let waypointCrosshair: d3.Selection<SVGLineElement, unknown, null, undefined> | null = null;
 
 // Computed properties
 const hasElevationData = computed(() => {
@@ -102,6 +114,77 @@ function processGeoJsonData() {
   };
 
   elevationPoints = extractElevationProfile(combinedGeoJson); // Use all points for maximum accuracy
+}
+
+// Function to create SVG pin path based on map pin design
+function createPinPath(size: number = 20): string {
+  // Scale the path to fit our size
+  const scale = size / 24; // Original viewBox is 24x24
+  
+  // Create the map pin shape without the inner circle
+  // Based on: M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0
+  const path = `M${20 * scale} ${10 * scale}c0 ${4.993 * scale}-${5.539 * scale} ${10.193 * scale}-${7.399 * scale} ${11.799 * scale}a${1 * scale} ${1 * scale} 0 0 1-${1.202 * scale} 0C${9.539 * scale} ${20.193 * scale} ${4 * scale} ${14.993 * scale} ${4 * scale} ${10 * scale}a${8 * scale} ${8 * scale} 0 0 1 ${16 * scale} 0`;
+  
+  return path;
+}
+
+// Add waypoint pins to the elevation chart
+function addWaypointPins() {
+  if (!svg || !xScale || !yScale || !props.waypoints) return;
+
+  // Remove existing waypoint pins
+  svg.selectAll('.waypoint-pin').remove();
+
+  // Create waypoint pins
+  const waypointGroup = svg.select('g').append('g').attr('class', 'waypoint-pins');
+
+  props.waypoints.forEach((waypoint) => {
+    // Find elevation at this distance
+    const interpolatedPoint = interpolateAtDistance(elevationPoints, waypoint.distance);
+    if (!interpolatedPoint) return;
+
+    const x = xScale!(waypoint.distance);
+    const y = yScale!(interpolatedPoint.elevation);
+    const color = getWaypointColor(waypoint.type);
+    const isSelected = props.selectedWaypointDistance === waypoint.distance;
+    const pinSize = isSelected ? 24 : 20;
+
+    // Create a group for each waypoint pin
+    const pinGroup = waypointGroup
+      .append('g')
+      .attr('class', 'waypoint-pin')
+      .attr('data-waypoint-id', waypoint.id)
+      .attr('transform', `translate(${x - pinSize/2}, ${y - pinSize * 0.95})`) // Position pin so bottom point touches the line
+      .style('cursor', 'pointer');
+
+    // Add the pin shape
+    pinGroup
+      .append('path')
+      .attr('d', createPinPath(pinSize))
+      .style('fill', color)
+      .style('stroke', '#ffffff')
+      .style('stroke-width', isSelected ? 2 : 1)
+      .style('opacity', 0.9)
+      .style('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))');
+
+    // Add click handler with proper event binding
+    pinGroup
+      .on('click', (event) => {
+        event.stopPropagation();
+        emit('waypoint-click', waypoint);
+      })
+      .on('mouseenter', function() {
+        d3.select(this).style('cursor', 'pointer');
+      })
+      .on('mouseleave', function() {
+        d3.select(this).style('cursor', 'pointer');
+      });
+
+    // Add hover tooltip
+    pinGroup
+      .append('title')
+      .text(`${waypoint.name} - ${formatDistance(waypoint.distance, userSettingsStore.settings.units.distance)}`);
+  });
 }
 
 // Initialize the D3 chart
@@ -258,7 +341,24 @@ function initChart() {
     .style('stroke', 'var(--main-color)')
     .style('stroke-width', 1)
     .style('opacity', 0)
-    .style('pointer-events', 'none')
+    .style('pointer-events', 'none');
+
+  // Add waypoint crosshair line (initially hidden)
+  waypointCrosshair = g.append('line')
+    .attr('class', 'waypoint-crosshair')
+    .attr('x1', 0)
+    .attr('x2', 0)
+    .attr('y1', 0)
+    .attr('y2', innerHeight)
+    .style('stroke', 'var(--accent-color)')
+    .style('stroke-width', 2)
+    .style('opacity', 0)
+    .style('pointer-events', 'none');
+
+  // Add waypoint pins
+  nextTick(() => {
+    addWaypointPins();
+  });
 
   // Add invisible overlay for mouse interactions
   g.append('rect')
@@ -424,6 +524,57 @@ function updateMapHoverCrosshair() {
   }
 }
 
+// Update waypoint crosshair position
+function updateWaypointCrosshair() {
+  if (!waypointCrosshair || !xScale || !tooltip.value) return;
+
+  if (props.selectedWaypointDistance !== null && props.selectedWaypointDistance !== undefined) {
+    const x = xScale(props.selectedWaypointDistance);
+    waypointCrosshair
+      .attr('x1', x)
+      .attr('x2', x)
+      .style('opacity', 0.9); // High opacity for selected waypoint
+
+    // Show tooltip for selected waypoint
+    const interpolatedPoint = interpolateAtDistance(elevationPoints, props.selectedWaypointDistance);
+    
+    if (interpolatedPoint) {
+      // Calculate grade at this distance
+      const grade = calculateGradeAtDistance(elevationPoints, interpolatedPoint.distance);
+      const gradeFormatted = grade >= 0 ? `+${grade.toFixed(1)}%` : `${grade.toFixed(1)}%`;
+      
+      // Update tooltip data
+      tooltipData.value = {
+        distance: formatDistance(interpolatedPoint.distance, userSettingsStore.settings.units.distance),
+        elevation: formatElevation(interpolatedPoint.elevation, userSettingsStore.settings.units.elevation),
+        grade: gradeFormatted
+      };
+
+      // Position tooltip at the waypoint crosshair
+      const containerRect = chartContainer.value!.getBoundingClientRect();
+      const tooltipEl = tooltip.value;
+      const margin = { top: 20, right: 30, bottom: 40, left: 60 };
+      
+      // Calculate position relative to chart area
+      const chartX = x + margin.left;
+      const chartY = margin.top + 10; // Fixed position near the top
+      
+      // Ensure tooltip doesn't go off-screen
+      const tooltipWidth = tooltipEl.offsetWidth;
+      const finalX = Math.min(chartX, containerRect.width - tooltipWidth - 10);
+      
+      tooltipEl.style.left = `${finalX}px`;
+      tooltipEl.style.top = `${chartY}px`;
+      
+      // Show tooltip for waypoint
+      tooltipVisible.value = true;
+      tooltipFromMap.value = false; // This is from waypoint selection
+    }
+  } else {
+    waypointCrosshair.style('opacity', 0);
+  }
+}
+
 // Resize handler
 function handleResize() {
   if (hasElevationData.value) {
@@ -453,6 +604,29 @@ watch(() => userSettingsStore.settings.units, () => {
 // Watch for map hover distance changes
 watch(() => props.mapHoverDistance, () => {
   updateMapHoverCrosshair();
+});
+
+// Watch for selected waypoint distance changes
+watch(() => props.selectedWaypointDistance, () => {
+  updateWaypointCrosshair();
+});
+
+// Watch for waypoints changes
+watch(() => props.waypoints, () => {
+  if (hasElevationData.value && svg) {
+    nextTick(() => {
+      addWaypointPins();
+    });
+  }
+}, { deep: true, immediate: true });
+
+// Watch for waypoints selection changes (to update pin appearance)
+watch(() => props.selectedWaypointDistance, () => {
+  if (hasElevationData.value && svg) {
+    nextTick(() => {
+      addWaypointPins();
+    });
+  }
 });
 
 // Setup resize observer

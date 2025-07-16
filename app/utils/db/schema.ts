@@ -135,12 +135,41 @@ export const courses = sqliteTable("courses", {
     .$defaultFn(() => new Date()),
 });
 
+// WAYPOINTS TABLE
+export const waypoints = sqliteTable("waypoints", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => uuidv4()),
+  courseId: text("course_id")
+    .notNull()
+    .references(() => courses.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  lat: text("lat").notNull(), // Store as text for precision
+  lng: text("lng").notNull(), // Store as text for precision
+  elevation: integer("elevation"), // in meters
+  distance: integer("distance").notNull(), // distance along route in meters
+  type: text("type").notNull(), // 'start', 'finish', 'waypoint', 'poi'
+  icon: text("icon"),
+  order: integer("order").notNull(), // order along the route
+  
+  // Timestamps
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
 // TYPE
 export type InsertUserSettings = InferInsertModel<typeof userSettings>;
 export type InsertGlobalSettings = InferInsertModel<typeof globalSettings>;
 export type InsertCourse = InferInsertModel<typeof courses>;
+export type InsertWaypoint = InferInsertModel<typeof waypoints>;
 
 export type SelectUserSettings = InferSelectModel<typeof userSettings>;
 export type SelectGlobalSettings = InferSelectModel<typeof globalSettings>;
 export type SelectKnowledge = InferSelectModel<typeof knowledge>;
 export type SelectCourse = InferSelectModel<typeof courses>;
+export type SelectWaypoint = InferSelectModel<typeof waypoints>;

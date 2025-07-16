@@ -1,7 +1,8 @@
-import { courses } from "~/utils/db/schema";
+import { courses, waypoints } from "~/utils/db/schema";
 import { cloudDb } from "~~/server/utils/db/cloud";
 import { auth } from "~/utils/auth";
 import { calculateCourseMetrics } from "~/utils/courseMetrics";
+import { processAllWaypoints } from "~/utils/waypoints";
 
 interface CreateCourseRequest {
   name: string;
@@ -39,6 +40,9 @@ export default defineEventHandler(async (event) => {
     // Calculate course metrics
     const metrics = calculateCourseMetrics(body.geoJsonData);
 
+    // Process waypoints from the GeoJSON data
+    const waypointData = processAllWaypoints(body.geoJsonData);
+
     // Create the course
     const [newCourse] = await cloudDb
       .insert(courses)
@@ -66,6 +70,24 @@ export default defineEventHandler(async (event) => {
         })() : null,
       })
       .returning();
+
+    // Insert waypoints if any were found
+    if (waypointData.length > 0 && newCourse.id) {
+      const waypointInserts = waypointData.map(wp => ({
+        courseId: newCourse.id,
+        name: wp.name,
+        description: wp.description || null,
+        lat: wp.lat.toString(),
+        lng: wp.lng.toString(),
+        elevation: wp.elevation || null,
+        distance: wp.distance,
+        type: wp.type,
+        icon: wp.icon || null,
+        order: wp.order,
+      }));
+
+      await cloudDb.insert(waypoints).values(waypointInserts);
+    }
 
     return {
       success: true,

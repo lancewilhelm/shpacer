@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { SelectCourse } from "~/utils/db/schema";
+import type { Waypoint } from "~/utils/waypoints";
 import { formatDistance, formatElevation } from "~/utils/courseMetrics";
 
 definePageMeta({
@@ -12,6 +13,7 @@ definePageMeta({
 const route = useRoute();
 const courseId = route.params.id as string;
 const userSettingsStore = useUserSettingsStore();
+const uiStore = useUiStore();
 
 const {
   data: courseData,
@@ -20,7 +22,15 @@ const {
   refresh,
 } = await useFetch<{ course: SelectCourse }>(`/api/courses/${courseId}`);
 
+const {
+  data: waypointsData,
+  pending: _waypointsPending,
+  error: _waypointsError,
+  refresh: _refreshWaypoints,
+} = await useFetch<{ waypoints: Waypoint[] }>(`/api/courses/${courseId}/waypoints`);
+
 const course = computed(() => courseData.value?.course);
+const waypoints = computed(() => waypointsData.value?.waypoints || []);
 
 const isEditing = ref(false);
 const editName = ref("");
@@ -29,6 +39,42 @@ const editRaceDate = ref("");
 const editStartTime = ref("");
 const isUpdating = ref(false);
 const updateError = ref("");
+
+// Waypoint interaction state
+const selectedWaypoint = ref<Waypoint | null>(null);
+
+// Panel resizing state
+const isResizing = ref(false);
+const resizeStartX = ref(0);
+const resizeStartWidth = ref(0);
+
+// Waypoint panel resizing functions
+function startResize(event: MouseEvent) {
+  isResizing.value = true;
+  resizeStartX.value = event.clientX;
+  resizeStartWidth.value = uiStore.waypointPanelWidth;
+  
+  document.addEventListener('mousemove', handleResize);
+  document.addEventListener('mouseup', stopResize);
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+}
+
+function handleResize(event: MouseEvent) {
+  if (!isResizing.value) return;
+  
+  const deltaX = resizeStartX.value - event.clientX; // Subtract because we're resizing from the left
+  const newWidth = resizeStartWidth.value + deltaX;
+  uiStore.setWaypointPanelWidth(newWidth);
+}
+
+function stopResize() {
+  isResizing.value = false;
+  document.removeEventListener('mousemove', handleResize);
+  document.removeEventListener('mouseup', stopResize);
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+}
 
 function formatCourseDistance(meters: number) {
   return formatDistance(meters, userSettingsStore.settings.units.distance);
@@ -250,6 +296,48 @@ function handleMapHover(event: { lat: number; lng: number; distance: number }) {
 function handleMapLeave() {
   mapHoverDistance.value = null;
 }
+
+// Handle waypoint events
+function handleWaypointSelect(waypoint: Waypoint) {
+  // Toggle selection: if the same waypoint is clicked, deselect it
+  if (selectedWaypoint.value?.id === waypoint.id) {
+    selectedWaypoint.value = null;
+  } else {
+    selectedWaypoint.value = waypoint;
+  }
+}
+
+function handleWaypointHover(_waypoint: Waypoint) {
+  // Could add hover effects here if needed
+}
+
+function handleWaypointLeave() {
+  // Could clear hover effects here if needed
+}
+
+function handleWaypointClick(waypoint: Waypoint) {
+  // Toggle selection: if the same waypoint is clicked, deselect it
+  if (selectedWaypoint.value?.id === waypoint.id) {
+    selectedWaypoint.value = null;
+  } else {
+    selectedWaypoint.value = waypoint;
+  }
+}
+
+function handleElevationWaypointClick(chartWaypoint: { id: string; name: string; distance: number; type: 'start' | 'finish' | 'waypoint' | 'poi' }) {
+  // Find the full waypoint object from the waypoints array
+  const fullWaypoint = waypoints.value.find(wp => wp.id === chartWaypoint.id);
+  if (fullWaypoint) {
+    handleWaypointClick(fullWaypoint);
+  }
+}
+
+// Cleanup resize listeners on unmount
+onUnmounted(() => {
+  if (isResizing.value) {
+    stopResize();
+  }
+});
 </script>
 
 <template>
@@ -467,45 +555,80 @@ function handleMapLeave() {
         </div>
 
         <!-- Content Section -->
-        <div class="flex-1 flex flex-col overflow-hidden">
-          <!-- Elevation Chart Section -->
-          <div class="p-4 border-b border-(--sub-color)">
-            <h2 class="text-lg font-semibold text-(--main-color) mb-3">Elevation Profile</h2>
-            <ElevationChart
-              :geo-json-data="geoJsonData"
-              :height="200"
-              :map-hover-distance="mapHoverDistance"
-              @elevation-hover="handleElevationHover"
-              @elevation-leave="handleElevationLeave"
-            />
-          </div>
+        <div class="flex-1 flex overflow-hidden">
+          <!-- Left Panel: Charts and Map -->
+          <div class="flex-1 flex flex-col overflow-hidden">
+            <!-- Elevation Chart Section -->
+            <div class="p-4 border-b border-(--sub-color)">
+              <h2 class="text-lg font-semibold text-(--main-color) mb-3">Elevation Profile</h2>
+              <ElevationChart
+                :geo-json-data="geoJsonData"
+                :height="200"
+                :map-hover-distance="mapHoverDistance"
+                :selected-waypoint-distance="selectedWaypoint?.distance || null"
+                :waypoints="waypoints"
+                @elevation-hover="handleElevationHover"
+                @elevation-leave="handleElevationLeave"
+                @waypoint-click="handleElevationWaypointClick"
+              />
+            </div>
 
-          <!-- Map Section -->
-          <div class="flex-1 p-4">
-            <div class="h-full rounded-lg overflow-hidden">
-              <ClientOnly>
-                <LeafletMap
-                  :geo-json-data="geoJsonData"
-                  :center="[0, 0]"
-                  :zoom="10"
-                  :elevation-hover-point="elevationHoverPoint"
-                  @map-hover="handleMapHover"
-                  @map-leave="handleMapLeave"
-                />
-                <template #fallback>
-                  <div
-                    class="w-full h-full bg-(--sub-alt-color) rounded-lg flex items-center justify-center"
-                  >
-                    <div class="text-center">
-                      <Icon
-                        name="svg-spinners:6-dots-scale"
-                        class="text-(--main-color) scale-200 mb-2"
-                      />
-                      <p class="text-(--sub-color)">Loading map...</p>
+            <!-- Map Section -->
+            <div class="flex-1 p-4">
+              <div class="h-full rounded-lg overflow-hidden">
+                <ClientOnly>
+                  <LeafletMap
+                    :geo-json-data="geoJsonData"
+                    :center="[0, 0]"
+                    :zoom="10"
+                    :waypoints="waypoints"
+                    :selected-waypoint="selectedWaypoint"
+                    :elevation-hover-point="elevationHoverPoint"
+                    @map-hover="handleMapHover"
+                    @map-leave="handleMapLeave"
+                    @waypoint-click="handleWaypointClick"
+                  />
+                  <template #fallback>
+                    <div
+                      class="w-full h-full bg-(--sub-alt-color) rounded-lg flex items-center justify-center"
+                    >
+                      <div class="text-center">
+                        <Icon
+                          name="svg-spinners:6-dots-scale"
+                          class="text-(--main-color) scale-200 mb-2"
+                        />
+                        <p class="text-(--sub-color)">Loading map...</p>
+                      </div>
                     </div>
-                  </div>
-                </template>
-              </ClientOnly>
+                  </template>
+                </ClientOnly>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Right Panel: Waypoints List -->
+          <div 
+            class="border-l border-(--sub-color) flex flex-col relative"
+            :style="{ width: `${uiStore.waypointPanelWidth}px` }"
+          >
+            <!-- Resize handle -->
+            <div 
+              class="absolute left-0 top-0 w-1 h-full cursor-col-resize transition-all duration-200 z-10 hover:w-[3px] hover:bg-(--main-color)"
+              :class="{ 'w-2 bg-(--main-color)': isResizing, 'bg-transparent hover:bg-(--main-color)': !isResizing }"
+              @mousedown="startResize"
+            />
+            
+            <div class="p-4 border-b border-(--sub-color)">
+              <h4 class="text-lg font-semibold text-(--main-color)">Waypoints</h4>
+            </div>
+            <div class="flex-1 overflow-hidden">
+              <WaypointList
+                :waypoints="waypoints"
+                :selected-waypoint="selectedWaypoint"
+                @waypoint-select="handleWaypointSelect"
+                @waypoint-hover="handleWaypointHover"
+                @waypoint-leave="handleWaypointLeave"
+              />
             </div>
           </div>
         </div>
