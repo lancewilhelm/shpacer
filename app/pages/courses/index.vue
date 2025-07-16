@@ -19,6 +19,7 @@ interface CourseListResponse {
 }
 
 const { data: coursesData, pending, error, refresh } = await useFetch<CourseListResponse>('/api/courses');
+const userSettingsStore = useUserSettingsStore();
 
 const courses = computed(() => coursesData.value?.courses || []);
 
@@ -41,6 +42,14 @@ function formatRaceDate(date: Date | string | number | null) {
 
 function getFileTypeIcon(fileType: string) {
   return fileType === 'gpx' ? 'heroicons:map' : 'heroicons:chart-bar';
+}
+
+function formatCourseDistance(meters: number) {
+  return formatDistance(meters, userSettingsStore.settings.units.distance);
+}
+
+function formatCourseElevation(meters: number) {
+  return formatElevation(meters, userSettingsStore.settings.units.elevation);
 }
 </script>
 
@@ -111,21 +120,21 @@ function getFileTypeIcon(fileType: string) {
               <div class="flex items-start justify-between mb-2">
                 <div class="flex items-center gap-2">
                   <Icon :name="getFileTypeIcon(course.fileType)" class="h-4 w-4 text-(--main-color)" />
-                  <span class="text-xs text-(--sub-color) uppercase">{{ course.fileType }}</span>
+                  <span class="text-xs text-(--main-color) uppercase">{{ course.fileType }}</span>
                 </div>
-                <div v-if="formatRaceDate(course.raceDate)" class="flex items-center gap-1 text-xs text-(--accent-color)">
-                  <Icon name="heroicons:calendar" class="h-3 w-3" />
+                <div v-if="formatRaceDate(course.raceDate)" class="flex items-center gap-1 text-xs text-(--main-color)">
+                  <Icon name="heroicons:flag" class="h-3 w-3" />
                   <span>{{ formatRaceDate(course.raceDate) }}</span>
                 </div>
               </div>
 
               <!-- Title -->
-              <h3 class="font-semibold text-(--main-color) mb-1 group-hover:text-(--accent-color) transition-colors truncate">
+              <h3 class="font-semibold flex-1 text-(--main-color) mb-1 group-hover:text-(--accent-color) transition-colors truncate">
                 {{ course.name }}
               </h3>
               
               <!-- Description -->
-              <p v-if="course.description" class="text-sm text-(--sub-color) mb-2 line-clamp-2">
+              <p v-if="course.description" class="text-sm text-(--main-color) mb-2 line-clamp-2">
                 {{ course.description }}
               </p>
 
@@ -133,15 +142,15 @@ function getFileTypeIcon(fileType: string) {
               <div class="flex items-center gap-3 mb-2 text-xs">
                 <div v-if="course.totalDistance" class="flex items-center gap-1 text-(--main-color)">
                   <Icon name="heroicons:map-pin" class="h-3 w-3" />
-                  <span>{{ formatDistance(course.totalDistance) }}</span>
+                  <span>{{ formatCourseDistance(course.totalDistance) }}</span>
                 </div>
                 <div v-if="course.elevationGain" class="flex items-center gap-1 text-(--main-color)">
                   <Icon name="heroicons:arrow-trending-up" class="h-3 w-3" />
-                  <span>{{ formatElevation(course.elevationGain) }}</span>
+                  <span>{{ formatCourseElevation(course.elevationGain) }}</span>
                 </div>
                 <div v-if="course.elevationLoss" class="flex items-center gap-1 text-(--main-color)">
                   <Icon name="heroicons:arrow-trending-down" class="h-3 w-3" />
-                  <span>{{ formatElevation(course.elevationLoss) }}</span>
+                  <span>{{ formatCourseElevation(course.elevationLoss) }}</span>
                 </div>
               </div>
 

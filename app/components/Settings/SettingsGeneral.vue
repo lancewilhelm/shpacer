@@ -1,10 +1,15 @@
 <script setup lang="ts">
+import { distanceUnits, elevationUnits, type DistanceUnit, type ElevationUnit } from '~/stores/userSettings';
+
 const changePasswordModalVisible = ref(false);
 const changePasswordSuccess = ref(false);
 const currentPassword = ref("");
 const newPassword = ref("");
 const confirmPassword = ref("");
 const { changePassword } = useAuth();
+
+const userSettingsStore = useUserSettingsStore();
+
 async function handleUpdatePassword() {
   if (newPassword.value !== confirmPassword.value) {
     alert("New password and confirmation do not match");
@@ -34,10 +39,45 @@ async function handleUpdatePassword() {
   }, 3000);
 }
 
+function updateDistanceUnit(unit: string) {
+  userSettingsStore.updateSettings({
+    units: {
+      ...userSettingsStore.settings.units,
+      distance: unit as DistanceUnit,
+    },
+  });
+}
+
+function updateElevationUnit(unit: string) {
+  userSettingsStore.updateSettings({
+    units: {
+      ...userSettingsStore.settings.units,
+      elevation: unit as ElevationUnit,
+    },
+  });
+}
+
 const config = useRuntimeConfig();
 </script>
 <template>
   <div class="w-full">
+    <SettingsGroup title="units" icon="lucide:ruler">
+      <SettingsSelectItem
+        :value="userSettingsStore.settings.units.distance"
+        :options="distanceUnits"
+        title="distance unit"
+        description="unit for displaying distances"
+        @select="updateDistanceUnit"
+      />
+      <SettingsSelectItem
+        :value="userSettingsStore.settings.units.elevation"
+        :options="elevationUnits"
+        title="elevation unit"
+        description="unit for displaying elevation gain/loss"
+        @select="updateElevationUnit"
+      />
+    </SettingsGroup>
+    
     <SettingsGroup title="credentials" icon="lucide:lock">
       <div class="flex items-center gap-2">
         <button

@@ -120,21 +120,38 @@ export function calculateCourseMetrics(geoJson: GeoJSON.FeatureCollection): Cour
 /**
  * Format distance for display
  * @param meters Distance in meters
+ * @param unit Unit preference: 'kilometers' or 'miles'
  * @returns Formatted distance string
  */
-export function formatDistance(meters: number): string {
-  if (meters < 1000) {
-    return `${meters}m`;
+export function formatDistance(meters: number, unit: 'kilometers' | 'miles' = 'kilometers'): string {
+  if (unit === 'miles') {
+    const miles = meters * 0.000621371;
+    if (miles < 1) {
+      const feet = meters * 3.28084;
+      return `${Math.round(feet)}ft`;
+    } else {
+      return `${miles.toFixed(1)}mi`;
+    }
   } else {
-    return `${(meters / 1000).toFixed(1)}km`;
+    if (meters < 1000) {
+      return `${meters}m`;
+    } else {
+      return `${(meters / 1000).toFixed(1)}km`;
+    }
   }
 }
 
 /**
  * Format elevation for display
  * @param meters Elevation in meters
+ * @param unit Unit preference: 'meters' or 'feet'
  * @returns Formatted elevation string
  */
-export function formatElevation(meters: number): string {
-  return `${meters}m`;
+export function formatElevation(meters: number, unit: 'meters' | 'feet' = 'meters'): string {
+  if (unit === 'feet') {
+    const feet = meters * 3.28084;
+    return `${Math.round(feet)}ft`;
+  } else {
+    return `${meters}m`;
+  }
 }

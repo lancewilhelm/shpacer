@@ -11,6 +11,7 @@ definePageMeta({
 
 const route = useRoute();
 const courseId = route.params.id as string;
+const userSettingsStore = useUserSettingsStore();
 
 const {
   data: courseData,
@@ -28,6 +29,14 @@ const editRaceDate = ref("");
 const editStartTime = ref("");
 const isUpdating = ref(false);
 const updateError = ref("");
+
+function formatCourseDistance(meters: number) {
+  return formatDistance(meters, userSettingsStore.settings.units.distance);
+}
+
+function formatCourseElevation(meters: number) {
+  return formatElevation(meters, userSettingsStore.settings.units.elevation);
+}
 
 watchEffect(() => {
   if (course.value) {
@@ -346,7 +355,7 @@ const geoJsonData = computed(() => {
                 <Icon name="heroicons:map-pin" class="h-5 w-5" />
                 <div class="flex flex-col">
                   <span class="font-medium">{{
-                    formatDistance(course.totalDistance)
+                    formatCourseDistance(course.totalDistance)
                   }}</span>
                   <span class="text-xs text-(--sub-color)">Distance</span>
                 </div>
@@ -358,7 +367,7 @@ const geoJsonData = computed(() => {
                 <Icon name="heroicons:arrow-trending-up" class="h-5 w-5" />
                 <div class="flex flex-col">
                   <span class="font-medium">{{
-                    formatElevation(course.elevationGain)
+                    formatCourseElevation(course.elevationGain)
                   }}</span>
                   <span class="text-xs text-(--sub-color)">Elevation Gain</span>
                 </div>
@@ -370,7 +379,7 @@ const geoJsonData = computed(() => {
                 <Icon name="heroicons:arrow-trending-down" class="h-5 w-5" />
                 <div class="flex flex-col">
                   <span class="font-medium">{{
-                    formatElevation(course.elevationLoss)
+                    formatCourseElevation(course.elevationLoss)
                   }}</span>
                   <span class="text-xs text-(--sub-color)">Elevation Loss</span>
                 </div>

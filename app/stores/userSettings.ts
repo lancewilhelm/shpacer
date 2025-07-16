@@ -16,6 +16,12 @@ export type FontFamily = (typeof fontFamilyOptions)[number];
 export const funboxModes = ["confetti", "snow"];
 export type FunboxMode = (typeof funboxModes)[number];
 
+export const distanceUnits = ["kilometers", "miles"] as const;
+export type DistanceUnit = (typeof distanceUnits)[number];
+
+export const elevationUnits = ["meters", "feet"] as const;
+export type ElevationUnit = (typeof elevationUnits)[number];
+
 export interface UserSettings {
   theme?: string;
   fontFamily: FontFamily;
@@ -25,6 +31,10 @@ export interface UserSettings {
     reverseSort: boolean;
   };
   funboxModes: FunboxMode[];
+  units: {
+    distance: DistanceUnit;
+    elevation: ElevationUnit;
+  };
 }
 
 function getDefaultSettings(): UserSettings {
@@ -36,6 +46,10 @@ function getDefaultSettings(): UserSettings {
       reverseSort: false,
     },
     funboxModes: [],
+    units: {
+      distance: "kilometers",
+      elevation: "meters",
+    },
   };
 }
 
