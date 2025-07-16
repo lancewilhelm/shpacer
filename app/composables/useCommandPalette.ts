@@ -1,5 +1,6 @@
 import fuzzysort from "fuzzysort";
 import themesList from "~/assets/json/themes.json";
+import { userSettings } from "~/utils/db/schema";
 
 interface Theme {
   name: string;
@@ -32,6 +33,8 @@ export function useCommandPalette() {
   const allThemes = computed<Theme[]>(() => sortedThemesList);
 
   const options = ref<Option[]>([
+    { label: "change distance unit", icon: "lucide:move-horizontal", options: getDistanceUnitOptions() },
+    { label: "change elevation unit", icon: "lucide:move-vertical", options: getElevationUnitOptions() },
     { label: "theme", icon: "lucide:palette" },
     { label: "favorite themes", icon: "lucide:star" },
     {
@@ -343,5 +346,29 @@ function getFontFamilyOptions() {
       useUiStore().setCommandPaletteVisible(false);
     },
     active: computed(() => userSettingsStore.settings.fontFamily === font),
+  }));
+}
+
+function getDistanceUnitOptions() {
+  const userSettingsStore = useUserSettingsStore();
+  return distanceUnits.map((unit) => ({
+    label: unit,
+    action: () => {
+      userSettingsStore.updateSettings({ units: { ...userSettingsStore.settings.units, distance: unit } });
+      useUiStore().setCommandPaletteVisible(false);
+    },
+    active: computed(() => userSettingsStore.settings.units.distance === unit),
+  }));
+}
+
+function getElevationUnitOptions() {
+  const userSettingsStore = useUserSettingsStore();
+  return elevationUnits.map((unit) => ({
+    label: unit,
+    action: () => {
+      userSettingsStore.updateSettings({ units: { ...userSettingsStore.settings.units, elevation: unit } });
+      useUiStore().setCommandPaletteVisible(false);
+    },
+    active: computed(() => userSettingsStore.settings.units.elevation === unit),
   }));
 }
