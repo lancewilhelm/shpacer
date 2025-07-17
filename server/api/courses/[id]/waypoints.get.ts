@@ -54,7 +54,7 @@ export default defineEventHandler(async (event) => {
     const formattedWaypoints = courseWaypoints.map(waypoint => ({
       id: waypoint.id,
       name: waypoint.name,
-      description: waypoint.description,
+      // Remove description field - waypoints should not have descriptions
       lat: parseFloat(waypoint.lat),
       lng: parseFloat(waypoint.lng),
       elevation: waypoint.elevation,

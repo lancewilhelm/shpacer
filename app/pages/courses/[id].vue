@@ -32,13 +32,8 @@ const {
 const course = computed(() => courseData.value?.course);
 const waypoints = computed(() => waypointsData.value?.waypoints || []);
 
-const isEditing = ref(false);
-const editName = ref("");
-const editDescription = ref("");
-const editRaceDate = ref("");
-const editStartTime = ref("");
-const isUpdating = ref(false);
-const updateError = ref("");
+// Course edit modal state
+const courseEditModalOpen = ref(false);
 
 // Waypoint interaction state
 const selectedWaypoint = ref<Waypoint | null>(null);
@@ -84,107 +79,9 @@ function formatCourseElevation(meters: number) {
   return formatElevation(meters, userSettingsStore.settings.units.elevation);
 }
 
-watchEffect(() => {
-  if (course.value) {
-    editName.value = course.value.name;
-    editDescription.value = course.value.description || "";
-    const raceDate = course.value.raceDate;
-    if (raceDate) {
-      // Convert to YYYY-MM-DD format without timezone conversion
-      const dateObj = new Date(raceDate);
-      const year = dateObj.getUTCFullYear();
-      const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
-      const day = String(dateObj.getUTCDate()).padStart(2, '0');
-      editRaceDate.value = `${year}-${month}-${day}`;
-      
-      // Extract time in HH:MM format
-      const hours = String(dateObj.getUTCHours()).padStart(2, '0');
-      const minutes = String(dateObj.getUTCMinutes()).padStart(2, '0');
-      editStartTime.value = `${hours}:${minutes}`;
-    } else {
-      editRaceDate.value = "";
-      editStartTime.value = "";
-    }
-  }
-});
-
 useHead({
   title: computed(() => course.value?.name || "Course"),
 });
-
-async function startEditing() {
-  isEditing.value = true;
-  updateError.value = "";
-}
-
-function cancelEditing() {
-  isEditing.value = false;
-  editName.value = course.value?.name || "";
-  editDescription.value = course.value?.description || "";
-  const raceDate = course.value?.raceDate;
-  if (raceDate) {
-    // Convert to YYYY-MM-DD format without timezone conversion
-    const dateObj = new Date(raceDate);
-    const year = dateObj.getUTCFullYear();
-    const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(dateObj.getUTCDate()).padStart(2, '0');
-    editRaceDate.value = `${year}-${month}-${day}`;
-    
-    // Extract time in HH:MM format
-    const hours = String(dateObj.getUTCHours()).padStart(2, '0');
-    const minutes = String(dateObj.getUTCMinutes()).padStart(2, '0');
-    editStartTime.value = `${hours}:${minutes}`;
-  } else {
-    editRaceDate.value = "";
-    editStartTime.value = "";
-  }
-  updateError.value = "";
-}
-
-async function saveChanges() {
-  if (!course.value || !editName.value.trim()) {
-    return;
-  }
-
-  isUpdating.value = true;
-  updateError.value = "";
-
-  try {
-    let raceDateTime = null;
-    if (editRaceDate.value) {
-      // Combine date and time into a single datetime value
-      const time = editStartTime.value || "00:00";
-      raceDateTime = `${editRaceDate.value}T${time}:00`;
-    }
-
-    const response = await $fetch<{ course: SelectCourse }>(
-      `/api/courses/${courseId}`,
-      {
-        method: "PUT",
-        body: {
-          name: editName.value.trim(),
-          description: editDescription.value.trim() || undefined,
-          raceDate: raceDateTime,
-        },
-      }
-    );
-
-    // Update local data
-    if (courseData.value) {
-      courseData.value.course = response.course;
-    }
-
-    isEditing.value = false;
-    
-    // Trigger reactivity by refreshing the data
-    await refresh();
-  } catch (error) {
-    console.error("Error updating course:", error);
-    updateError.value = "Failed to update course. Please try again.";
-  } finally {
-    isUpdating.value = false;
-  }
-}
 
 async function downloadOriginalFile() {
   if (!course.value) return;
@@ -268,6 +165,43 @@ const geoJsonData = computed(() => {
   return [course.value.geoJsonData as GeoJSON.FeatureCollection];
 });
 
+// Compute map center and zoom from course data
+const mapCenter = computed((): [number, number] => {
+  // If we have waypoints, use the first waypoint as center
+  if (waypoints.value.length > 0) {
+    const firstWaypoint = waypoints.value[0];
+    if (firstWaypoint) {
+      return [firstWaypoint.lat, firstWaypoint.lng];
+    }
+  }
+  
+  // If we have geo data, try to extract center from it
+  if (geoJsonData.value.length > 0) {
+    const geoJson = geoJsonData.value[0];
+    if (geoJson && geoJson.features.length > 0) {
+      const firstFeature = geoJson.features[0];
+      if (firstFeature && firstFeature.geometry.type === 'LineString') {
+        const coords = firstFeature.geometry.coordinates[0];
+        if (coords && coords.length >= 2 && typeof coords[0] === 'number' && typeof coords[1] === 'number') {
+          return [coords[1], coords[0]]; // Note: GeoJSON is [lng, lat], Leaflet expects [lat, lng]
+        }
+      } else if (firstFeature && firstFeature.geometry.type === 'Point') {
+        const coords = firstFeature.geometry.coordinates;
+        if (coords && coords.length >= 2 && typeof coords[0] === 'number' && typeof coords[1] === 'number') {
+          return [coords[1], coords[0]];
+        }
+      }
+    }
+  }
+  
+  // Fallback center
+  return [40.7128, -74.0060]; // New York City as a reasonable default
+});
+
+const mapZoom = computed((): number => {
+  return 13; // Good default zoom level for viewing a course
+});
+
 // Elevation chart interaction state
 const elevationHoverPoint = ref<{
   lat: number;
@@ -332,6 +266,32 @@ function handleElevationWaypointClick(chartWaypoint: { id: string; name: string;
   }
 }
 
+// Course edit modal handlers
+function openCourseEditModal() {
+  courseEditModalOpen.value = true;
+}
+
+function closeCourseEditModal() {
+  courseEditModalOpen.value = false;
+}
+
+function handleCourseUpdated(updatedCourse: SelectCourse) {
+  if (courseData.value) {
+    courseData.value.course = updatedCourse;
+  }
+  refresh(); // Refresh to get the latest data
+}
+
+function handleWaypointUpdated(_updatedWaypoint: Waypoint) {
+  // Refresh waypoints to get the latest data
+  _refreshWaypoints();
+}
+
+function handleWaypointDeleted(_waypointId: string) {
+  // Refresh waypoints to get the latest data after deletion
+  _refreshWaypoints();
+}
+
 // Cleanup resize listeners on unmount
 onUnmounted(() => {
   if (isResizing.value) {
@@ -383,83 +343,22 @@ onUnmounted(() => {
           >
             <Icon name="heroicons:arrow-left" class="h-5 w-5" />
           </NuxtLink>
-          <div class="flex items-center gap-4 mb-4">
+          <div class="flex items-center justify-between gap-4 mb-4">
             <div class="flex-1">
-              <div v-if="!isEditing" class="flex items-center gap-4">
-                <h1 class="text-2xl font-bold text-(--main-color)">
-                  {{ course.name }}
-                </h1>
-                <button
-                  class="p-2 text-(--sub-color) hover:text-(--main-color) transition-colors rounded"
-                  title="Edit course"
-                  @click="startEditing"
-                >
-                  <Icon name="heroicons:pencil" class="h-4 w-4" />
-                </button>
-              </div>
-
-              <div v-if="!isEditing && course.description" class="mb-4">
+              <h1 class="text-2xl font-bold text-(--main-color)">
+                {{ course.name }}
+              </h1>
+              <div v-if="course.description" class="mt-2">
                 <p class="text-(--sub-color)">{{ course.description }}</p>
               </div>
-
-              <div v-if="isEditing" class="space-y-2 mt-2">
-                <input
-                  v-model="editName"
-                  type="text"
-                  class="text-2xl font-bold border border-(--sub-color) focus:border-(--main-color) text-(--main-color) w-full"
-                  placeholder="Course name"
-                />
-                <textarea
-                  v-model="editDescription"
-                  placeholder="Course description (optional)"
-                  rows="2"
-                  class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) placeholder-(--sub-color) focus:border-(--main-color) mb-0!"
-                />
-                <div>
-                  <label class="block text-sm font-medium text-(--main-color) mb-1">
-                    Race Date
-                  </label>
-                  <input
-                    v-model="editRaceDate"
-                    type="date"
-                    class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
-                  />
-                </div>
-                <div>
-                  <label class="block text-sm font-medium text-(--main-color) mb-1">
-                    Start Time
-                  </label>
-                  <input
-                    v-model="editStartTime"
-                    type="time"
-                    class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
-                  />
-                  <p class="text-xs text-(--sub-color) mt-1">Optional: Set a start time if this course is for a specific race</p>
-                </div>
-                <div class="flex items-center gap-2">
-                  <button
-                    class="px-3 py-1 bg-(--main-color) text-(--bg-color) rounded text-sm hover:opacity-80 transition-opacity disabled:opacity-50"
-                    :disabled="isUpdating"
-                    @click="saveChanges"
-                  >
-                    {{ isUpdating ? "Saving..." : "Save" }}
-                  </button>
-                  <button
-                    class="px-3 py-1 border border-(--sub-color) text-(--main-color) rounded text-sm hover:bg-(--sub-alt-color) transition-colors"
-                    @click="cancelEditing"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
             </div>
-          </div>
-
-          <div
-            v-if="updateError"
-            class="mb-4 p-3 bg-(--error-color) bg-opacity-10 border border-(--error-color) rounded-lg"
-          >
-            <p class="text-(--error-color) text-sm">{{ updateError }}</p>
+            <button
+              class="px-4 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity flex items-center gap-2"
+              @click="courseEditModalOpen = true"
+            >
+              <Icon name="heroicons:pencil" class="h-4 w-4" />
+              Edit Course
+            </button>
           </div>
 
           <div class="flex flex-col gap-4">
@@ -469,7 +368,7 @@ onUnmounted(() => {
                 v-if="course.totalDistance"
                 class="flex items-center gap-2 text-(--main-color)"
               >
-                <Icon name="heroicons:map-pin" class="h-5 w-5" />
+                <Icon name="heroicons:map-pin" class="h-5 w-5 scale-150" />
                 <div class="flex flex-col">
                   <span class="font-medium">{{
                     formatCourseDistance(course.totalDistance)
@@ -481,7 +380,7 @@ onUnmounted(() => {
                 v-if="course.elevationGain"
                 class="flex items-center gap-2 text-(--main-color)"
               >
-                <Icon name="heroicons:arrow-trending-up" class="h-5 w-5" />
+                <Icon name="heroicons:arrow-trending-up" class="h-5 w-5 scale-150" />
                 <div class="flex flex-col">
                   <span class="font-medium">{{
                     formatCourseElevation(course.elevationGain)
@@ -493,7 +392,7 @@ onUnmounted(() => {
                 v-if="course.elevationLoss"
                 class="flex items-center gap-2 text-(--main-color)"
               >
-                <Icon name="heroicons:arrow-trending-down" class="h-5 w-5" />
+                <Icon name="heroicons:arrow-trending-down" class="h-5 w-5 scale-150" />
                 <div class="flex flex-col">
                   <span class="font-medium">{{
                     formatCourseElevation(course.elevationLoss)
@@ -533,6 +432,14 @@ onUnmounted(() => {
               </div>
 
               <div class="flex items-center gap-2">
+                <button
+                  class="px-3 py-1 border border-(--main-color) text-(--main-color) rounded hover:bg-(--main-color) hover:text-(--bg-color) transition-colors text-sm flex items-center gap-1"
+                  title="Edit course and waypoints"
+                  @click="openCourseEditModal"
+                >
+                  <Icon name="heroicons:pencil" class="h-4 w-4" />
+                  Edit
+                </button>
                 <button
                   class="px-3 py-1 border border-(--sub-color) text-(--main-color) rounded hover:bg-(--sub-alt-color) transition-colors text-sm flex items-center gap-1"
                   title="Download original file"
@@ -579,8 +486,8 @@ onUnmounted(() => {
                 <ClientOnly>
                   <LeafletMap
                     :geo-json-data="geoJsonData"
-                    :center="[0, 0]"
-                    :zoom="10"
+                    :center="mapCenter"
+                    :zoom="mapZoom"
                     :waypoints="waypoints"
                     :selected-waypoint="selectedWaypoint"
                     :elevation-hover-point="elevationHoverPoint"
@@ -634,5 +541,17 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+
+    <!-- Course Edit Modal -->
+    <CourseEditModal
+      :open="courseEditModalOpen"
+      :course="course || null"
+      :waypoints="waypoints"
+      :geo-json-data="geoJsonData"
+      @close="closeCourseEditModal"
+      @course-updated="handleCourseUpdated"
+      @waypoint-updated="handleWaypointUpdated"
+      @waypoint-deleted="handleWaypointDeleted"
+    />
   </div>
 </template>

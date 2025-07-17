@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Waypoint } from '~/utils/waypoints';
 import { formatDistance, formatElevation } from '~/utils/courseMetrics';
-import { getWaypointIcon, getWaypointColor } from '~/utils/waypoints';
+import { getWaypointColor } from '~/utils/waypoints';
 
 interface Props {
   waypoints?: Waypoint[];
@@ -71,7 +71,7 @@ function getWaypointTypeLabel(type: Waypoint['type']): string {
       
       <div v-else class="space-y-1 p-1">
         <div
-          v-for="waypoint in waypoints"
+          v-for="(waypoint, index) in waypoints"
           :key="waypoint.id"
           class="p-1 rounded-lg cursor-pointer transition-all duration-200 hover:bg-(--sub-alt-color) border"
           :class="{
@@ -83,16 +83,12 @@ function getWaypointTypeLabel(type: Waypoint['type']): string {
           @mouseleave="handleWaypointLeave"
         >
           <div class="flex items-start gap-2">
-            <!-- Waypoint Icon -->
+            <!-- Waypoint Number -->
             <div
-              class="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center"
-              :style="{ backgroundColor: getWaypointColor(waypoint.type) + '20' }"
+              class="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white"
+              :style="{ backgroundColor: getWaypointColor(waypoint.type) }"
             >
-              <Icon
-                :name="getWaypointIcon(waypoint.type)"
-                class="h-4 w-4"
-                :style="{ color: getWaypointColor(waypoint.type) }"
-              />
+              {{ index + 1 }}
             </div>
             
             <!-- Waypoint Info -->
@@ -108,13 +104,6 @@ function getWaypointTypeLabel(type: Waypoint['type']): string {
                   {{ getWaypointTypeLabel(waypoint.type) }}
                 </span>
               </div>
-              
-              <p
-                v-if="waypoint.description"
-                class="text-sm text-(--sub-color) mt-1 line-clamp-2"
-              >
-                {{ waypoint.description }}
-              </p>
               
               <!-- Distance and Elevation -->
               <div class="flex items-center gap-4 mt-2 text-xs text-(--sub-color)">

@@ -116,18 +116,6 @@ function processGeoJsonData() {
   elevationPoints = extractElevationProfile(combinedGeoJson); // Use all points for maximum accuracy
 }
 
-// Function to create SVG pin path based on map pin design
-function createPinPath(size: number = 20): string {
-  // Scale the path to fit our size
-  const scale = size / 24; // Original viewBox is 24x24
-  
-  // Create the map pin shape without the inner circle
-  // Based on: M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0
-  const path = `M${20 * scale} ${10 * scale}c0 ${4.993 * scale}-${5.539 * scale} ${10.193 * scale}-${7.399 * scale} ${11.799 * scale}a${1 * scale} ${1 * scale} 0 0 1-${1.202 * scale} 0C${9.539 * scale} ${20.193 * scale} ${4 * scale} ${14.993 * scale} ${4 * scale} ${10 * scale}a${8 * scale} ${8 * scale} 0 0 1 ${16 * scale} 0`;
-  
-  return path;
-}
-
 // Add waypoint pins to the elevation chart
 function addWaypointPins() {
   if (!svg || !xScale || !yScale || !props.waypoints) return;
@@ -138,7 +126,7 @@ function addWaypointPins() {
   // Create waypoint pins
   const waypointGroup = svg.select('g').append('g').attr('class', 'waypoint-pins');
 
-  props.waypoints.forEach((waypoint) => {
+  props.waypoints.forEach((waypoint, index) => {
     // Find elevation at this distance
     const interpolatedPoint = interpolateAtDistance(elevationPoints, waypoint.distance);
     if (!interpolatedPoint) return;
@@ -147,25 +135,50 @@ function addWaypointPins() {
     const y = yScale!(interpolatedPoint.elevation);
     const color = getWaypointColor(waypoint.type);
     const isSelected = props.selectedWaypointDistance === waypoint.distance;
-    const pinSize = isSelected ? 24 : 20;
+    const circleSize = isSelected ? 16 : 12;
+    const waypointNumber = index + 1;
+    const offsetY = circleSize + 8; // Position circle above the line
 
     // Create a group for each waypoint pin
     const pinGroup = waypointGroup
       .append('g')
       .attr('class', 'waypoint-pin')
       .attr('data-waypoint-id', waypoint.id)
-      .attr('transform', `translate(${x - pinSize/2}, ${y - pinSize * 0.95})`) // Position pin so bottom point touches the line
+      .attr('transform', `translate(${x}, ${y - offsetY})`) // Position above the line
       .style('cursor', 'pointer');
 
-    // Add the pin shape
+    // Add a connecting line from circle to elevation line
     pinGroup
-      .append('path')
-      .attr('d', createPinPath(pinSize))
+      .append('line')
+      .attr('x1', 0)
+      .attr('y1', circleSize)
+      .attr('x2', 0)
+      .attr('y2', offsetY)
+      .style('stroke', color)
+      .style('stroke-width', isSelected ? 2 : 1)
+      .style('opacity', 0.6)
+      .style('pointer-events', 'none');
+
+    // Add the circle background
+    pinGroup
+      .append('circle')
+      .attr('r', circleSize)
       .style('fill', color)
       .style('stroke', '#ffffff')
-      .style('stroke-width', isSelected ? 2 : 1)
-      .style('opacity', 0.9)
+      .style('stroke-width', isSelected ? 3 : 2)
+      .style('opacity', 0.7)
       .style('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))');
+
+    // Add the number text
+    pinGroup
+      .append('text')
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'middle')
+      .attr('font-size', `${circleSize * 0.8}px`)
+      .attr('font-weight', 'bold')
+      .attr('fill', '#ffffff')
+      .attr('pointer-events', 'none')
+      .text(waypointNumber);
 
     // Add click handler with proper event binding
     pinGroup
@@ -199,7 +212,7 @@ function initChart() {
   const width = containerRect.width;
   const height = props.height;
 
-  const margin = { top: 20, right: 30, bottom: 40, left: 60 };
+  const margin = { top: 40, right: 30, bottom: 40, left: 60 }; // Increased top margin for waypoint circles
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
 
@@ -269,9 +282,11 @@ function initChart() {
 
   // Add axes
   const xAxis = d3.axisBottom(xScale)
+    .ticks(8)
     .tickFormat(d => formatDistance(Number(d), userSettingsStore.settings.units.distance));
 
   const yAxis = d3.axisLeft(yScale)
+    .ticks(6)
     .tickFormat(d => formatElevation(Number(d), userSettingsStore.settings.units.elevation));
 
   g.append('g')
@@ -294,7 +309,7 @@ function initChart() {
 
   // Add grid lines
   g.selectAll('.grid-line-x')
-    .data(xScale.ticks())
+    .data(xScale.ticks(8))
     .enter()
     .append('line')
     .attr('class', 'grid-line-x')
@@ -307,7 +322,7 @@ function initChart() {
     .style('opacity', 0.1);
 
   g.selectAll('.grid-line-y')
-    .data(yScale.ticks())
+    .data(yScale.ticks(6))
     .enter()
     .append('line')
     .attr('class', 'grid-line-y')

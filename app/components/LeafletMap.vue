@@ -28,6 +28,7 @@ interface Props {
     elevation: number;
     grade: number;
   } | null;
+  autoZoomToWaypoint?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -38,12 +39,14 @@ const props = withDefaults(defineProps<Props>(), {
   waypoints: () => [],
   selectedWaypoint: null,
   elevationHoverPoint: null,
+  autoZoomToWaypoint: false,
 });
 
 const emit = defineEmits<{
   'map-hover': [event: { lat: number; lng: number; distance: number }];
   'map-leave': [];
   'waypoint-click': [waypoint: Waypoint];
+  'line-click': [coords: { lat: number; lng: number }];
 }>();
 
 const userSettingsStore = useUserSettingsStore();
@@ -53,7 +56,7 @@ const mapId = `map-${Math.random().toString(36).substr(2, 9)}`;
 
 let map: L.Map | null = null;
 const geoJsonLayers: L.GeoJSON[] = [];
-const waypointMarkers: L.CircleMarker[] = [];
+const waypointMarkers: Map<string, L.Marker> = new Map(); // Track markers by waypoint ID
 let elevationHoverMarker: L.CircleMarker | null = null;
 
 // Function to handle track hover and calculate distance along route
@@ -186,6 +189,11 @@ function addGeoJsonLayers() {
         layer.on('mouseout', () => {
           emit('map-leave');
         });
+
+        // Add click event for line clicking
+        layer.on('click', (e: L.LeafletMouseEvent) => {
+          emit('line-click', { lat: e.latlng.lat, lng: e.latlng.lng });
+        });
       },
     }).addTo(map!);
 
@@ -218,7 +226,7 @@ function getTrackColor(index: number): string {
 }
 
 // Function to create custom waypoint icon
-function createWaypointIcon(waypoint: Waypoint, isSelected: boolean = false): L.DivIcon | null {
+function createWaypointIcon(waypoint: Waypoint, waypointNumber: number, isSelected: boolean = false): L.DivIcon | null {
   if (!L) return null;
 
   const color = getWaypointColor(waypoint.type);
@@ -238,23 +246,11 @@ function createWaypointIcon(waypoint: Waypoint, isSelected: boolean = false): L.
         align-items: center;
         justify-content: center;
         position: relative;
+        font-weight: bold;
+        color: white;
+        font-size: ${size * 0.8}px;
       ">
-        <div style="
-          width: ${size}px;
-          height: ${size}px;
-          background-color: white;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        ">
-          <div style="
-            width: ${size - 4}px;
-            height: ${size - 4}px;
-            background-color: ${color};
-            border-radius: 50%;
-          "></div>
-        </div>
+        ${waypointNumber}
       </div>
     `,
     className: 'waypoint-marker',
@@ -263,56 +259,106 @@ function createWaypointIcon(waypoint: Waypoint, isSelected: boolean = false): L.
   });
 }
 
-// Function to add waypoint markers
-function addWaypointMarkers() {
+// Function to efficiently update waypoint markers
+function updateWaypointMarkers() {
   if (!map || !L) return;
 
-  // Clear existing waypoint markers
-  waypointMarkers.forEach((marker) => {
-    map!.removeLayer(marker);
-  });
-  waypointMarkers.length = 0;
+  const currentWaypointIds = new Set(props.waypoints.map(w => w.id));
+  const existingMarkerIds = new Set(waypointMarkers.keys());
 
-  // Add new waypoint markers
-  props.waypoints.forEach((waypoint) => {
-    const isSelected = props.selectedWaypoint?.id === waypoint.id;
-    const icon = createWaypointIcon(waypoint, isSelected);
-    
-    if (!icon) return;
-
-    const marker = L.circleMarker(
-      [waypoint.lat, waypoint.lng],
-      {
-        radius: isSelected ? 10 : 8,
-        fillColor: getWaypointColor(waypoint.type),
-        color: '#ffffff',
-        weight: isSelected ? 3 : 2,
-        opacity: 1,
-        fillOpacity: 0.9,
+  // Remove markers for waypoints that no longer exist
+  for (const markerId of existingMarkerIds) {
+    if (!currentWaypointIds.has(markerId)) {
+      const marker = waypointMarkers.get(markerId);
+      if (marker) {
+        map.removeLayer(marker);
+        waypointMarkers.delete(markerId);
       }
-    ).addTo(map!);
-
-    // Add click handler
-    marker.on('click', () => {
-      emit('waypoint-click', waypoint);
-    });
-
-    // Add tooltip
-    marker.bindTooltip(
-      `<strong>${waypoint.name}</strong>${waypoint.description ? `<br/>${waypoint.description}` : ''}`,
-      {
-        permanent: isSelected, // Show permanently if selected
-        direction: 'top',
-        offset: [0, -10]
-      }
-    );
-
-    // If this waypoint is selected, open the tooltip
-    if (isSelected) {
-      marker.openTooltip();
     }
+  }
 
-    waypointMarkers.push(marker);
+  // Update or create markers for each waypoint
+  props.waypoints.forEach((waypoint, index) => {
+    const isSelected = props.selectedWaypoint?.id === waypoint.id;
+    const waypointNumber = index + 1;
+    const existingMarker = waypointMarkers.get(waypoint.id);
+
+    if (existingMarker) {
+      // Get current marker position to check if it actually changed
+      const currentPos = existingMarker.getLatLng();
+      const positionChanged = currentPos.lat !== waypoint.lat || currentPos.lng !== waypoint.lng;
+      
+      // Only update position if it actually changed
+      if (positionChanged) {
+        existingMarker.setLatLng([waypoint.lat, waypoint.lng]);
+      }
+      
+      // Check if icon needs updating (selection state or waypoint number changed)
+      const icon = existingMarker.getIcon() as L.DivIcon;
+      const iconHtml = typeof icon?.options?.html === 'string' ? icon.options.html : '';
+      const currentlySelected = iconHtml.includes('border: 3px');
+      const shouldBeSelected = isSelected;
+      const iconNeedsUpdate = currentlySelected !== shouldBeSelected;
+      
+      if (iconNeedsUpdate) {
+        const newIcon = createWaypointIcon(waypoint, waypointNumber, isSelected);
+        if (newIcon) {
+          existingMarker.setIcon(newIcon);
+        }
+      }
+
+      // Only update tooltip if selection state changed
+      if (iconNeedsUpdate) {
+        // Update tooltip
+        existingMarker.unbindTooltip();
+        existingMarker.bindTooltip(
+          `<strong>${waypoint.name}</strong>`,
+          {
+            permanent: isSelected,
+            direction: 'top',
+            offset: [0, -10]
+          }
+        );
+
+        // Handle tooltip visibility
+        if (isSelected) {
+          existingMarker.openTooltip();
+        } else {
+          existingMarker.closeTooltip();
+        }
+      }
+    } else {
+      // Create new marker
+      const icon = createWaypointIcon(waypoint, waypointNumber, isSelected);
+      if (!icon) return;
+
+      const marker = L.marker(
+        [waypoint.lat, waypoint.lng],
+        { icon }
+      ).addTo(map!);
+
+      // Add click handler
+      marker.on('click', () => {
+        emit('waypoint-click', waypoint);
+      });
+
+      // Add tooltip
+      marker.bindTooltip(
+        `<strong>${waypoint.name}</strong>`,
+        {
+          permanent: isSelected,
+          direction: 'top',
+          offset: [0, -10]
+        }
+      );
+
+      // If this waypoint is selected, open the tooltip
+      if (isSelected) {
+        marker.openTooltip();
+      }
+
+      waypointMarkers.set(waypoint.id, marker);
+    }
   });
 }
 
@@ -396,7 +442,7 @@ onMounted(() => {
   addGeoJsonLayers();
 
   // Add waypoint markers
-  addWaypointMarkers();
+  updateWaypointMarkers();
 
   // Force map to resize in case of layout issues
   setTimeout(() => {
@@ -461,7 +507,7 @@ watch(
 watch(
   () => props.waypoints,
   () => {
-    addWaypointMarkers();
+    updateWaypointMarkers();
   },
   { deep: true }
 );
@@ -469,8 +515,34 @@ watch(
 // Watch for changes in selected waypoint
 watch(
   () => props.selectedWaypoint,
-  () => {
-    addWaypointMarkers();
+  (newWaypoint, oldWaypoint) => {
+    // Only update if selection actually changed
+    if (oldWaypoint?.id !== newWaypoint?.id) {
+      updateWaypointMarkers();
+      
+      // Only zoom to selected waypoint if auto-zoom is enabled
+      if (props.autoZoomToWaypoint && newWaypoint && map) {
+        map.setView([newWaypoint.lat, newWaypoint.lng], 16, {
+          animate: true,
+          duration: 0.5
+        });
+      }
+    }
+  },
+  { deep: true }
+);
+
+// Watch for changes in center and zoom
+watch(
+  () => [props.center, props.zoom] as const,
+  ([newCenter, newZoom], [oldCenter, oldZoom]) => {
+    const centerChanged = !oldCenter || !newCenter || 
+      oldCenter[0] !== newCenter[0] || oldCenter[1] !== newCenter[1];
+    const zoomChanged = oldZoom !== newZoom;
+    
+    if (map && newCenter && typeof newZoom === 'number' && (centerChanged || zoomChanged)) {
+      map.setView(newCenter, newZoom);
+    }
   },
   { deep: true }
 );

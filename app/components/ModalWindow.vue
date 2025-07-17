@@ -1,7 +1,25 @@
 <script setup lang="ts">
-defineProps<{
+const props = defineProps<{
   open: boolean;
+  width?: string; // e.g., "80vw", "800px", "90%"
+  height?: string; // e.g., "80vh", "600px", "90%"
+  maxWidth?: string;
+  maxHeight?: string;
 }>();
+
+const emit = defineEmits(["close"]);
+
+// Compute modal styles based on props
+const modalStyles = computed(() => {
+  const styles: Record<string, string> = {};
+  
+  if (props.width) styles.width = props.width;
+  if (props.height) styles.height = props.height;
+  if (props.maxWidth) styles.maxWidth = props.maxWidth;
+  if (props.maxHeight) styles.maxHeight = props.maxHeight;
+  
+  return styles;
+});
 
 // Add event listener for escape key to close the modal
 onMounted(() => {
@@ -18,8 +36,6 @@ onMounted(() => {
     window.removeEventListener("keydown", handleKeydown);
   });
 });
-
-const emit = defineEmits(["close"]);
 </script>
 
 <template>
@@ -30,7 +46,8 @@ const emit = defineEmits(["close"]);
       @click="emit('close')"
     >
       <div
-        class="bg-(--bg-color) border border-(--main-color) m-4 md:max-w-[80%] lg:max-w-[60%] p-4 rounded-lg shadow-lg"
+        class="bg-(--bg-color) border border-(--main-color) m-4 max-w-[80%] p-4 rounded-lg shadow-lg"
+        :style="modalStyles"
         @click.stop
       >
         <slot />

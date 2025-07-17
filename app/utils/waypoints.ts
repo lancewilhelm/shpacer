@@ -196,7 +196,6 @@ export function extractWaypoints(geoJson: GeoJSON.FeatureCollection): Waypoint[]
 
       const properties = feature.properties || {};
       const name = properties.name || properties.title || properties.desc || 'Waypoint';
-      const description = properties.description || properties.desc || properties.cmt;
 
       // Find the closest point on the route to determine distance and snap coordinates
       const snappedResult = findClosestPointOnRoute(lat, lng, routeCoordinates);
@@ -204,7 +203,7 @@ export function extractWaypoints(geoJson: GeoJSON.FeatureCollection): Waypoint[]
       const waypoint: Waypoint = {
         id: `waypoint-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         name: String(name),
-        description: description ? String(description) : undefined,
+        // Remove description for waypoints - they should not have descriptions
         lat: snappedResult.snappedLat, // Use snapped coordinates
         lng: snappedResult.snappedLng, // Use snapped coordinates
         originalLat: lat, // Store original coordinates
@@ -244,7 +243,6 @@ export function generateStartFinishWaypoints(geoJson: GeoJSON.FeatureCollection)
       waypoints.push({
         id: `start-${Date.now()}`,
         name: 'Start',
-        description: 'Course start point',
         lat: startLat,
         lng: startLng,
         elevation: typeof startElevation === 'number' ? startElevation : undefined,
@@ -283,7 +281,6 @@ export function generateStartFinishWaypoints(geoJson: GeoJSON.FeatureCollection)
       waypoints.push({
         id: `finish-${Date.now()}`,
         name: 'Finish',
-        description: 'Course finish point',
         lat: finishLat,
         lng: finishLng,
         elevation: typeof finishElevation === 'number' ? finishElevation : undefined,
@@ -318,7 +315,7 @@ export function waypointsToMarkers(waypoints: Waypoint[]): WaypointMarker[] {
   return waypoints.map(waypoint => ({
     waypoint,
     position: [waypoint.lat, waypoint.lng] as [number, number],
-    popup: `<strong>${waypoint.name}</strong>${waypoint.description ? `<br/>${waypoint.description}` : ''}`,
+    popup: `<strong>${waypoint.name}</strong>`,
     icon: waypoint.icon
   }));
 }
@@ -367,7 +364,6 @@ export function createWaypointAtPosition(
   lat: number,
   lng: number,
   name: string,
-  description?: string,
   type: Waypoint['type'] = 'waypoint'
 ): Waypoint {
   const routeCoordinates = extractRouteCoordinates(geoJson);
@@ -376,7 +372,6 @@ export function createWaypointAtPosition(
   return {
     id: `waypoint-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     name,
-    description,
     lat: snappedResult.snappedLat,
     lng: snappedResult.snappedLng,
     originalLat: lat,

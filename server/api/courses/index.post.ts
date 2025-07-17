@@ -76,7 +76,7 @@ export default defineEventHandler(async (event) => {
       const waypointInserts = waypointData.map(wp => ({
         courseId: newCourse.id,
         name: wp.name,
-        description: wp.description || null,
+        // Remove description field - waypoints should not have descriptions
         lat: wp.lat.toString(),
         lng: wp.lng.toString(),
         elevation: wp.elevation || null,
