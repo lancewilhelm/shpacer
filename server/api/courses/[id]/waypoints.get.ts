@@ -54,13 +54,12 @@ export default defineEventHandler(async (event) => {
     const formattedWaypoints = courseWaypoints.map(waypoint => ({
       id: waypoint.id,
       name: waypoint.name,
-      // Remove description field - waypoints should not have descriptions
+      description: waypoint.description,
       lat: parseFloat(waypoint.lat),
       lng: parseFloat(waypoint.lng),
       elevation: waypoint.elevation,
       distance: waypoint.distance,
-      type: waypoint.type as 'start' | 'finish' | 'waypoint' | 'poi',
-      icon: waypoint.icon,
+      tags: JSON.parse(waypoint.tags as string),
       order: waypoint.order,
     }));
 

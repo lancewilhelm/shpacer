@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { formatDistance, formatElevation } from '~/utils/courseMetrics';
 import type { Waypoint } from '~/utils/waypoints';
-import { getWaypointColor } from '~/utils/waypoints';
+import { getWaypointColorFromOrder } from '~/utils/waypoints';
 
 // Only import Leaflet on client side to avoid SSR issues
 let L: typeof import("leaflet") | null = null;
@@ -29,6 +29,11 @@ interface Props {
     grade: number;
   } | null;
   autoZoomToWaypoint?: boolean;
+  mapClickLocation?: {
+    lat: number;
+    lng: number;
+    distance: number;
+  } | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -40,6 +45,7 @@ const props = withDefaults(defineProps<Props>(), {
   selectedWaypoint: null,
   elevationHoverPoint: null,
   autoZoomToWaypoint: false,
+  mapClickLocation: null,
 });
 
 const emit = defineEmits<{
@@ -47,6 +53,7 @@ const emit = defineEmits<{
   'map-leave': [];
   'waypoint-click': [waypoint: Waypoint];
   'line-click': [coords: { lat: number; lng: number }];
+  'track-click': [coords: { lat: number; lng: number }];
 }>();
 
 const userSettingsStore = useUserSettingsStore();
@@ -190,9 +197,9 @@ function addGeoJsonLayers() {
           emit('map-leave');
         });
 
-        // Add click event for line clicking
+        // Add click event for track clicking (for waypoint creation)
         layer.on('click', (e: L.LeafletMouseEvent) => {
-          emit('line-click', { lat: e.latlng.lat, lng: e.latlng.lng });
+          emit('track-click', { lat: e.latlng.lat, lng: e.latlng.lng });
         });
       },
     }).addTo(map!);
@@ -225,11 +232,34 @@ function getTrackColor(index: number): string {
   return colors[index % colors.length] || "#ff0000";
 }
 
+// Function to get waypoint display content (S, F, or number)
+function getWaypointDisplayContent(waypoint: Waypoint, waypoints: Waypoint[]): string {
+  const sortedWaypoints = [...waypoints].sort((a, b) => a.order - b.order);
+  const waypointIndex = sortedWaypoints.findIndex(w => w.id === waypoint.id);
+  
+  if (waypointIndex === -1) return '?';
+  
+  // First waypoint is Start
+  if (waypointIndex === 0) return 'S';
+  
+  // Last waypoint is Finish
+  if (waypointIndex === sortedWaypoints.length - 1) return 'F';
+  
+  // Middle waypoints are numbered 1, 2, 3, etc.
+  return waypointIndex.toString();
+}
+
+// Function to get waypoint primary color
+function getWaypointPrimaryColor(waypoint: Waypoint, waypoints: Waypoint[]): string {
+  return getWaypointColorFromOrder(waypoint, waypoints);
+}
+
 // Function to create custom waypoint icon
-function createWaypointIcon(waypoint: Waypoint, waypointNumber: number, isSelected: boolean = false): L.DivIcon | null {
+function createWaypointIcon(waypoint: Waypoint, waypoints: Waypoint[], isSelected: boolean = false): L.DivIcon | null {
   if (!L) return null;
 
-  const color = getWaypointColor(waypoint.type);
+  const color = getWaypointPrimaryColor(waypoint, waypoints);
+  const displayContent = getWaypointDisplayContent(waypoint, waypoints);
   const size = isSelected ? 16 : 12;
   const borderWidth = isSelected ? 3 : 2;
 
@@ -250,7 +280,7 @@ function createWaypointIcon(waypoint: Waypoint, waypointNumber: number, isSelect
         color: white;
         font-size: ${size * 0.8}px;
       ">
-        ${waypointNumber}
+        ${displayContent}
       </div>
     `,
     className: 'waypoint-marker',
@@ -278,9 +308,8 @@ function updateWaypointMarkers() {
   }
 
   // Update or create markers for each waypoint
-  props.waypoints.forEach((waypoint, index) => {
+  props.waypoints.forEach((waypoint) => {
     const isSelected = props.selectedWaypoint?.id === waypoint.id;
-    const waypointNumber = index + 1;
     const existingMarker = waypointMarkers.get(waypoint.id);
 
     if (existingMarker) {
@@ -301,7 +330,7 @@ function updateWaypointMarkers() {
       const iconNeedsUpdate = currentlySelected !== shouldBeSelected;
       
       if (iconNeedsUpdate) {
-        const newIcon = createWaypointIcon(waypoint, waypointNumber, isSelected);
+        const newIcon = createWaypointIcon(waypoint, props.waypoints, isSelected);
         if (newIcon) {
           existingMarker.setIcon(newIcon);
         }
@@ -329,7 +358,7 @@ function updateWaypointMarkers() {
       }
     } else {
       // Create new marker
-      const icon = createWaypointIcon(waypoint, waypointNumber, isSelected);
+      const icon = createWaypointIcon(waypoint, props.waypoints, isSelected);
       if (!icon) return;
 
       const marker = L.marker(

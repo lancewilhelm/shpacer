@@ -1,7 +1,15 @@
 <script setup lang="ts">
-import type { Waypoint } from '~/utils/waypoints';
+import type { SelectWaypoint } from '~/utils/db/schema';
 import { formatDistance, formatElevation } from '~/utils/courseMetrics';
-import { getWaypointColor } from '~/utils/waypoints';
+import { getTagsByIds } from '~/utils/waypointTags';
+import { getWaypointColorFromOrder } from '~/utils/waypoints';
+
+// Define a waypoint type that matches what we get from the API
+type Waypoint = SelectWaypoint & {
+  lat: number;
+  lng: number;
+  tags: string[];
+};
 
 interface Props {
   waypoints?: Waypoint[];
@@ -41,23 +49,34 @@ function formatWaypointDistance(meters: number) {
   return formatDistance(meters, userSettingsStore.settings.units.distance);
 }
 
-function formatWaypointElevation(meters: number) {
+function formatWaypointElevation(meters: number | null) {
+  if (meters === null) return '';
   return formatElevation(meters, userSettingsStore.settings.units.elevation);
 }
 
-function getWaypointTypeLabel(type: Waypoint['type']): string {
-  switch (type) {
-    case 'start':
-      return 'Start';
-    case 'finish':
-      return 'Finish';
-    case 'waypoint':
-      return 'Waypoint';
-    case 'poi':
-      return 'Point of Interest';
-    default:
-      return 'Unknown';
+function getWaypointPrimaryColor(waypoint: Waypoint): string {
+  return getWaypointColorFromOrder(waypoint, waypoints.value || []);
+}
+
+function getWaypointDisplayContent(waypoint: Waypoint): string {
+  // Check if this is a start waypoint (order 0)
+  if (waypoint.order === 0) {
+    return 'S';
   }
+  
+  // Check if this is a finish waypoint (highest order)
+  const maxOrder = Math.max(...(waypoints.value?.map(w => w.order) || [0]));
+  if (waypoint.order === maxOrder && waypoint.order > 0) {
+    return 'F';
+  }
+  
+  // Regular waypoints get numbered 1, 2, 3, etc.
+  // Filter out start/finish waypoints and get the index
+  const regularWaypoints = waypoints.value?.filter(w => 
+    w.order !== 0 && w.order !== maxOrder
+  ) || [];
+  const regularIndex = regularWaypoints.findIndex(w => w.id === waypoint.id);
+  return (regularIndex + 1).toString();
 }
 </script>
 
@@ -71,7 +90,7 @@ function getWaypointTypeLabel(type: Waypoint['type']): string {
       
       <div v-else class="space-y-1 p-1">
         <div
-          v-for="(waypoint, index) in waypoints"
+          v-for="waypoint in waypoints"
           :key="waypoint.id"
           class="p-1 rounded-lg cursor-pointer transition-all duration-200 hover:bg-(--sub-alt-color) border"
           :class="{
@@ -83,26 +102,39 @@ function getWaypointTypeLabel(type: Waypoint['type']): string {
           @mouseleave="handleWaypointLeave"
         >
           <div class="flex items-start gap-2">
-            <!-- Waypoint Number -->
+            <!-- Waypoint Number/Letter -->
             <div
               class="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white"
-              :style="{ backgroundColor: getWaypointColor(waypoint.type) }"
+              :style="{ backgroundColor: getWaypointPrimaryColor(waypoint) }"
             >
-              {{ index + 1 }}
+              {{ getWaypointDisplayContent(waypoint) }}
             </div>
             
             <!-- Waypoint Info -->
             <div class="flex-1 min-w-0">
-              <div class="flex items-center justify-between gap-2">
+              <div class="flex items-start justify-between gap-2">
                 <h6 class="font-medium text-(--main-color) truncate">
                   {{ waypoint.name }}
                 </h6>
-                <span
-                  class="text-xs px-2 py-1 rounded-full text-(--bg-color) font-medium"
-                  :style="{ backgroundColor: getWaypointColor(waypoint.type) }"
+              </div>
+              
+              <!-- Tags Row -->
+              <div 
+                v-if="waypoint.tags.length > 0"
+                class="flex gap-1 mt-1 flex-wrap"
+              >
+                <div
+                  v-for="tagId in waypoint.tags"
+                  :key="tagId"
+                  class="w-5 h-5 rounded flex items-center justify-center"
+                  :style="{ backgroundColor: getTagsByIds([tagId])[0]?.color || '#6b7280' }"
+                  :title="getTagsByIds([tagId])[0]?.label || tagId"
                 >
-                  {{ getWaypointTypeLabel(waypoint.type) }}
-                </span>
+                  <Icon
+                    :name="getTagsByIds([tagId])[0]?.icon || 'lucide:map-pin'"
+                    class="h-3 w-3 text-white"
+                  />
+                </div>
               </div>
               
               <!-- Distance and Elevation -->

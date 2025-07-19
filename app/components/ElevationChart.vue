@@ -1,6 +1,16 @@
 <template>
   <div class="elevation-chart-container">
-    <div ref="chartContainer" class="elevation-chart" />
+    <div 
+      ref="chartContainer" 
+      class="elevation-chart" 
+      :class="{ 'creation-mode': creationMode }"
+    />
+    
+    <!-- Creation mode indicator -->
+    <div v-if="creationMode" class="creation-mode-indicator">
+      <Icon name="heroicons:plus-circle" class="h-4 w-4" />
+      <span>Click on the elevation profile to add a waypoint</span>
+    </div>
     
     <!-- Custom tooltip -->
     <div 
@@ -28,7 +38,7 @@ import * as d3 from 'd3';
 import { extractElevationProfile, interpolateAtDistance, getElevationStats, calculateGradeAtDistance, type ElevationPoint } from '~/utils/elevationProfile';
 import { formatDistance, formatElevation } from '~/utils/courseMetrics';
 import { useUserSettingsStore } from '~/stores/userSettings';
-import { getWaypointColor } from '~/utils/waypoints';
+import { getWaypointColorFromOrder } from '~/utils/waypoints';
 
 interface Props {
   geoJsonData: GeoJSON.FeatureCollection[];
@@ -39,8 +49,10 @@ interface Props {
     id: string;
     name: string;
     distance: number;
-    type: 'start' | 'finish' | 'waypoint' | 'poi';
+    order: number;
+    tags: string[];
   }>;
+  creationMode?: boolean;
 }
 
 interface ElevationHoverEvent {
@@ -56,12 +68,14 @@ const props = withDefaults(defineProps<Props>(), {
   mapHoverDistance: null,
   selectedWaypointDistance: null,
   waypoints: () => [],
+  creationMode: false,
 });
 
 const emit = defineEmits<{
   'elevation-hover': [event: ElevationHoverEvent];
   'elevation-leave': [];
-  'waypoint-click': [waypoint: { id: string; name: string; distance: number; type: 'start' | 'finish' | 'waypoint' | 'poi' }];
+  'waypoint-click': [waypoint: { id: string; name: string; distance: number; order: number; tags: string[] }];
+  'waypoint-create': [event: { lat: number; lng: number; distance: number; elevation: number }];
 }>();
 
 const userSettingsStore = useUserSettingsStore();
@@ -116,6 +130,28 @@ function processGeoJsonData() {
   elevationPoints = extractElevationProfile(combinedGeoJson); // Use all points for maximum accuracy
 }
 
+// Function to get waypoint display content (S, F, or number)
+function getWaypointDisplayContent(waypoint: { id: string; order: number }, waypoints: { id: string; order: number }[]): string {
+  const sortedWaypoints = [...waypoints].sort((a, b) => a.order - b.order);
+  const waypointIndex = sortedWaypoints.findIndex(w => w.id === waypoint.id);
+  
+  if (waypointIndex === -1) return '?';
+  
+  // First waypoint is Start
+  if (waypointIndex === 0) return 'S';
+  
+  // Last waypoint is Finish
+  if (waypointIndex === sortedWaypoints.length - 1) return 'F';
+  
+  // Middle waypoints are numbered 1, 2, 3, etc.
+  return waypointIndex.toString();
+}
+
+// Function to get waypoint primary color
+function getWaypointPrimaryColor(waypoint: { order: number }, waypoints: { order: number }[]): string {
+  return getWaypointColorFromOrder(waypoint, waypoints);
+}
+
 // Add waypoint pins to the elevation chart
 function addWaypointPins() {
   if (!svg || !xScale || !yScale || !props.waypoints) return;
@@ -126,17 +162,17 @@ function addWaypointPins() {
   // Create waypoint pins
   const waypointGroup = svg.select('g').append('g').attr('class', 'waypoint-pins');
 
-  props.waypoints.forEach((waypoint, index) => {
+  props.waypoints.forEach((waypoint) => {
     // Find elevation at this distance
     const interpolatedPoint = interpolateAtDistance(elevationPoints, waypoint.distance);
     if (!interpolatedPoint) return;
 
     const x = xScale!(waypoint.distance);
     const y = yScale!(interpolatedPoint.elevation);
-    const color = getWaypointColor(waypoint.type);
+    const color = getWaypointPrimaryColor(waypoint, props.waypoints);
     const isSelected = props.selectedWaypointDistance === waypoint.distance;
     const circleSize = isSelected ? 16 : 12;
-    const waypointNumber = index + 1;
+    const displayContent = getWaypointDisplayContent(waypoint, props.waypoints);
     const offsetY = circleSize + 8; // Position circle above the line
 
     // Create a group for each waypoint pin
@@ -178,7 +214,7 @@ function addWaypointPins() {
       .attr('font-weight', 'bold')
       .attr('fill', '#ffffff')
       .attr('pointer-events', 'none')
-      .text(waypointNumber);
+      .text(displayContent);
 
     // Add click handler with proper event binding
     pinGroup
@@ -382,8 +418,10 @@ function initChart() {
     .attr('height', innerHeight)
     .style('fill', 'none')
     .style('pointer-events', 'all')
+    .style('cursor', props.creationMode ? 'crosshair' : 'default')
     .on('mousemove', handleMouseMove)
-    .on('mouseleave', handleMouseLeave);
+    .on('mouseleave', handleMouseLeave)
+    .on('click', handleChartClick);
 
   // Add axis labels
   g.append('text')
@@ -479,6 +517,26 @@ function handleMouseLeave() {
   }
 
   emit('elevation-leave');
+}
+
+// Handle chart click for waypoint creation
+function handleChartClick(event: MouseEvent) {
+  if (!props.creationMode || !xScale) return;
+
+  const [mouseX] = d3.pointer(event);
+  const distance = xScale.invert(mouseX);
+
+  // Interpolate elevation and coordinates at this distance
+  const interpolatedPoint = interpolateAtDistance(elevationPoints, distance);
+  
+  if (interpolatedPoint) {
+    emit('waypoint-create', {
+      lat: interpolatedPoint.lat,
+      lng: interpolatedPoint.lng,
+      distance: interpolatedPoint.distance,
+      elevation: interpolatedPoint.elevation
+    });
+  }
 }
 
 // Update map hover crosshair position
@@ -644,6 +702,14 @@ watch(() => props.selectedWaypointDistance, () => {
   }
 });
 
+// Watch for creation mode changes to update cursor
+watch(() => props.creationMode, () => {
+  if (svg) {
+    svg.select('.overlay')
+      .style('cursor', props.creationMode ? 'crosshair' : 'default');
+  }
+});
+
 // Setup resize observer
 onMounted(() => {
   if (chartContainer.value) {
@@ -724,5 +790,35 @@ onMounted(() => {
   background-color: var(--bg-color);
   border-color: var(--sub-color);
   opacity: 0.7;
+}
+
+.creation-mode {
+  border: 2px dashed var(--main-color);
+  border-radius: 8px;
+}
+
+.creation-mode-indicator {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: var(--main-color);
+  color: var(--bg-color);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 20;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
 </style>

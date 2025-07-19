@@ -292,6 +292,11 @@ function handleWaypointDeleted(_waypointId: string) {
   _refreshWaypoints();
 }
 
+function handleWaypointCreated(_createdWaypoint: Waypoint) {
+  // Refresh waypoints to get the latest data after creation
+  _refreshWaypoints();
+}
+
 // Cleanup resize listeners on unmount
 onUnmounted(() => {
   if (isResizing.value) {
@@ -526,7 +531,7 @@ onUnmounted(() => {
             />
             
             <div class="p-4 border-b border-(--sub-color)">
-              <h4 class="text-lg font-semibold text-(--main-color)">Waypoints</h4>
+              <div class="text-lg font-semibold text-(--main-color)">Waypoints</div>
             </div>
             <div class="flex-1 overflow-hidden">
               <WaypointList
@@ -552,6 +557,7 @@ onUnmounted(() => {
       @course-updated="handleCourseUpdated"
       @waypoint-updated="handleWaypointUpdated"
       @waypoint-deleted="handleWaypointDeleted"
+      @waypoint-created="handleWaypointCreated"
     />
   </div>
 </template>

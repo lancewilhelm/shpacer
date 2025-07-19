@@ -149,7 +149,7 @@ export const waypoints = sqliteTable("waypoints", {
   lng: text("lng").notNull(), // Store as text for precision
   elevation: integer("elevation"), // in meters
   distance: integer("distance").notNull(), // distance along route in meters
-  type: text("type").notNull(), // 'start', 'finish', 'waypoint', 'poi'
+  tags: text("tags", { mode: "json" }).notNull().default("[]"), // Array of tag IDs
   icon: text("icon"),
   order: integer("order").notNull(), // order along the route
   

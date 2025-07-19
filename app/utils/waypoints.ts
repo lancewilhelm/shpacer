@@ -12,7 +12,7 @@ export interface Waypoint {
   originalLng?: number; // Original GPS coordinates from GPX file
   elevation?: number;
   distance: number; // Distance along route in meters
-  type: 'start' | 'finish' | 'waypoint' | 'poi';
+  tags: string[]; // Array of tag IDs
   icon?: string;
   order: number; // Order along the route (0 = start, 999999 = finish)
   snapDistance?: number; // Distance from original point to snapped point (for quality assessment)
@@ -210,7 +210,7 @@ export function extractWaypoints(geoJson: GeoJSON.FeatureCollection): Waypoint[]
         originalLng: lng, // Store original coordinates
         elevation: snappedResult.snappedElevation || (typeof elevation === 'number' ? elevation : undefined),
         distance: snappedResult.distance,
-        type: 'waypoint',
+        tags: [], // No tags by default, user can add them later
         order: Math.floor(snappedResult.distance), // Use distance as order for now
         snapDistance: calculateDistance(lat, lng, snappedResult.snappedLat, snappedResult.snappedLng)
       };
@@ -247,7 +247,7 @@ export function generateStartFinishWaypoints(geoJson: GeoJSON.FeatureCollection)
         lng: startLng,
         elevation: typeof startElevation === 'number' ? startElevation : undefined,
         distance: 0,
-        type: 'start',
+        tags: [], // No tags by default
         icon: 'heroicons:play',
         order: 0
       });
@@ -285,7 +285,7 @@ export function generateStartFinishWaypoints(geoJson: GeoJSON.FeatureCollection)
         lng: finishLng,
         elevation: typeof finishElevation === 'number' ? finishElevation : undefined,
         distance: totalDistance,
-        type: 'finish',
+        tags: [], // No tags by default
         icon: 'heroicons:flag',
         order: 999999
       });
@@ -321,27 +321,10 @@ export function waypointsToMarkers(waypoints: Waypoint[]): WaypointMarker[] {
 }
 
 /**
- * Get waypoint icon based on type
- */
-export function getWaypointIcon(type: Waypoint['type']): string {
-  switch (type) {
-    case 'start':
-      return 'heroicons:play';
-    case 'finish':
-      return 'heroicons:flag';
-    case 'waypoint':
-      return 'heroicons:map-pin';
-    case 'poi':
-      return 'heroicons:star';
-    default:
-      return 'heroicons:map-pin';
-  }
-}
-
-/**
  * Get waypoint color based on type
+ * @deprecated Use getWaypointColorFromOrder for new database waypoints
  */
-export function getWaypointColor(type: Waypoint['type']): string {
+export function getWaypointColor(type: 'start' | 'finish' | 'waypoint' | 'poi'): string {
   switch (type) {
     case 'start':
       return '#10b981'; // Green
@@ -364,7 +347,7 @@ export function createWaypointAtPosition(
   lat: number,
   lng: number,
   name: string,
-  type: Waypoint['type'] = 'waypoint'
+  tags: string[] = []
 ): Waypoint {
   const routeCoordinates = extractRouteCoordinates(geoJson);
   const snappedResult = findClosestPointOnRoute(lat, lng, routeCoordinates);
@@ -378,7 +361,7 @@ export function createWaypointAtPosition(
     originalLng: lng,
     elevation: snappedResult.snappedElevation,
     distance: snappedResult.distance,
-    type,
+    tags,
     order: Math.floor(snappedResult.distance),
     snapDistance: calculateDistance(lat, lng, snappedResult.snappedLat, snappedResult.snappedLng)
   };
@@ -431,4 +414,24 @@ export function getQualityColor(quality: ReturnType<typeof getWaypointQuality>):
     case 'fair': return '#f59e0b';      // Amber
     case 'poor': return '#ef4444';      // Red
   }
+}
+
+/**
+ * Get waypoint color for database waypoints (using order to determine start/finish)
+ * This function works with the new database schema that uses tags instead of type
+ */
+export function getWaypointColorFromOrder(waypoint: { order: number }, allWaypoints: { order: number }[]): string {
+  // Check if this is a start waypoint (order 0)
+  if (waypoint.order === 0) {
+    return '#10b981'; // Green for start
+  }
+  
+  // Check if this is a finish waypoint (highest order)
+  const maxOrder = Math.max(...allWaypoints.map(w => w.order));
+  if (waypoint.order === maxOrder && waypoint.order > 0) {
+    return '#ef4444'; // Red for finish
+  }
+  
+  // Regular waypoints get blue
+  return '#3b82f6';
 }

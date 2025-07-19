@@ -6,9 +6,11 @@ import { auth } from "~/utils/auth";
 interface UpdateWaypointRequest {
   id: string;
   name?: string;
+  description?: string;
   distance?: number;
   lat?: number;
   lng?: number;
+  tags?: string[];
 }
 
 export default defineEventHandler(async (event) => {
@@ -69,6 +71,14 @@ export default defineEventHandler(async (event) => {
       updateData.name = body.name;
     }
 
+    if (body.description !== undefined) {
+      updateData.description = body.description;
+    }
+
+    if (body.tags !== undefined) {
+      updateData.tags = JSON.stringify(body.tags);
+    }
+
     if (body.distance !== undefined) {
       updateData.distance = body.distance;
       updateData.order = Math.floor(body.distance); // Update order based on distance
@@ -93,12 +103,12 @@ export default defineEventHandler(async (event) => {
     const formattedWaypoint = {
       id: updatedWaypoint.id,
       name: updatedWaypoint.name,
+      description: updatedWaypoint.description,
       lat: parseFloat(updatedWaypoint.lat),
       lng: parseFloat(updatedWaypoint.lng),
       elevation: updatedWaypoint.elevation,
       distance: updatedWaypoint.distance,
-      type: updatedWaypoint.type as 'start' | 'finish' | 'waypoint' | 'poi',
-      icon: updatedWaypoint.icon,
+      tags: JSON.parse(updatedWaypoint.tags as string),
       order: updatedWaypoint.order,
     };
 

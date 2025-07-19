@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import type { SelectCourse } from '~/utils/db/schema';
 import type { Waypoint } from '~/utils/waypoints';
-import { getWaypointColor } from '~/utils/waypoints';
+import { getWaypointColorFromOrder } from '~/utils/waypoints';
 import { formatDistance } from '~/utils/courseMetrics';
+import { extractElevationProfile, interpolateAtDistance } from '~/utils/elevationProfile';
+import { getTagsByIds } from '~/utils/waypointTags';
+import WaypointTagSelector from '~/components/WaypointTagSelector.vue';
 
 interface Props {
   open: boolean;
@@ -16,6 +19,7 @@ interface Emits {
   'course-updated': [course: SelectCourse];
   'waypoint-updated': [waypoint: Waypoint];
   'waypoint-deleted': [waypointId: string];
+  'waypoint-created': [waypoint: Waypoint];
 }
 
 const props = defineProps<Props>();
@@ -39,12 +43,60 @@ const editableWaypoints = ref<Waypoint[]>([]);
 const selectedWaypointForEdit = ref<Waypoint | null>(null);
 const originalWaypointState = ref<Waypoint | null>(null); // Store original state for reset
 const editingWaypointDistance = ref<string>('');
-const editingStepSize = ref<number>(0.1); // Default step size in user's preferred units
+const editingStepSize = ref<number>(0.1); // Default step size: 0.1 miles or 0.1 km
 const preventMapCentering = ref<boolean>(false);
 const stableMapCenter = ref<[number, number] | null>(null); // Stable center during edits
 const waypointUpdateError = ref('');
 const updatingWaypointIds = ref<Set<string>>(new Set());
 const deletingWaypointIds = ref<Set<string>>(new Set());
+
+// Helper functions for waypoint display
+function getWaypointDisplayContent(waypoint: Waypoint, waypoints: Waypoint[]): string {
+  const sortedWaypoints = [...waypoints].sort((a, b) => a.order - b.order);
+  const waypointIndex = sortedWaypoints.findIndex(w => w.id === waypoint.id);
+  
+  if (waypointIndex === -1) return '?';
+  
+  // First waypoint is Start
+  if (waypointIndex === 0) return 'S';
+  
+  // Last waypoint is Finish
+  if (waypointIndex === sortedWaypoints.length - 1) return 'F';
+  
+  // Middle waypoints are numbered 1, 2, 3, etc.
+  return waypointIndex.toString();
+}
+
+function getWaypointPrimaryColor(waypoint: Waypoint, waypoints: Waypoint[]): string {
+  return getWaypointColorFromOrder(waypoint, waypoints);
+}
+
+function isStartOrFinishWaypoint(waypoint: Waypoint, waypoints: Waypoint[]): boolean {
+  const sortedWaypoints = [...waypoints].sort((a, b) => a.order - b.order);
+  const waypointIndex = sortedWaypoints.findIndex(w => w.id === waypoint.id);
+  return waypointIndex === 0 || waypointIndex === sortedWaypoints.length - 1;
+}
+
+function canDeleteWaypoint(waypoint: Waypoint, waypoints: Waypoint[]): boolean {
+  return !isStartOrFinishWaypoint(waypoint, waypoints);
+}
+
+async function updateWaypointTags(tags: string[]) {
+  if (!selectedWaypointForEdit.value) return;
+  
+  // Update the local waypoint tags
+  selectedWaypointForEdit.value.tags = tags;
+  
+  // If it's not a new waypoint being created, save to the database
+  if (!newWaypointBeingCreated.value) {
+    await updateWaypoint(selectedWaypointForEdit.value);
+  }
+}
+
+// Waypoint creation state
+const creatingWaypoint = ref(false);
+const newWaypointBeingCreated = ref<Partial<Waypoint> | null>(null);
+const mapClickLocation = ref<{ lat: number; lng: number; distance: number } | null>(null);
 
 // Initialize form data when course changes
 watchEffect(() => {
@@ -81,8 +133,8 @@ watch(selectedWaypointForEdit, (newWaypoint) => {
     // Convert from meters to user's preferred units
     const distanceInUserUnits = userSettingsStore.settings.units.distance === 'miles' 
       ? newWaypoint.distance * 0.000621371 // Convert meters to miles
-      : newWaypoint.distance; // Keep in meters
-    editingWaypointDistance.value = distanceInUserUnits.toFixed(userSettingsStore.settings.units.distance === 'miles' ? 3 : 0);
+      : newWaypoint.distance / 1000; // Convert meters to kilometers
+    editingWaypointDistance.value = distanceInUserUnits.toFixed(userSettingsStore.settings.units.distance === 'miles' ? 3 : 1);
   } else {
     editingWaypointDistance.value = '';
   }
@@ -179,6 +231,15 @@ function closeModal() {
   updatingWaypointIds.value.clear();
   deletingWaypointIds.value.clear();
   
+  // Clean up temporary waypoint if it exists
+  if (newWaypointBeingCreated.value) {
+    const index = editableWaypoints.value.findIndex(w => w.id === newWaypointBeingCreated.value?.id);
+    if (index !== -1) {
+      editableWaypoints.value.splice(index, 1);
+    }
+    newWaypointBeingCreated.value = null;
+  }
+  
   // Reset waypoint editing state
   if (originalWaypointState.value && selectedWaypointForEdit.value) {
     const index = editableWaypoints.value.findIndex(w => w.id === selectedWaypointForEdit.value?.id);
@@ -243,6 +304,7 @@ async function updateWaypoint(waypoint: Waypoint) {
         distance: waypoint.distance,
         lat: waypoint.lat,
         lng: waypoint.lng,
+        tags: waypoint.tags || [],
       },
     });
 
@@ -250,6 +312,8 @@ async function updateWaypoint(waypoint: Waypoint) {
     const index = editableWaypoints.value.findIndex(w => w.id === waypoint.id);
     if (index !== -1) {
       editableWaypoints.value[index] = response.waypoint;
+      // Sort waypoints by distance to update numbering
+      editableWaypoints.value.sort((a, b) => a.distance - b.distance);
     }
 
     emit('waypoint-updated', response.waypoint);
@@ -265,7 +329,7 @@ async function deleteWaypoint(waypoint: Waypoint) {
   if (!props.course) return;
   
   // Don't allow deleting start/finish waypoints
-  if (waypoint.type === 'start' || waypoint.type === 'finish') {
+  if (isStartOrFinishWaypoint(waypoint, props.waypoints)) {
     waypointUpdateError.value = 'Cannot delete start or finish waypoints.';
     return;
   }
@@ -301,6 +365,213 @@ async function deleteWaypoint(waypoint: Waypoint) {
   }
 }
 
+async function createWaypoint(event?: { lat: number; lng: number; distance: number; elevation: number }, customName?: string) {
+  if (!props.course) return;
+
+  creatingWaypoint.value = true;
+  waypointUpdateError.value = '';
+
+  try {
+    let lat, lng, distance, elevation;
+    
+    if (event) {
+      // Called from elevation chart or other source with specific coordinates
+      lat = event.lat;
+      lng = event.lng;
+      distance = event.distance;
+      elevation = event.elevation;
+    } else {
+      // Called from plus button - use current map center and calculate distance
+      const currentMapCenter = mapCenter.value;
+      if (!currentMapCenter) {
+        waypointUpdateError.value = 'Unable to determine position for new waypoint.';
+        return;
+      }
+      
+      lat = currentMapCenter[0];
+      lng = currentMapCenter[1];
+      const calculatedDistance = calculateDistanceFromPosition(lat, lng);
+      
+      if (calculatedDistance === null) {
+        waypointUpdateError.value = 'Unable to calculate distance for new waypoint.';
+        return;
+      }
+      
+      distance = calculatedDistance;
+      elevation = calculateElevationAtDistance(distance); // Calculate elevation from distance
+    }
+
+    // Generate a default name based on distance
+    const distanceInUserUnits = userSettingsStore.settings.units.distance === 'miles' 
+      ? distance * 0.000621371 
+      : distance / 1000; // Convert to km
+    const formattedDistance = distanceInUserUnits.toFixed(userSettingsStore.settings.units.distance === 'miles' ? 1 : 1);
+    const unit = userSettingsStore.settings.units.distance === 'miles' ? 'mi' : 'km';
+    const defaultName = customName || `Waypoint ${formattedDistance}${unit}`;
+
+    const response = await $fetch<{ waypoint: Waypoint }>(`/api/courses/${props.course.id}/waypoints`, {
+      method: 'POST',
+      body: {
+        name: defaultName,
+        lat: lat,
+        lng: lng,
+        distance: distance,
+        elevation: elevation,
+        type: 'waypoint'
+      },
+    });
+
+    // Add to local array and sort by distance
+    editableWaypoints.value.push(response.waypoint);
+    editableWaypoints.value.sort((a, b) => a.distance - b.distance);
+
+    emit('waypoint-created', response.waypoint);
+    
+    // Clear any creation state
+    newWaypointBeingCreated.value = null;
+    mapClickLocation.value = null;
+  } catch (error) {
+    console.error('Error creating waypoint:', error);
+    waypointUpdateError.value = 'Failed to create waypoint. Please try again.';
+  } finally {
+    creatingWaypoint.value = false;
+  }
+}
+
+function startManualWaypointCreation() {
+  // Create a new waypoint object for editing, starting at distance 0
+  const distanceInUserUnits = 0; // Always start at 0
+  const distanceInMeters = 0; // Always start at 0 meters
+    
+  const position = calculatePositionFromDistance(distanceInMeters);
+  if (!position) {
+    waypointUpdateError.value = 'Unable to calculate position for new waypoint.';
+    return;
+  }
+
+  // Calculate elevation at distance 0
+  const elevation = calculateElevationAtDistance(distanceInMeters);
+
+  newWaypointBeingCreated.value = {
+    id: 'temp-new-waypoint',
+    name: 'New Waypoint',
+    lat: position.lat,
+    lng: position.lng,
+    distance: distanceInMeters,
+    elevation: elevation,
+    order: Math.floor(distanceInMeters),
+    tags: [] // Start with no tags
+  };
+  
+  // Add to editable waypoints temporarily so it shows on the map
+  editableWaypoints.value.push(newWaypointBeingCreated.value as Waypoint);
+  editableWaypoints.value.sort((a, b) => a.distance - b.distance);
+  
+  // Set this as the selected waypoint for editing
+  selectedWaypointForEdit.value = newWaypointBeingCreated.value as Waypoint;
+  editingWaypointDistance.value = distanceInUserUnits.toFixed(userSettingsStore.settings.units.distance === 'miles' ? 3 : 1);
+}
+
+function handleMapTrackClick(coords: { lat: number; lng: number }) {
+  // Only show the popup if we're not currently editing any waypoint
+  if (selectedWaypointForEdit.value) {
+    // If we're editing a waypoint, treat this as a line click to move the waypoint
+    handleMapLineClick(coords);
+    return;
+  }
+  
+  // Calculate distance for this position and show the creation popup
+  const distance = calculateDistanceFromPosition(coords.lat, coords.lng);
+  if (distance !== null) {
+    mapClickLocation.value = {
+      lat: coords.lat,
+      lng: coords.lng,
+      distance: distance
+    };
+  }
+}
+
+function createWaypointAtMapClick() {
+  if (!mapClickLocation.value) return;
+  
+  const elevation = calculateElevationAtDistance(mapClickLocation.value.distance);
+  
+  createWaypoint({
+    lat: mapClickLocation.value.lat,
+    lng: mapClickLocation.value.lng,
+    distance: mapClickLocation.value.distance,
+    elevation: elevation
+  });
+  
+  // Clear the click location
+  mapClickLocation.value = null;
+}
+
+function cancelMapClickCreation() {
+  mapClickLocation.value = null;
+}
+
+async function saveNewWaypoint() {
+  if (!newWaypointBeingCreated.value || !props.course) return;
+
+  creatingWaypoint.value = true;
+  waypointUpdateError.value = '';
+
+  try {
+    // Calculate elevation for the waypoint's current distance
+    const elevation = calculateElevationAtDistance(newWaypointBeingCreated.value.distance || 0);
+    
+    const response = await $fetch<{ waypoint: Waypoint }>(`/api/courses/${props.course.id}/waypoints`, {
+      method: 'POST',
+      body: {
+        name: newWaypointBeingCreated.value.name,
+        lat: newWaypointBeingCreated.value.lat,
+        lng: newWaypointBeingCreated.value.lng,
+        distance: newWaypointBeingCreated.value.distance,
+        elevation: elevation,
+        tags: newWaypointBeingCreated.value.tags || []
+      },
+    });
+
+    // Remove the temporary waypoint and add the real one
+    const tempIndex = editableWaypoints.value.findIndex(w => w.id === newWaypointBeingCreated.value?.id);
+    if (tempIndex !== -1) {
+      editableWaypoints.value.splice(tempIndex, 1);
+    }
+    
+    // Add the real waypoint and sort by distance
+    editableWaypoints.value.push(response.waypoint);
+    editableWaypoints.value.sort((a, b) => a.distance - b.distance);
+
+    emit('waypoint-created', response.waypoint);
+    
+    // Clear creation state and close the panel
+    newWaypointBeingCreated.value = null;
+    selectedWaypointForEdit.value = null;
+    stableMapCenter.value = null;
+    preventMapCentering.value = false;
+  } catch (error) {
+    console.error('Error creating waypoint:', error);
+    waypointUpdateError.value = 'Failed to create waypoint. Please try again.';
+  } finally {
+    creatingWaypoint.value = false;
+  }
+}
+
+function cancelNewWaypoint() {
+  // Remove the temporary waypoint from the editable list
+  if (newWaypointBeingCreated.value) {
+    const index = editableWaypoints.value.findIndex(w => w.id === newWaypointBeingCreated.value?.id);
+    if (index !== -1) {
+      editableWaypoints.value.splice(index, 1);
+    }
+  }
+  
+  newWaypointBeingCreated.value = null;
+  selectedWaypointForEdit.value = null;
+  editingWaypointDistance.value = '';
+}
+
 function selectWaypointForEdit(waypoint: Waypoint) {
   // Store the original state for potential reset
   originalWaypointState.value = { ...waypoint };
@@ -314,12 +585,21 @@ function selectWaypointForEdit(waypoint: Waypoint) {
 }
 
 function clearWaypointSelection() {
-  // Reset waypoint to original state if it wasn't saved
-  if (originalWaypointState.value && selectedWaypointForEdit.value) {
-    const index = editableWaypoints.value.findIndex(w => w.id === selectedWaypointForEdit.value?.id);
+  // If we're canceling new waypoint creation, remove the temporary waypoint
+  if (newWaypointBeingCreated.value) {
+    const index = editableWaypoints.value.findIndex(w => w.id === newWaypointBeingCreated.value?.id);
     if (index !== -1) {
-      // Reset to original position
-      editableWaypoints.value[index] = { ...originalWaypointState.value };
+      editableWaypoints.value.splice(index, 1);
+    }
+    newWaypointBeingCreated.value = null;
+  } else {
+    // Reset waypoint to original state if it wasn't saved
+    if (originalWaypointState.value && selectedWaypointForEdit.value) {
+      const index = editableWaypoints.value.findIndex(w => w.id === selectedWaypointForEdit.value?.id);
+      if (index !== -1) {
+        // Reset to original position
+        editableWaypoints.value[index] = { ...originalWaypointState.value };
+      }
     }
   }
   
@@ -348,17 +628,37 @@ function handleMapLineClick(coords: { lat: number; lng: number }) {
   // Calculate the distance along the route for the clicked position
   const distanceAtClick = calculateDistanceFromPosition(coords.lat, coords.lng);
   if (distanceAtClick !== null) {
+    // Calculate elevation at the new distance
+    const elevationAtClick = calculateElevationAtDistance(distanceAtClick);
+    
     // Update the waypoint to this position
     selectedWaypointForEdit.value.lat = coords.lat;
     selectedWaypointForEdit.value.lng = coords.lng;
     selectedWaypointForEdit.value.distance = distanceAtClick;
     selectedWaypointForEdit.value.order = Math.floor(distanceAtClick);
+    selectedWaypointForEdit.value.elevation = elevationAtClick;
+    
+    // If we're creating a new waypoint, also update the creation object and the temporary waypoint in the list
+    if (newWaypointBeingCreated.value && selectedWaypointForEdit.value.id === newWaypointBeingCreated.value.id) {
+      newWaypointBeingCreated.value.lat = coords.lat;
+      newWaypointBeingCreated.value.lng = coords.lng;
+      newWaypointBeingCreated.value.distance = distanceAtClick;
+      newWaypointBeingCreated.value.order = Math.floor(distanceAtClick);
+      newWaypointBeingCreated.value.elevation = elevationAtClick;
+      
+      // Update the temporary waypoint in the editable list and re-sort
+      const tempIndex = editableWaypoints.value.findIndex(w => w.id === newWaypointBeingCreated.value?.id);
+      if (tempIndex !== -1) {
+        editableWaypoints.value[tempIndex] = { ...newWaypointBeingCreated.value as Waypoint };
+        editableWaypoints.value.sort((a, b) => a.distance - b.distance);
+      }
+    }
     
     // Update the distance input field in user's preferred units
     const distanceInUserUnits = userSettingsStore.settings.units.distance === 'miles' 
       ? distanceAtClick * 0.000621371 // Convert meters to miles
-      : distanceAtClick; // Keep in meters
-    editingWaypointDistance.value = distanceInUserUnits.toFixed(userSettingsStore.settings.units.distance === 'miles' ? 3 : 0);
+      : distanceAtClick / 1000; // Convert meters to kilometers
+    editingWaypointDistance.value = distanceInUserUnits.toFixed(userSettingsStore.settings.units.distance === 'miles' ? 3 : 1);
   }
   
   // Reset the flag after a short delay to allow normal centering again
@@ -524,6 +824,28 @@ function calculateDistanceBetweenPoints(lat1: number, lng1: number, lat2: number
   return R * c;
 }
 
+function calculateElevationAtDistance(distance: number): number {
+  if (!props.geoJsonData.length) return 0;
+  
+  // Extract elevation profile from the GeoJSON data
+  const combinedFeatures: GeoJSON.Feature[] = [];
+  for (const geoJson of props.geoJsonData) {
+    combinedFeatures.push(...geoJson.features);
+  }
+  
+  const combinedGeoJson: GeoJSON.FeatureCollection = {
+    type: 'FeatureCollection',
+    features: combinedFeatures
+  };
+  
+  const elevationPoints = extractElevationProfile(combinedGeoJson);
+  
+  // Interpolate elevation at the specified distance
+  const interpolatedPoint = interpolateAtDistance(elevationPoints, distance);
+  
+  return interpolatedPoint?.elevation || 0;
+}
+
 function adjustWaypointDistance(waypoint: Waypoint, direction: 'up' | 'down') {
   // Set stable map center if not already set
   if (!stableMapCenter.value && waypoint) {
@@ -536,7 +858,7 @@ function adjustWaypointDistance(waypoint: Waypoint, direction: 'up' | 'down') {
   // Convert step size from user units to meters
   const stepSizeInMeters = userSettingsStore.settings.units.distance === 'miles'
     ? editingStepSize.value * 1609.34 // Convert miles to meters
-    : editingStepSize.value; // Already in meters
+    : editingStepSize.value * 1000; // Convert kilometers to meters
   
   const adjustment = direction === 'up' ? -stepSizeInMeters : stepSizeInMeters;
   const newDistance = Math.max(0, waypoint.distance + adjustment);
@@ -544,17 +866,37 @@ function adjustWaypointDistance(waypoint: Waypoint, direction: 'up' | 'down') {
   // Calculate new position based on distance
   const newPosition = calculatePositionFromDistance(newDistance);
   if (newPosition) {
+    // Calculate elevation at the new distance
+    const newElevation = calculateElevationAtDistance(newDistance);
+    
     // Update the waypoint locally (this will affect the map display)
     waypoint.distance = newDistance;
     waypoint.order = Math.floor(newDistance);
     waypoint.lat = newPosition.lat;
     waypoint.lng = newPosition.lng;
+    waypoint.elevation = newElevation;
+    
+    // If we're creating a new waypoint, also update the creation object and the temporary waypoint in the list
+    if (newWaypointBeingCreated.value && waypoint.id === newWaypointBeingCreated.value.id) {
+      newWaypointBeingCreated.value.distance = newDistance;
+      newWaypointBeingCreated.value.order = Math.floor(newDistance);
+      newWaypointBeingCreated.value.lat = newPosition.lat;
+      newWaypointBeingCreated.value.lng = newPosition.lng;
+      newWaypointBeingCreated.value.elevation = newElevation;
+      
+      // Update the temporary waypoint in the editable list and re-sort
+      const tempIndex = editableWaypoints.value.findIndex(w => w.id === newWaypointBeingCreated.value?.id);
+      if (tempIndex !== -1) {
+        editableWaypoints.value[tempIndex] = { ...newWaypointBeingCreated.value as Waypoint };
+        editableWaypoints.value.sort((a, b) => a.distance - b.distance);
+      }
+    }
     
     // Update the distance input field in user's preferred units
     const distanceInUserUnits = userSettingsStore.settings.units.distance === 'miles' 
       ? newDistance * 0.000621371 // Convert meters to miles
-      : newDistance; // Keep in meters
-    editingWaypointDistance.value = distanceInUserUnits.toFixed(userSettingsStore.settings.units.distance === 'miles' ? 3 : 0);
+      : newDistance / 1000; // Convert meters to kilometers
+    editingWaypointDistance.value = distanceInUserUnits.toFixed(userSettingsStore.settings.units.distance === 'miles' ? 3 : 1);
   }
   
   // Reset the flag after a short delay to allow normal centering again
@@ -579,8 +921,8 @@ function updateWaypointFromDistanceInput() {
     // Reset to current distance if invalid
     const distanceInUserUnits = userSettingsStore.settings.units.distance === 'miles' 
       ? selectedWaypointForEdit.value.distance * 0.000621371 // Convert meters to miles
-      : selectedWaypointForEdit.value.distance; // Keep in meters
-    editingWaypointDistance.value = distanceInUserUnits.toFixed(userSettingsStore.settings.units.distance === 'miles' ? 3 : 0);
+      : selectedWaypointForEdit.value.distance / 1000; // Convert meters to kilometers
+    editingWaypointDistance.value = distanceInUserUnits.toFixed(userSettingsStore.settings.units.distance === 'miles' ? 3 : 1);
     
     // Reset the flag
     setTimeout(() => {
@@ -592,16 +934,36 @@ function updateWaypointFromDistanceInput() {
   // Convert from user units to meters
   const newDistanceInMeters = userSettingsStore.settings.units.distance === 'miles'
     ? inputDistance * 1609.34 // Convert miles to meters
-    : inputDistance; // Already in meters
+    : inputDistance * 1000; // Convert kilometers to meters
   
   // Calculate new position based on distance
   const newPosition = calculatePositionFromDistance(newDistanceInMeters);
   if (newPosition) {
+    // Calculate elevation at the new distance
+    const newElevation = calculateElevationAtDistance(newDistanceInMeters);
+    
     // Update the waypoint locally
     selectedWaypointForEdit.value.distance = newDistanceInMeters;
     selectedWaypointForEdit.value.order = Math.floor(newDistanceInMeters);
     selectedWaypointForEdit.value.lat = newPosition.lat;
     selectedWaypointForEdit.value.lng = newPosition.lng;
+    selectedWaypointForEdit.value.elevation = newElevation;
+    
+    // If we're creating a new waypoint, also update the creation object and the temporary waypoint in the list
+    if (newWaypointBeingCreated.value) {
+      newWaypointBeingCreated.value.distance = newDistanceInMeters;
+      newWaypointBeingCreated.value.order = Math.floor(newDistanceInMeters);
+      newWaypointBeingCreated.value.lat = newPosition.lat;
+      newWaypointBeingCreated.value.lng = newPosition.lng;
+      newWaypointBeingCreated.value.elevation = newElevation;
+      
+      // Update the temporary waypoint in the editable list and re-sort
+      const tempIndex = editableWaypoints.value.findIndex(w => w.id === newWaypointBeingCreated.value?.id);
+      if (tempIndex !== -1) {
+        editableWaypoints.value[tempIndex] = { ...newWaypointBeingCreated.value as Waypoint };
+        editableWaypoints.value.sort((a, b) => a.distance - b.distance);
+      }
+    }
   }
   
   // Reset the flag after a short delay to allow normal centering again
@@ -617,33 +979,33 @@ function saveWaypointChanges() {
   originalWaypointState.value = null;
   
   updateWaypoint(selectedWaypointForEdit.value);
+  
+  // Close the edit panel after saving
+  selectedWaypointForEdit.value = null;
+  stableMapCenter.value = null;
+  preventMapCentering.value = false;
 }
 
 function canMoveUp(waypoint: Waypoint): boolean {
-  if (waypoint.type === 'start') return false;
+  if (isStartOrFinishWaypoint(waypoint, props.waypoints)) {
+    const sortedWaypoints = [...props.waypoints].sort((a, b) => a.order - b.order);
+    const waypointIndex = sortedWaypoints.findIndex(w => w.id === waypoint.id);
+    // Start waypoint (index 0) cannot move up
+    if (waypointIndex === 0) return false;
+  }
   return waypoint.distance > 100; // Minimum distance from start
 }
 
 function canMoveDown(waypoint: Waypoint): boolean {
-  if (waypoint.type === 'finish') return false;
+  if (isStartOrFinishWaypoint(waypoint, props.waypoints)) {
+    const sortedWaypoints = [...props.waypoints].sort((a, b) => a.order - b.order);
+    const waypointIndex = sortedWaypoints.findIndex(w => w.id === waypoint.id);
+    // Finish waypoint (last index) cannot move down
+    if (waypointIndex === sortedWaypoints.length - 1) return false;
+  }
   const course = props.course;
   if (!course?.totalDistance) return true;
   return waypoint.distance < (course.totalDistance - 100); // Minimum distance from finish
-}
-
-function getWaypointTypeLabel(type: Waypoint['type']): string {
-  switch (type) {
-    case 'start':
-      return 'Start';
-    case 'finish':
-      return 'Finish';
-    case 'waypoint':
-      return 'Waypoint';
-    case 'poi':
-      return 'Point of Interest';
-    default:
-      return 'Unknown';
-  }
 }
 </script>
 
@@ -656,7 +1018,7 @@ function getWaypointTypeLabel(type: Waypoint['type']): string {
   >
     <div class="w-full h-full flex flex-col">
       <!-- Header -->
-      <div class="flex items-center justify-between mb-6">
+      <div class="flex items-center justify-between">
         <h2 class="text-2xl font-bold text-(--main-color)">Edit Course</h2>
         <button
           class="p-2 text-(--sub-color) hover:text-(--main-color) transition-colors"
@@ -667,7 +1029,7 @@ function getWaypointTypeLabel(type: Waypoint['type']): string {
       </div>
 
       <!-- Tabs -->
-      <div class="flex border-b border-(--sub-color) mb-6">
+      <div class="flex border-b border-(--sub-color) mb-4">
         <button
           class="px-4 py-2 font-medium transition-colors border-b-2"
           :class="activeTab === 'course' 
@@ -767,8 +1129,10 @@ function getWaypointTypeLabel(type: Waypoint['type']): string {
                 :waypoints="editableWaypoints"
                 :selected-waypoint="selectedWaypointForEdit"
                 :auto-zoom-to-waypoint="!preventMapCentering"
+                :map-click-location="mapClickLocation"
                 @waypoint-click="handleMapWaypointClick"
                 @line-click="handleMapLineClick"
+                @track-click="handleMapTrackClick"
               />
               <template #fallback>
                 <div class="w-full h-full bg-red-200 rounded-lg flex items-center justify-center">
@@ -779,10 +1143,39 @@ function getWaypointTypeLabel(type: Waypoint['type']): string {
                 </div>
               </template>
             </ClientOnly>
+            
+            <!-- Map Click Popup -->
+            <div
+              v-if="mapClickLocation"
+              class="absolute bg-(--bg-color) border border-(--sub-color) rounded-lg shadow-lg p-3 z-1000"
+              :style="{
+                left: '50%',
+                top: '50%',
+                transform: 'translate(-50%, -50%)'
+              }"
+            >
+              <div class="text-sm text-(--main-color) mb-2">
+                Add waypoint at {{ formatDistance(mapClickLocation.distance, userSettingsStore.settings.units.distance) }}?
+              </div>
+              <div class="flex gap-2">
+                <button
+                  class="px-3 py-1 bg-(--main-color) text-(--bg-color) rounded text-sm hover:opacity-80 transition-opacity"
+                  @click="createWaypointAtMapClick"
+                >
+                  Add Waypoint
+                </button>
+                <button
+                  class="px-3 py-1 border border-(--sub-color) text-(--sub-color) rounded text-sm hover:text-(--main-color) hover:border-(--main-color) transition-colors"
+                  @click="cancelMapClickCreation"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
 
         <!-- Right Panel: Waypoint List or Edit -->
-        <div class="w-80 flex flex-col">
+        <div class="w-96 flex flex-col">
           <div v-if="waypointUpdateError" class="mb-4 p-3 bg-(--error-color) bg-opacity-10 border border-(--error-color) rounded-lg">
             <p class="text-(--error-color) text-sm">{{ waypointUpdateError }}</p>
           </div>
@@ -790,10 +1183,12 @@ function getWaypointTypeLabel(type: Waypoint['type']): string {
           <!-- Waypoint Edit Panel -->
           <div v-if="selectedWaypointForEdit" class="flex-1 overflow-hidden">
             <div class="flex items-center justify-between mb-4">
-              <h3 class="text-lg font-semibold text-(--main-color)">Edit Waypoint</h3>
+              <h3 class="text-lg font-semibold text-(--main-color)">
+                {{ newWaypointBeingCreated ? 'Create New Waypoint' : 'Edit Waypoint' }}
+              </h3>
               <button
                 class="p-1 text-(--sub-color) hover:text-(--main-color) transition-colors"
-                @click="clearWaypointSelection"
+                @click="newWaypointBeingCreated ? cancelNewWaypoint() : clearWaypointSelection()"
               >
                 <Icon name="heroicons:x-mark" class="h-5 w-5" />
               </button>
@@ -804,15 +1199,16 @@ function getWaypointTypeLabel(type: Waypoint['type']): string {
               <div class="flex items-center gap-3">
                 <div
                   class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white"
-                  :style="{ backgroundColor: getWaypointColor(selectedWaypointForEdit.type) }"
+                  :style="{ backgroundColor: getWaypointPrimaryColor(selectedWaypointForEdit, editableWaypoints) }"
                 >
-                  {{ editableWaypoints.findIndex(w => w.id === selectedWaypointForEdit?.id) + 1 }}
+                  {{ getWaypointDisplayContent(selectedWaypointForEdit, editableWaypoints) }}
                 </div>
                 <span
                   class="text-xs px-2 py-1 rounded-full text-(--bg-color) font-medium"
-                  :style="{ backgroundColor: getWaypointColor(selectedWaypointForEdit.type) }"
+                  :style="{ backgroundColor: getWaypointPrimaryColor(selectedWaypointForEdit, editableWaypoints) }"
                 >
-                  {{ getWaypointTypeLabel(selectedWaypointForEdit.type) }}
+                  {{ getWaypointDisplayContent(selectedWaypointForEdit, editableWaypoints) === 'S' ? 'Start' : 
+                       getWaypointDisplayContent(selectedWaypointForEdit, editableWaypoints) === 'F' ? 'Finish' : 'Waypoint' }}
                 </span>
               </div>
 
@@ -825,7 +1221,7 @@ function getWaypointTypeLabel(type: Waypoint['type']): string {
                   v-model="selectedWaypointForEdit.name"
                   type="text"
                   class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
-                  @blur="updateWaypoint(selectedWaypointForEdit)"
+                  @blur="!newWaypointBeingCreated && updateWaypoint(selectedWaypointForEdit)"
                 />
               </div>
 
@@ -846,7 +1242,7 @@ function getWaypointTypeLabel(type: Waypoint['type']): string {
                     v-model="editingWaypointDistance"
                     type="number"
                     min="0"
-                    :step="userSettingsStore.settings.units.distance === 'miles' ? '0.001' : '1'"
+                    :step="userSettingsStore.settings.units.distance === 'miles' ? '0.001' : '0.1'"
                     class="flex-1 px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
                     :placeholder="`Enter distance in ${userSettingsStore.settings.units.distance}`"
                     @blur="updateWaypointFromDistanceInput"
@@ -867,7 +1263,7 @@ function getWaypointTypeLabel(type: Waypoint['type']): string {
                     v-model.number="editingStepSize"
                     type="number"
                     min="0.001"
-                    :step="userSettingsStore.settings.units.distance === 'miles' ? '0.001' : '1'"
+                    :step="userSettingsStore.settings.units.distance === 'miles' ? '0.001' : '0.1'"
                     class="w-20 px-2 py-1 text-xs border border-(--sub-color) rounded bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
                   />
                   <span class="text-xs text-(--sub-color)">{{ userSettingsStore.settings.units.distance }}</span>
@@ -896,6 +1292,15 @@ function getWaypointTypeLabel(type: Waypoint['type']): string {
                 
                 <!-- Save Button -->
                 <button
+                  v-if="newWaypointBeingCreated"
+                  class="w-full px-3 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50"
+                  :disabled="creatingWaypoint"
+                  @click="saveNewWaypoint"
+                >
+                  {{ creatingWaypoint ? 'Creating...' : 'Create Waypoint' }}
+                </button>
+                <button
+                  v-else
                   class="w-full px-3 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50"
                   :disabled="updatingWaypointIds.has(selectedWaypointForEdit.id)"
                   @click="saveWaypointChanges"
@@ -908,8 +1313,19 @@ function getWaypointTypeLabel(type: Waypoint['type']): string {
                 </p>
               </div>
 
+              <!-- Tags Selector -->
+              <div class="pt-4 border-t border-(--sub-color)">
+                <label class="block text-sm font-medium text-(--main-color) mb-3">
+                  Waypoint Tags
+                </label>
+                <WaypointTagSelector
+                  :selected-tags="selectedWaypointForEdit.tags || []"
+                  @update:selected-tags="updateWaypointTags($event)"
+                />
+              </div>
+
               <!-- Delete Button -->
-              <div v-if="selectedWaypointForEdit.type === 'waypoint' || selectedWaypointForEdit.type === 'poi'" class="pt-4 border-t border-(--sub-color)">
+              <div v-if="canDeleteWaypoint(selectedWaypointForEdit, editableWaypoints)" class="pt-4 border-t border-(--sub-color)">
                 <button
                   class="w-full px-3 py-2 border border-(--error-color) text-(--error-color) rounded-lg hover:bg-(--error-color) hover:text-(--bg-color) transition-colors disabled:opacity-50"
                   :disabled="deletingWaypointIds.has(selectedWaypointForEdit.id)"
@@ -929,10 +1345,24 @@ function getWaypointTypeLabel(type: Waypoint['type']): string {
           </div>
 
           <!-- Waypoint List -->
-          <div v-else class="h-full max-h-full flex-col flex-1 overflow-hidden">
-            <div class="h-full overflow-y-auto">
+          <div v-else class="h-full flex flex-col overflow-hidden">
+            <!-- Waypoints Header -->
+            <div class="flex items-center justify-between border-b border-(--sub-color) p-2 pt-0 mb-2 flex-shrink-0">
+              <div class="text-lg font-medium text-(--main-color)">Waypoints</div>
+              <button
+                class="p-2 bg-(--sub-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50"
+                :disabled="creatingWaypoint"
+                title="Add new waypoint"
+                @click="startManualWaypointCreation"
+              >
+                <Icon name="heroicons:plus" class="h-4 w-4" />
+              </button>
+            </div>
+            
+            <!-- Scrollable waypoint list -->
+            <div class="flex-1 overflow-y-auto">
               <div
-                v-for="(waypoint, index) in editableWaypoints"
+                v-for="waypoint in editableWaypoints"
                 :key="waypoint.id"
                 class="p-1 rounded-lg cursor-pointer border border-(--bg-color) hover:border-(--main-color) transition-colors"
                 @click="selectWaypointForEdit(waypoint)"
@@ -941,9 +1371,9 @@ function getWaypointTypeLabel(type: Waypoint['type']): string {
                   <!-- Number -->
                   <div
                     class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                    :style="{ backgroundColor: getWaypointColor(waypoint.type) }"
+                    :style="{ backgroundColor: getWaypointPrimaryColor(waypoint, editableWaypoints) }"
                   >
-                    {{ index + 1 }}
+                    {{ getWaypointDisplayContent(waypoint, editableWaypoints) }}
                   </div>
 
                   <!-- Info -->
@@ -951,7 +1381,7 @@ function getWaypointTypeLabel(type: Waypoint['type']): string {
                     <div class="flex items-center justify-between">
                       <h6 class="font-medium text-(--main-color) truncate">{{ waypoint.name }}</h6>
                       <button
-                        v-if="waypoint.type === 'waypoint' || waypoint.type === 'poi'"
+                        v-if="canDeleteWaypoint(waypoint, editableWaypoints)"
                         class="p-1! text-(--error-color) hover:bg-(--error-color) hover:text-(--bg-color) rounded transition-colors"
                         :disabled="deletingWaypointIds.has(waypoint.id)"
                         title="Delete waypoint"
@@ -960,7 +1390,27 @@ function getWaypointTypeLabel(type: Waypoint['type']): string {
                         <Icon name="heroicons:trash" class="h-3 w-3" />
                       </button>
                     </div>
-                    <div class="text-xs text-(--sub-color)">
+                    
+                    <!-- Tags Row -->
+                    <div 
+                      v-if="waypoint.tags && waypoint.tags.length > 0"
+                      class="flex gap-1 mt-1 flex-wrap"
+                    >
+                      <div
+                        v-for="tagId in waypoint.tags"
+                        :key="tagId"
+                        class="w-4 h-4 rounded flex items-center justify-center"
+                        :style="{ backgroundColor: getTagsByIds([tagId])[0]?.color || '#6b7280' }"
+                        :title="getTagsByIds([tagId])[0]?.label || tagId"
+                      >
+                        <Icon
+                          :name="getTagsByIds([tagId])[0]?.icon || 'lucide:map-pin'"
+                          class="h-2.5 w-2.5 text-white"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div class="text-xs text-(--sub-color) mt-1">
                       {{ formatDistance(waypoint.distance, userSettingsStore.settings.units.distance) }}
                     </div>
                   </div>
