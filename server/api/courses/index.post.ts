@@ -81,7 +81,6 @@ export default defineEventHandler(async (event) => {
         lng: wp.lng.toString(),
         elevation: wp.elevation || null,
         distance: wp.distance,
-        type: wp.type,
         icon: wp.icon || null,
         order: wp.order,
       }));
