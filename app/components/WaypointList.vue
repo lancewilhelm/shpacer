@@ -1,14 +1,19 @@
 <script setup lang="ts">
-import type { SelectWaypoint } from '~/utils/db/schema';
 import { formatDistance, formatElevation } from '~/utils/courseMetrics';
 import { getTagsByIds } from '~/utils/waypointTags';
 import { getWaypointColorFromOrder } from '~/utils/waypoints';
 
 // Define a waypoint type that matches what we get from the API
-type Waypoint = SelectWaypoint & {
+type Waypoint = {
+  id: string;
+  name: string;
+  description: string | null;
   lat: number;
   lng: number;
+  elevation: number | null;
+  distance: number;
   tags: string[];
+  order: number;
 };
 
 interface Props {

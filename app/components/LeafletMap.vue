@@ -1,7 +1,19 @@
 <script setup lang="ts">
 import { formatDistance, formatElevation } from '~/utils/courseMetrics';
-import type { Waypoint } from '~/utils/waypoints';
 import { getWaypointColorFromOrder } from '~/utils/waypoints';
+
+// Define a waypoint type that matches what we get from the API
+type Waypoint = {
+  id: string;
+  name: string;
+  description: string | null;
+  lat: number;
+  lng: number;
+  elevation: number | null;
+  distance: number;
+  tags: string[];
+  order: number;
+};
 
 // Only import Leaflet on client side to avoid SSR issues
 let L: typeof import("leaflet") | null = null;

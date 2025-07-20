@@ -1,7 +1,19 @@
 <script setup lang="ts">
 import type { SelectCourse } from "~/utils/db/schema";
-import type { Waypoint } from "~/utils/waypoints";
 import { formatDistance, formatElevation } from "~/utils/courseMetrics";
+
+// Define the waypoint type that matches what we get from the API
+type Waypoint = {
+  id: string;
+  name: string;
+  description: string | null;
+  lat: number;
+  lng: number;
+  elevation: number | null;
+  distance: number;
+  tags: string[];
+  order: number;
+};
 
 definePageMeta({
   auth: {
@@ -258,7 +270,7 @@ function handleWaypointClick(waypoint: Waypoint) {
   }
 }
 
-function handleElevationWaypointClick(chartWaypoint: { id: string; name: string; distance: number; type: 'start' | 'finish' | 'waypoint' | 'poi' }) {
+function handleElevationWaypointClick(chartWaypoint: { id: string; name: string; distance: number; order: number; tags: string[] }) {
   // Find the full waypoint object from the waypoints array
   const fullWaypoint = waypoints.value.find(wp => wp.id === chartWaypoint.id);
   if (fullWaypoint) {

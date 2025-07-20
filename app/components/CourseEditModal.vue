@@ -1,11 +1,23 @@
 <script setup lang="ts">
 import type { SelectCourse } from '~/utils/db/schema';
-import type { Waypoint } from '~/utils/waypoints';
 import { getWaypointColorFromOrder } from '~/utils/waypoints';
 import { formatDistance } from '~/utils/courseMetrics';
 import { extractElevationProfile, interpolateAtDistance } from '~/utils/elevationProfile';
 import { getTagsByIds } from '~/utils/waypointTags';
 import WaypointTagSelector from '~/components/WaypointTagSelector.vue';
+
+// Define a waypoint type that matches what we get from the API
+type Waypoint = {
+  id: string;
+  name: string;
+  description: string | null;
+  lat: number;
+  lng: number;
+  elevation: number | null;
+  distance: number;
+  tags: string[];
+  order: number;
+};
 
 interface Props {
   open: boolean;
