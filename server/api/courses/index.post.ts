@@ -9,7 +9,7 @@ interface CreateCourseRequest {
   description?: string;
   originalFileName: string;
   originalFileContent: string;
-  fileType: 'gpx' | 'tcx';
+  fileType: "gpx" | "tcx";
   geoJsonData: GeoJSON.FeatureCollection;
   raceDate?: string | null;
 }
@@ -19,21 +19,27 @@ export default defineEventHandler(async (event) => {
     const session = await auth.api.getSession({
       headers: event.headers,
     });
-    
+
     if (!session?.user?.id) {
       throw createError({
         statusCode: 401,
-        statusMessage: "Unauthorized"
+        statusMessage: "Unauthorized",
       });
     }
 
     const body = await readBody<CreateCourseRequest>(event);
-    
+
     // Validate required fields
-    if (!body.name || !body.originalFileName || !body.originalFileContent || !body.fileType || !body.geoJsonData) {
+    if (
+      !body.name ||
+      !body.originalFileName ||
+      !body.originalFileContent ||
+      !body.fileType ||
+      !body.geoJsonData
+    ) {
       throw createError({
         statusCode: 400,
-        statusMessage: "Missing required fields"
+        statusMessage: "Missing required fields",
       });
     }
 
@@ -57,23 +63,27 @@ export default defineEventHandler(async (event) => {
         totalDistance: metrics.totalDistance,
         elevationGain: metrics.elevationGain,
         elevationLoss: metrics.elevationLoss,
-        raceDate: body.raceDate ? (() => {
-          // Parse the datetime string (format: YYYY-MM-DDTHH:MM:SS)
-          const date = new Date(body.raceDate);
-          return new Date(Date.UTC(
-            date.getFullYear(),
-            date.getMonth(),
-            date.getDate(),
-            date.getHours(),
-            date.getMinutes()
-          ));
-        })() : null,
+        raceDate: body.raceDate
+          ? (() => {
+              // Parse the datetime string (format: YYYY-MM-DDTHH:MM:SS)
+              const date = new Date(body.raceDate);
+              return new Date(
+                Date.UTC(
+                  date.getFullYear(),
+                  date.getMonth(),
+                  date.getDate(),
+                  date.getHours(),
+                  date.getMinutes(),
+                ),
+              );
+            })()
+          : null,
       })
       .returning();
 
     // Insert waypoints if any were found
     if (waypointData.length > 0 && newCourse.id) {
-      const waypointInserts = waypointData.map(wp => ({
+      const waypointInserts = waypointData.map((wp) => ({
         courseId: newCourse.id,
         name: wp.name,
         // Remove description field - waypoints should not have descriptions
@@ -90,13 +100,13 @@ export default defineEventHandler(async (event) => {
 
     return {
       success: true,
-      course: newCourse
+      course: newCourse,
     };
   } catch (error) {
     console.error("Error creating course:", error);
     throw createError({
       statusCode: 500,
-      statusMessage: "Failed to create course"
+      statusMessage: "Failed to create course",
     });
   }
 });

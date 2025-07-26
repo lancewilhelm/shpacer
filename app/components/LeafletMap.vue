@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { formatDistance, formatElevation } from '~/utils/courseMetrics';
 import { getWaypointColorFromOrder } from '~/utils/waypoints';
+import { calculateDistance } from '~/utils/distance';
 
 // Define a waypoint type that matches what we get from the API
 type Waypoint = {
@@ -68,10 +68,8 @@ const emit = defineEmits<{
   'track-click': [coords: { lat: number; lng: number }];
 }>();
 
-const userSettingsStore = useUserSettingsStore();
-
 // Generate unique map ID
-const mapId = `map-${Math.random().toString(36).substr(2, 9)}`;
+const mapId = `map-${Math.random().toString(36).slice(2, 9)}`;
 
 let map: L.Map | null = null;
 const geoJsonLayers: L.GeoJSON[] = [];
@@ -133,16 +131,8 @@ function handleTrackHover(e: L.LeafletMouseEvent, geoJson: GeoJSON.FeatureCollec
         if (prevCoord && prevCoord.length >= 2) {
           const [prevLon, prevLat] = prevCoord;
           if (typeof prevLon === 'number' && typeof prevLat === 'number') {
-            // Haversine formula for accurate distance
-            const R = 6371000; // Earth's radius in meters
-            const dLat = (lat - prevLat) * Math.PI / 180;
-            const dLon = (lon - prevLon) * Math.PI / 180;
-            const a = 
-              Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-              Math.cos(prevLat * Math.PI / 180) * Math.cos(lat * Math.PI / 180) *
-              Math.sin(dLon / 2) * Math.sin(dLon / 2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            cumulativeDistance += R * c;
+            // Use centralized distance calculation function
+            cumulativeDistance += calculateDistance(prevLat, prevLon, lat, lon);
           }
         }
       }
@@ -241,7 +231,7 @@ function getTrackColor(index: number): string {
     "#0080ff",
     "#80ff00",
   ];
-  return colors[index % colors.length] || "#ff0000";
+  return colors[index % colors.length] || "#0000ff";
 }
 
 // Function to get waypoint display content (S, F, or number)
@@ -508,30 +498,14 @@ function updateElevationHoverMarker() {
     elevationHoverMarker = L.circleMarker(
       [props.elevationHoverPoint.lat, props.elevationHoverPoint.lng],
       {
-        radius: 8,
+        radius: 6,
         fillColor: '#ff4444',
         color: '#ffffff',
-        weight: 2,
+        weight: 0,
         opacity: 1,
         fillOpacity: 0.8,
       }
     ).addTo(map);
-
-    // Add tooltip with elevation info
-    const gradeFormatted = props.elevationHoverPoint.grade >= 0 
-      ? `+${props.elevationHoverPoint.grade.toFixed(1)}%` 
-      : `${props.elevationHoverPoint.grade.toFixed(1)}%`;
-    
-    elevationHoverMarker.bindTooltip(
-      `Distance: ${formatDistance(props.elevationHoverPoint.distance, userSettingsStore.settings.units.distance)}<br/>` +
-      `Elevation: ${formatElevation(props.elevationHoverPoint.elevation, userSettingsStore.settings.units.elevation)}<br/>` +
-      `Grade: ${gradeFormatted}`,
-      {
-        permanent: false,
-        direction: 'top',
-        offset: [0, -10]
-      }
-    );
   }
 }
 

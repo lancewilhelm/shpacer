@@ -18,19 +18,24 @@ const mapMarkers = [
     position: [37.228907521653305, -80.42045661944468] as [number, number],
     popup: "Let's get this",
     open: false,
-  }
+  },
 ];
 
 // GeoJSON data from uploaded files
 const geoJsonData = ref<GeoJSON.FeatureCollection[]>([]);
 
 // Handle file upload
-function onFilesProcessed(files: Array<{ name: string; geoJson: GeoJSON.FeatureCollection }>) {
+function onFilesProcessed(
+  files: Array<{ name: string; geoJson: GeoJSON.FeatureCollection }>,
+) {
   // Clear existing data and add new files
-  geoJsonData.value = files.map(file => file.geoJson);
+  geoJsonData.value = files.map((file) => file.geoJson);
 }
 
-function onFileAdded(file: { name: string; geoJson: GeoJSON.FeatureCollection }) {
+function onFileAdded(file: {
+  name: string;
+  geoJson: GeoJSON.FeatureCollection;
+}) {
   // For single file upload, replace existing data
   geoJsonData.value = [file.geoJson];
 }
@@ -48,7 +53,7 @@ function onFileRemoved(_fileName: string) {
       <div>
         <h2 class="text-2xl font-bold mb-2">shpacer</h2>
       </div>
-      
+
       <!-- File Upload Section -->
       <div class="flex-shrink-0">
         <FileUpload
@@ -57,18 +62,20 @@ function onFileRemoved(_fileName: string) {
           @file-removed="onFileRemoved"
         />
       </div>
-      
+
       <!-- Map Section -->
       <div class="flex-1 min-h-0">
         <ClientOnly>
-          <LeafletMap 
-            :center="mapCenter" 
-            :zoom="13" 
+          <LeafletMap
+            :center="mapCenter"
+            :zoom="13"
             :markers="mapMarkers"
             :geo-json-data="geoJsonData"
           />
           <template #fallback>
-            <div class="w-full h-full rounded-lg shadow-lg bg-gray-100 flex items-center justify-center">
+            <div
+              class="w-full h-full rounded-lg shadow-lg bg-gray-100 flex items-center justify-center"
+            >
               <p class="text-gray-500">Loading map...</p>
             </div>
           </template>
@@ -77,5 +84,3 @@ function onFileRemoved(_fileName: string) {
     </div>
   </div>
 </template>
-
-

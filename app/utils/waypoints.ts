@@ -2,6 +2,8 @@
  * Waypoint utilities for extracting and processing waypoint data from GeoJSON
  */
 
+import { calculateDistance } from "./distance";
+
 export interface Waypoint {
   id: string;
   name: string;
@@ -26,21 +28,6 @@ export interface WaypointMarker {
 }
 
 /**
- * Calculate the distance between two points using Haversine formula
- */
-function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371000; // Earth's radius in meters
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-/**
  * Find the closest point on a line segment to a target point
  */
 function closestPointOnSegment(
@@ -49,7 +36,7 @@ function closestPointOnSegment(
   startLat: number,
   startLng: number,
   endLat: number,
-  endLng: number
+  endLng: number,
 ): { lat: number; lng: number; distance: number; ratio: number } {
   // Convert to simple cartesian coordinates for calculation
   const A = targetLat - startLat;
@@ -59,7 +46,7 @@ function closestPointOnSegment(
 
   const dot = A * C + B * D;
   const lenSq = C * C + D * D;
-  
+
   let param = -1;
   if (lenSq !== 0) {
     param = dot / lenSq;
@@ -86,7 +73,12 @@ function closestPointOnSegment(
     ratio = param;
   }
 
-  const distance = calculateDistance(targetLat, targetLng, closestLat, closestLng);
+  const distance = calculateDistance(
+    targetLat,
+    targetLng,
+    closestLat,
+    closestLng,
+  );
   return { lat: closestLat, lng: closestLng, distance, ratio };
 }
 
@@ -94,14 +86,14 @@ function closestPointOnSegment(
  * Find the closest point on a route to a given coordinate with precise line segment snapping
  */
 function findClosestPointOnRoute(
-  targetLat: number, 
-  targetLng: number, 
-  routeCoordinates: number[][]
-): { 
-  distance: number; 
-  closestIndex: number; 
-  snappedLat: number; 
-  snappedLng: number; 
+  targetLat: number,
+  targetLng: number,
+  routeCoordinates: number[][],
+): {
+  distance: number;
+  closestIndex: number;
+  snappedLat: number;
+  snappedLng: number;
   snappedElevation?: number;
   segmentRatio: number;
 } {
@@ -117,32 +109,52 @@ function findClosestPointOnRoute(
   for (let i = 0; i < routeCoordinates.length - 1; i++) {
     const startCoord = routeCoordinates[i];
     const endCoord = routeCoordinates[i + 1];
-    
-    if (!startCoord || !endCoord || startCoord.length < 2 || endCoord.length < 2) continue;
+
+    if (
+      !startCoord ||
+      !endCoord ||
+      startCoord.length < 2 ||
+      endCoord.length < 2
+    )
+      continue;
 
     const [startLng, startLat, startElev] = startCoord;
     const [endLng, endLat, endElev] = endCoord;
-    
-    if (typeof startLng !== 'number' || typeof startLat !== 'number' ||
-        typeof endLng !== 'number' || typeof endLat !== 'number') continue;
+
+    if (
+      typeof startLng !== "number" ||
+      typeof startLat !== "number" ||
+      typeof endLng !== "number" ||
+      typeof endLat !== "number"
+    )
+      continue;
 
     // Find closest point on this line segment
-    const closest = closestPointOnSegment(targetLat, targetLng, startLat, startLng, endLat, endLng);
-    
+    const closest = closestPointOnSegment(
+      targetLat,
+      targetLng,
+      startLat,
+      startLng,
+      endLat,
+      endLng,
+    );
+
     if (closest.distance < minDistance) {
       minDistance = closest.distance;
       closestIndex = i;
-      closestRouteDistance = cumulativeDistance + (closest.ratio * calculateDistance(startLat, startLng, endLat, endLng));
+      closestRouteDistance =
+        cumulativeDistance +
+        closest.ratio * calculateDistance(startLat, startLng, endLat, endLng);
       snappedLat = closest.lat;
       snappedLng = closest.lng;
       segmentRatio = closest.ratio;
-      
+
       // Interpolate elevation if available
-      if (typeof startElev === 'number' && typeof endElev === 'number') {
+      if (typeof startElev === "number" && typeof endElev === "number") {
         snappedElevation = startElev + (endElev - startElev) * closest.ratio;
-      } else if (typeof startElev === 'number') {
+      } else if (typeof startElev === "number") {
         snappedElevation = startElev;
-      } else if (typeof endElev === 'number') {
+      } else if (typeof endElev === "number") {
         snappedElevation = endElev;
       }
     }
@@ -151,26 +163,28 @@ function findClosestPointOnRoute(
     cumulativeDistance += calculateDistance(startLat, startLng, endLat, endLng);
   }
 
-  return { 
-    distance: closestRouteDistance, 
-    closestIndex, 
-    snappedLat, 
-    snappedLng, 
+  return {
+    distance: closestRouteDistance,
+    closestIndex,
+    snappedLat,
+    snappedLng,
     snappedElevation,
-    segmentRatio
+    segmentRatio,
   };
 }
 
 /**
  * Extract coordinates from GeoJSON geometry for route analysis
  */
-function extractRouteCoordinates(geoJson: GeoJSON.FeatureCollection): number[][] {
+function extractRouteCoordinates(
+  geoJson: GeoJSON.FeatureCollection,
+): number[][] {
   const coordinates: number[][] = [];
 
   for (const feature of geoJson.features) {
-    if (feature.geometry.type === 'LineString') {
+    if (feature.geometry.type === "LineString") {
       coordinates.push(...feature.geometry.coordinates);
-    } else if (feature.geometry.type === 'MultiLineString') {
+    } else if (feature.geometry.type === "MultiLineString") {
       for (const line of feature.geometry.coordinates) {
         coordinates.push(...line);
       }
@@ -183,22 +197,68 @@ function extractRouteCoordinates(geoJson: GeoJSON.FeatureCollection): number[][]
 /**
  * Extract waypoints from GeoJSON data with precise route snapping
  */
-export function extractWaypoints(geoJson: GeoJSON.FeatureCollection): Waypoint[] {
+export function extractWaypoints(
+  geoJson: GeoJSON.FeatureCollection,
+): Waypoint[] {
   const waypoints: Waypoint[] = [];
   const routeCoordinates = extractRouteCoordinates(geoJson);
 
+  // Calculate total route distance to avoid finish waypoint conflict
+  let totalRouteDistance = 0;
+  for (let i = 1; i < routeCoordinates.length; i++) {
+    const prevCoord = routeCoordinates[i - 1];
+    const currentCoord = routeCoordinates[i];
+
+    if (
+      prevCoord &&
+      currentCoord &&
+      prevCoord.length >= 2 &&
+      currentCoord.length >= 2
+    ) {
+      const [prevLng, prevLat] = prevCoord;
+      const [currentLng, currentLat] = currentCoord;
+
+      if (
+        typeof prevLng === "number" &&
+        typeof prevLat === "number" &&
+        typeof currentLng === "number" &&
+        typeof currentLat === "number"
+      ) {
+        totalRouteDistance += calculateDistance(
+          prevLat,
+          prevLng,
+          currentLat,
+          currentLng,
+        );
+      }
+    }
+  }
+
   // Extract Point features as waypoints
   for (const feature of geoJson.features) {
-    if (feature.geometry.type === 'Point') {
+    if (feature.geometry.type === "Point") {
       const [lng, lat, elevation] = feature.geometry.coordinates;
-      
-      if (typeof lng !== 'number' || typeof lat !== 'number') continue;
+
+      if (typeof lng !== "number" || typeof lat !== "number") continue;
 
       const properties = feature.properties || {};
-      const name = properties.name || properties.title || properties.desc || 'Waypoint';
+      const name =
+        properties.name || properties.title || properties.desc || "Waypoint";
 
       // Find the closest point on the route to determine distance and snap coordinates
       const snappedResult = findClosestPointOnRoute(lat, lng, routeCoordinates);
+
+      // Ensure imported waypoints don't conflict with start/finish positions
+      // Add minimum buffer to avoid being treated as start waypoint (distance 0)
+      // and finish waypoint (distance = totalRouteDistance)
+      let adjustedDistance = snappedResult.distance;
+      const MIN_BUFFER = 50; // 50 meters minimum buffer
+
+      if (adjustedDistance < MIN_BUFFER) {
+        adjustedDistance = MIN_BUFFER;
+      } else if (adjustedDistance > totalRouteDistance - MIN_BUFFER) {
+        adjustedDistance = totalRouteDistance - MIN_BUFFER;
+      }
 
       const waypoint: Waypoint = {
         id: `waypoint-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -208,11 +268,18 @@ export function extractWaypoints(geoJson: GeoJSON.FeatureCollection): Waypoint[]
         lng: snappedResult.snappedLng, // Use snapped coordinates
         originalLat: lat, // Store original coordinates
         originalLng: lng, // Store original coordinates
-        elevation: snappedResult.snappedElevation || (typeof elevation === 'number' ? elevation : undefined),
-        distance: snappedResult.distance,
+        elevation:
+          snappedResult.snappedElevation ||
+          (typeof elevation === "number" ? elevation : undefined),
+        distance: adjustedDistance, // Use adjusted distance to avoid conflicts
         tags: [], // No tags by default, user can add them later
-        order: Math.floor(snappedResult.distance), // Use distance as order for now
-        snapDistance: calculateDistance(lat, lng, snappedResult.snappedLat, snappedResult.snappedLng)
+        order: Math.floor(adjustedDistance), // Use adjusted distance as order
+        snapDistance: calculateDistance(
+          lat,
+          lng,
+          snappedResult.snappedLat,
+          snappedResult.snappedLng,
+        ),
       };
 
       waypoints.push(waypoint);
@@ -225,9 +292,11 @@ export function extractWaypoints(geoJson: GeoJSON.FeatureCollection): Waypoint[]
 /**
  * Generate start and finish waypoints for a route
  */
-export function generateStartFinishWaypoints(geoJson: GeoJSON.FeatureCollection): Waypoint[] {
+export function generateStartFinishWaypoints(
+  geoJson: GeoJSON.FeatureCollection,
+): Waypoint[] {
   const routeCoordinates = extractRouteCoordinates(geoJson);
-  
+
   if (routeCoordinates.length < 2) {
     return [];
   }
@@ -238,18 +307,19 @@ export function generateStartFinishWaypoints(geoJson: GeoJSON.FeatureCollection)
   const startCoord = routeCoordinates[0];
   if (startCoord && startCoord.length >= 2) {
     const [startLng, startLat, startElevation] = startCoord;
-    
-    if (typeof startLng === 'number' && typeof startLat === 'number') {
+
+    if (typeof startLng === "number" && typeof startLat === "number") {
       waypoints.push({
         id: `start-${Date.now()}`,
-        name: 'Start',
+        name: "Start",
         lat: startLat,
         lng: startLng,
-        elevation: typeof startElevation === 'number' ? startElevation : undefined,
+        elevation:
+          typeof startElevation === "number" ? startElevation : undefined,
         distance: 0,
         tags: [], // No tags by default
-        icon: 'heroicons:play',
-        order: 0
+        icon: "heroicons:play",
+        order: 0,
       });
     }
   }
@@ -259,15 +329,28 @@ export function generateStartFinishWaypoints(geoJson: GeoJSON.FeatureCollection)
   for (let i = 1; i < routeCoordinates.length; i++) {
     const prevCoord = routeCoordinates[i - 1];
     const currentCoord = routeCoordinates[i];
-    
-    if (prevCoord && currentCoord && 
-        prevCoord.length >= 2 && currentCoord.length >= 2) {
+
+    if (
+      prevCoord &&
+      currentCoord &&
+      prevCoord.length >= 2 &&
+      currentCoord.length >= 2
+    ) {
       const [prevLng, prevLat] = prevCoord;
       const [currentLng, currentLat] = currentCoord;
-      
-      if (typeof prevLng === 'number' && typeof prevLat === 'number' &&
-          typeof currentLng === 'number' && typeof currentLat === 'number') {
-        totalDistance += calculateDistance(prevLat, prevLng, currentLat, currentLng);
+
+      if (
+        typeof prevLng === "number" &&
+        typeof prevLat === "number" &&
+        typeof currentLng === "number" &&
+        typeof currentLat === "number"
+      ) {
+        totalDistance += calculateDistance(
+          prevLat,
+          prevLng,
+          currentLat,
+          currentLng,
+        );
       }
     }
   }
@@ -276,18 +359,19 @@ export function generateStartFinishWaypoints(geoJson: GeoJSON.FeatureCollection)
   const finishCoord = routeCoordinates[routeCoordinates.length - 1];
   if (finishCoord && finishCoord.length >= 2) {
     const [finishLng, finishLat, finishElevation] = finishCoord;
-    
-    if (typeof finishLng === 'number' && typeof finishLat === 'number') {
+
+    if (typeof finishLng === "number" && typeof finishLat === "number") {
       waypoints.push({
         id: `finish-${Date.now()}`,
-        name: 'Finish',
+        name: "Finish",
         lat: finishLat,
         lng: finishLng,
-        elevation: typeof finishElevation === 'number' ? finishElevation : undefined,
+        elevation:
+          typeof finishElevation === "number" ? finishElevation : undefined,
         distance: totalDistance,
         tags: [], // No tags by default
-        icon: 'heroicons:flag',
-        order: 999999
+        icon: "heroicons:flag",
+        order: 999999,
       });
     }
   }
@@ -298,13 +382,15 @@ export function generateStartFinishWaypoints(geoJson: GeoJSON.FeatureCollection)
 /**
  * Combine extracted waypoints with generated start/finish waypoints
  */
-export function processAllWaypoints(geoJson: GeoJSON.FeatureCollection): Waypoint[] {
+export function processAllWaypoints(
+  geoJson: GeoJSON.FeatureCollection,
+): Waypoint[] {
   const extractedWaypoints = extractWaypoints(geoJson);
   const startFinishWaypoints = generateStartFinishWaypoints(geoJson);
-  
+
   // Combine and sort by order (distance)
   const allWaypoints = [...startFinishWaypoints, ...extractedWaypoints];
-  
+
   return allWaypoints.sort((a, b) => a.order - b.order);
 }
 
@@ -312,11 +398,11 @@ export function processAllWaypoints(geoJson: GeoJSON.FeatureCollection): Waypoin
  * Convert waypoints to marker format for map display
  */
 export function waypointsToMarkers(waypoints: Waypoint[]): WaypointMarker[] {
-  return waypoints.map(waypoint => ({
+  return waypoints.map((waypoint) => ({
     waypoint,
     position: [waypoint.lat, waypoint.lng] as [number, number],
     popup: `<strong>${waypoint.name}</strong>`,
-    icon: waypoint.icon
+    icon: waypoint.icon,
   }));
 }
 
@@ -324,18 +410,20 @@ export function waypointsToMarkers(waypoints: Waypoint[]): WaypointMarker[] {
  * Get waypoint color based on type
  * @deprecated Use getWaypointColorFromOrder for new database waypoints
  */
-export function getWaypointColor(type: 'start' | 'finish' | 'waypoint' | 'poi'): string {
+export function getWaypointColor(
+  type: "start" | "finish" | "waypoint" | "poi",
+): string {
   switch (type) {
-    case 'start':
-      return '#10b981'; // Green
-    case 'finish':
-      return '#ef4444'; // Red
-    case 'waypoint':
-      return '#3b82f6'; // Blue
-    case 'poi':
-      return '#f59e0b'; // Amber
+    case "start":
+      return "#10b981"; // Green
+    case "finish":
+      return "#ef4444"; // Red
+    case "waypoint":
+      return "#3b82f6"; // Blue
+    case "poi":
+      return "#f59e0b"; // Amber
     default:
-      return '#6b7280'; // Gray
+      return "#6b7280"; // Gray
   }
 }
 
@@ -347,7 +435,7 @@ export function createWaypointAtPosition(
   lat: number,
   lng: number,
   name: string,
-  tags: string[] = []
+  tags: string[] = [],
 ): Waypoint {
   const routeCoordinates = extractRouteCoordinates(geoJson);
   const snappedResult = findClosestPointOnRoute(lat, lng, routeCoordinates);
@@ -363,7 +451,12 @@ export function createWaypointAtPosition(
     distance: snappedResult.distance,
     tags,
     order: Math.floor(snappedResult.distance),
-    snapDistance: calculateDistance(lat, lng, snappedResult.snappedLat, snappedResult.snappedLng)
+    snapDistance: calculateDistance(
+      lat,
+      lng,
+      snappedResult.snappedLat,
+      snappedResult.snappedLng,
+    ),
   };
 }
 
@@ -374,10 +467,14 @@ export function updateWaypointPosition(
   waypoint: Waypoint,
   geoJson: GeoJSON.FeatureCollection,
   newLat: number,
-  newLng: number
+  newLng: number,
 ): Waypoint {
   const routeCoordinates = extractRouteCoordinates(geoJson);
-  const snappedResult = findClosestPointOnRoute(newLat, newLng, routeCoordinates);
+  const snappedResult = findClosestPointOnRoute(
+    newLat,
+    newLng,
+    routeCoordinates,
+  );
 
   return {
     ...waypoint,
@@ -388,31 +485,44 @@ export function updateWaypointPosition(
     elevation: snappedResult.snappedElevation,
     distance: snappedResult.distance,
     order: Math.floor(snappedResult.distance),
-    snapDistance: calculateDistance(newLat, newLng, snappedResult.snappedLat, snappedResult.snappedLng)
+    snapDistance: calculateDistance(
+      newLat,
+      newLng,
+      snappedResult.snappedLat,
+      snappedResult.snappedLng,
+    ),
   };
 }
 
 /**
  * Validate waypoint quality based on snap distance
  */
-export function getWaypointQuality(waypoint: Waypoint): 'excellent' | 'good' | 'fair' | 'poor' {
+export function getWaypointQuality(
+  waypoint: Waypoint,
+): "excellent" | "good" | "fair" | "poor" {
   const snapDistance = waypoint.snapDistance || 0;
-  
-  if (snapDistance < 10) return 'excellent'; // Within 10 meters
-  if (snapDistance < 50) return 'good';      // Within 50 meters
-  if (snapDistance < 200) return 'fair';    // Within 200 meters
-  return 'poor';                             // Over 200 meters
+
+  if (snapDistance < 10) return "excellent"; // Within 10 meters
+  if (snapDistance < 50) return "good"; // Within 50 meters
+  if (snapDistance < 200) return "fair"; // Within 200 meters
+  return "poor"; // Over 200 meters
 }
 
 /**
  * Get quality color for UI display
  */
-export function getQualityColor(quality: ReturnType<typeof getWaypointQuality>): string {
+export function getQualityColor(
+  quality: ReturnType<typeof getWaypointQuality>,
+): string {
   switch (quality) {
-    case 'excellent': return '#10b981'; // Green
-    case 'good': return '#3b82f6';      // Blue
-    case 'fair': return '#f59e0b';      // Amber
-    case 'poor': return '#ef4444';      // Red
+    case "excellent":
+      return "#10b981"; // Green
+    case "good":
+      return "#3b82f6"; // Blue
+    case "fair":
+      return "#f59e0b"; // Amber
+    case "poor":
+      return "#ef4444"; // Red
   }
 }
 
@@ -420,18 +530,21 @@ export function getQualityColor(quality: ReturnType<typeof getWaypointQuality>):
  * Get waypoint color for database waypoints (using order to determine start/finish)
  * This function works with the new database schema that uses tags instead of type
  */
-export function getWaypointColorFromOrder(waypoint: { order: number }, allWaypoints: { order: number }[]): string {
+export function getWaypointColorFromOrder(
+  waypoint: { order: number },
+  allWaypoints: { order: number }[],
+): string {
   // Check if this is a start waypoint (order 0)
   if (waypoint.order === 0) {
-    return '#10b981'; // Green for start
+    return "#10b981"; // Green for start
   }
-  
+
   // Check if this is a finish waypoint (highest order)
-  const maxOrder = Math.max(...allWaypoints.map(w => w.order));
+  const maxOrder = Math.max(...allWaypoints.map((w) => w.order));
   if (waypoint.order === maxOrder && waypoint.order > 0) {
-    return '#ef4444'; // Red for finish
+    return "#ef4444"; // Red for finish
   }
-  
+
   // Regular waypoints get blue
-  return '#3b82f6';
+  return "#3b82f6";
 }

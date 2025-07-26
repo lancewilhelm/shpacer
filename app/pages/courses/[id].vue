@@ -22,11 +22,15 @@ definePageMeta({
   },
 });
 
+// Get the course ID from the route parameters
 const route = useRoute();
 const courseId = route.params.id as string;
+
+// Import necessary stores
 const userSettingsStore = useUserSettingsStore();
 const uiStore = useUiStore();
 
+// Fetch course data
 const {
   data: courseData,
   pending,
@@ -34,6 +38,7 @@ const {
   refresh,
 } = await useFetch<{ course: SelectCourse }>(`/api/courses/${courseId}`);
 
+// Fetch waypoints data
 const {
   data: waypointsData,
   pending: _waypointsPending,
@@ -41,14 +46,18 @@ const {
   refresh: _refreshWaypoints,
 } = await useFetch<{ waypoints: Waypoint[] }>(`/api/courses/${courseId}/waypoints`);
 
+// Store the course and waypoints data in computed properties
 const course = computed(() => courseData.value?.course);
 const waypoints = computed(() => waypointsData.value?.waypoints || []);
 
+// Set the page title dynamically based on the course name
+useHead({
+  title: computed(() => course.value?.name || "Course"),
+});
+
+
 // Course edit modal state
 const courseEditModalOpen = ref(false);
-
-// Waypoint interaction state
-const selectedWaypoint = ref<Waypoint | null>(null);
 
 // Panel resizing state
 const isResizing = ref(false);
@@ -56,6 +65,10 @@ const resizeStartX = ref(0);
 const resizeStartWidth = ref(0);
 
 // Waypoint panel resizing functions
+/**
+ * Start resizing the waypoint panel 
+ * @param event MouseEvent
+ */
 function startResize(event: MouseEvent) {
   isResizing.value = true;
   resizeStartX.value = event.clientX;
@@ -67,6 +80,10 @@ function startResize(event: MouseEvent) {
   document.body.style.userSelect = 'none';
 }
 
+/**
+ * Handle the resizing of the waypoint panel
+ * @param event MouseEvent
+ */
 function handleResize(event: MouseEvent) {
   if (!isResizing.value) return;
   
@@ -75,6 +92,9 @@ function handleResize(event: MouseEvent) {
   uiStore.setWaypointPanelWidth(newWidth);
 }
 
+/**
+ * Stop resizing the waypoint panel
+ */
 function stopResize() {
   isResizing.value = false;
   document.removeEventListener('mousemove', handleResize);
@@ -83,18 +103,9 @@ function stopResize() {
   document.body.style.userSelect = '';
 }
 
-function formatCourseDistance(meters: number) {
-  return formatDistance(meters, userSettingsStore.settings.units.distance);
-}
-
-function formatCourseElevation(meters: number) {
-  return formatElevation(meters, userSettingsStore.settings.units.elevation);
-}
-
-useHead({
-  title: computed(() => course.value?.name || "Course"),
-});
-
+/**
+ * Download the original course file (GPX or TCX)
+ */
 async function downloadOriginalFile() {
   if (!course.value) return;
 
@@ -117,6 +128,9 @@ async function downloadOriginalFile() {
   }
 }
 
+/**
+ * Delete the course
+ */
 async function deleteCourse() {
   if (!course.value) return;
 
@@ -137,6 +151,10 @@ async function deleteCourse() {
   }
 }
 
+/**
+ * Format a date for display
+ * @param date Date | string | number
+ */
 function formatDate(date: Date | string | number) {
   return new Date(date).toLocaleDateString("en-US", {
     year: "numeric",
@@ -147,6 +165,10 @@ function formatDate(date: Date | string | number) {
   });
 }
 
+/**
+ * Format a race date for display
+ * @param date Date | string | number | null
+ */
 function formatRaceDate(date: Date | string | number | null) {
   if (!date) return null;
   // Use UTC methods to avoid timezone conversion
@@ -172,46 +194,10 @@ function formatRaceDate(date: Date | string | number | null) {
   return dateStr;
 }
 
+// Compute GeoJSON data for the map. This is used to render the course on the map.
 const geoJsonData = computed(() => {
   if (!course.value?.geoJsonData) return [];
   return [course.value.geoJsonData as GeoJSON.FeatureCollection];
-});
-
-// Compute map center and zoom from course data
-const mapCenter = computed((): [number, number] => {
-  // If we have waypoints, use the first waypoint as center
-  if (waypoints.value.length > 0) {
-    const firstWaypoint = waypoints.value[0];
-    if (firstWaypoint) {
-      return [firstWaypoint.lat, firstWaypoint.lng];
-    }
-  }
-  
-  // If we have geo data, try to extract center from it
-  if (geoJsonData.value.length > 0) {
-    const geoJson = geoJsonData.value[0];
-    if (geoJson && geoJson.features.length > 0) {
-      const firstFeature = geoJson.features[0];
-      if (firstFeature && firstFeature.geometry.type === 'LineString') {
-        const coords = firstFeature.geometry.coordinates[0];
-        if (coords && coords.length >= 2 && typeof coords[0] === 'number' && typeof coords[1] === 'number') {
-          return [coords[1], coords[0]]; // Note: GeoJSON is [lng, lat], Leaflet expects [lat, lng]
-        }
-      } else if (firstFeature && firstFeature.geometry.type === 'Point') {
-        const coords = firstFeature.geometry.coordinates;
-        if (coords && coords.length >= 2 && typeof coords[0] === 'number' && typeof coords[1] === 'number') {
-          return [coords[1], coords[0]];
-        }
-      }
-    }
-  }
-  
-  // Fallback center
-  return [40.7128, -74.0060]; // New York City as a reasonable default
-});
-
-const mapZoom = computed((): number => {
-  return 13; // Good default zoom level for viewing a course
 });
 
 // Elevation chart interaction state
@@ -223,6 +209,7 @@ const elevationHoverPoint = ref<{
   grade: number;
 } | null>(null);
 
+// Stores the distance for mouse hover on the map course
 const mapHoverDistance = ref<number | null>(null);
 
 // Handle elevation chart hover events
@@ -230,6 +217,7 @@ function handleElevationHover(event: { lat: number; lng: number; distance: numbe
   elevationHoverPoint.value = event;
 }
 
+// Reset elevation hover point when leaving the chart
 function handleElevationLeave() {
   elevationHoverPoint.value = null;
 }
@@ -242,6 +230,9 @@ function handleMapHover(event: { lat: number; lng: number; distance: number }) {
 function handleMapLeave() {
   mapHoverDistance.value = null;
 }
+
+// Waypoint interaction state
+const selectedWaypoint = ref<Waypoint | null>(null);
 
 // Handle waypoint events
 function handleWaypointSelect(waypoint: Waypoint) {
@@ -388,7 +379,7 @@ onUnmounted(() => {
                 <Icon name="heroicons:map-pin" class="h-5 w-5 scale-150" />
                 <div class="flex flex-col">
                   <span class="font-medium">{{
-                    formatCourseDistance(course.totalDistance)
+                    formatDistance(course.totalDistance, userSettingsStore.settings.units.distance)
                   }}</span>
                   <span class="text-xs text-(--sub-color)">Distance</span>
                 </div>
@@ -400,7 +391,7 @@ onUnmounted(() => {
                 <Icon name="heroicons:arrow-trending-up" class="h-5 w-5 scale-150" />
                 <div class="flex flex-col">
                   <span class="font-medium">{{
-                    formatCourseElevation(course.elevationGain)
+                    formatElevation(course.elevationGain, userSettingsStore.settings.units.elevation)
                   }}</span>
                   <span class="text-xs text-(--sub-color)">Elevation Gain</span>
                 </div>
@@ -412,7 +403,7 @@ onUnmounted(() => {
                 <Icon name="heroicons:arrow-trending-down" class="h-5 w-5 scale-150" />
                 <div class="flex flex-col">
                   <span class="font-medium">{{
-                    formatCourseElevation(course.elevationLoss)
+                    formatElevation(course.elevationLoss, userSettingsStore.settings.units.elevation)
                   }}</span>
                   <span class="text-xs text-(--sub-color)">Elevation Loss</span>
                 </div>
@@ -503,8 +494,6 @@ onUnmounted(() => {
                 <ClientOnly>
                   <LeafletMap
                     :geo-json-data="geoJsonData"
-                    :center="mapCenter"
-                    :zoom="mapZoom"
                     :waypoints="waypoints"
                     :selected-waypoint="selectedWaypoint"
                     :elevation-hover-point="elevationHoverPoint"
