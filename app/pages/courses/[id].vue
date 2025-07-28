@@ -837,6 +837,7 @@ onUnmounted(() => {
                                 :get-default-stoppage-time="
                                     getDefaultStoppageTime
                                 "
+                                :geo-json-data="geoJsonData"
                                 @waypoint-select="handleWaypointSelect"
                                 @waypoint-hover="handleWaypointHover"
                                 @waypoint-leave="handleWaypointLeave"

@@ -25,13 +25,15 @@ interface Props {
 interface Emits {
     (e: "close"): void;
     (e: "save-waypoint-note", waypointId: string, notes: string): void;
-    (e: "delete-waypoint-note", waypointId: string): void;
+    (
+        e: "delete-waypoint-note" | "delete-waypoint-stoppage-time",
+        waypointId: string,
+    ): void;
     (
         e: "save-waypoint-stoppage-time",
         waypointId: string,
         stoppageTime: number,
     ): void;
-    (e: "delete-waypoint-stoppage-time", waypointId: string): void;
 }
 
 const props = withDefaults(defineProps<Props>(), {

@@ -2,6 +2,13 @@
 import { formatDistance, formatElevation } from "~/utils/courseMetrics";
 import { getTagsByIds } from "~/utils/waypointTags";
 import { getWaypointColorFromOrder } from "~/utils/waypoints";
+import {
+    calculateWaypointSegments,
+    getSegmentAfterWaypoint,
+} from "~/utils/waypointSegments";
+import type { WaypointSegment } from "~/utils/waypointSegments";
+import { extractElevationProfile } from "~/utils/elevationProfile";
+import type { ElevationPoint } from "~/utils/elevationProfile";
 
 // Define a waypoint type that matches what we get from the API
 type Waypoint = {
@@ -23,6 +30,7 @@ interface Props {
     getWaypointNote?: (waypointId: string) => string;
     getWaypointStoppageTime?: (waypointId: string) => number;
     getDefaultStoppageTime?: () => number;
+    geoJsonData?: GeoJSON.FeatureCollection[];
 }
 
 interface Emits {
@@ -42,6 +50,7 @@ const _props = withDefaults(defineProps<Props>(), {
     getWaypointNote: () => () => "",
     getWaypointStoppageTime: () => () => 0,
     getDefaultStoppageTime: () => () => 0,
+    geoJsonData: () => [],
 });
 
 const {
@@ -51,6 +60,7 @@ const {
     getWaypointNote,
     getWaypointStoppageTime,
     getDefaultStoppageTime,
+    geoJsonData,
 } = toRefs(_props);
 
 const emit = defineEmits<Emits>();
@@ -60,6 +70,31 @@ const userSettingsStore = useUserSettingsStore();
 // State for waypoint editing modal
 const editingWaypoint = ref<Waypoint | null>(null);
 const editModalOpen = ref(false);
+
+// Extract elevation profile from GeoJSON data
+const elevationProfile = computed((): ElevationPoint[] => {
+    if (!geoJsonData.value || geoJsonData.value.length === 0) {
+        return [];
+    }
+
+    // Combine all GeoJSON features
+    const combinedGeoJson: GeoJSON.FeatureCollection = {
+        type: "FeatureCollection",
+        features: geoJsonData.value.flatMap(
+            (collection) => collection.features,
+        ),
+    };
+
+    return extractElevationProfile(combinedGeoJson);
+});
+
+// Calculate segments between waypoints
+const waypointSegments = computed(() => {
+    if (!waypoints.value || waypoints.value.length < 2) {
+        return [];
+    }
+    return calculateWaypointSegments(waypoints.value, elevationProfile.value);
+});
 
 function handleWaypointClick(waypoint: Waypoint) {
     emit("waypoint-select", waypoint);
@@ -134,6 +169,18 @@ function handleSaveStoppageTime(waypointId: string, stoppageTime: number) {
 function handleDeleteStoppageTime(waypointId: string) {
     emit("delete-waypoint-stoppage-time", waypointId);
 }
+
+function formatSegmentDistance(meters: number) {
+    return formatDistance(meters, userSettingsStore.settings.units.distance);
+}
+
+function formatSegmentElevation(meters: number) {
+    return formatElevation(meters, userSettingsStore.settings.units.elevation);
+}
+
+function getSegmentForWaypoint(waypointId: string): WaypointSegment | null {
+    return getSegmentAfterWaypoint(waypointId, waypointSegments.value);
+}
 </script>
 
 <template>
@@ -150,141 +197,246 @@ function handleDeleteStoppageTime(waypointId: string) {
                 <p class="text-sm">No waypoints found</p>
             </div>
 
-            <div v-else class="space-y-1 p-1">
-                <div
-                    v-for="waypoint in waypoints"
-                    :key="waypoint.id"
-                    class="p-1 rounded-lg cursor-pointer transition-all duration-200 hover:bg-(--sub-alt-color) border"
-                    :class="{
-                        'bg-(--sub-alt-color) border-(--main-color)':
-                            selectedWaypoint?.id === waypoint.id,
-                        'border-transparent':
-                            selectedWaypoint?.id !== waypoint.id,
-                    }"
-                    @click="handleWaypointClick(waypoint)"
-                    @mouseenter="handleWaypointHover(waypoint)"
-                    @mouseleave="handleWaypointLeave"
-                >
-                    <div class="flex gap-2">
-                        <!-- Waypoint Number/Letter -->
+            <div v-else class="flex">
+                <!-- Waypoint List Column -->
+                <div class="flex-1 space-y-1 p-1">
+                    <template
+                        v-for="(waypoint, index) in waypoints"
+                        :key="waypoint.id"
+                    >
+                        <!-- Waypoint Item -->
                         <div
-                            class="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                            :style="{
-                                backgroundColor:
-                                    getWaypointPrimaryColor(waypoint),
+                            class="p-1 rounded-lg cursor-pointer transition-all duration-200 hover:bg-(--sub-alt-color) border"
+                            :class="{
+                                'bg-(--sub-alt-color) border-(--main-color)':
+                                    selectedWaypoint?.id === waypoint.id,
+                                'border-transparent':
+                                    selectedWaypoint?.id !== waypoint.id,
                             }"
+                            @click="handleWaypointClick(waypoint)"
+                            @mouseenter="handleWaypointHover(waypoint)"
+                            @mouseleave="handleWaypointLeave"
                         >
-                            <div class="translate-y-0.25">
-                                {{ getWaypointDisplayContent(waypoint) }}
-                            </div>
-                        </div>
-                        <div class="flex-col gap-1 w-full">
-                            <div class="flex items-start gap-2">
-                                <!-- Waypoint Info -->
+                            <div class="flex gap-2">
+                                <!-- Waypoint Number/Letter -->
                                 <div
-                                    class="flex items-start justify-between gap-2"
-                                >
-                                    <div
-                                        class="font-medium text-(--main-color) truncate"
-                                    >
-                                        {{ waypoint.name }}
-                                    </div>
-                                </div>
-
-                                <!-- Distance, Elevation, and Edit Button Row -->
-                                <div
-                                    class="flex w-full items-center justify-between gap-4 mt-0.5 text-xs text-(--sub-color)"
-                                >
-                                    <div class="flex items-center gap-4">
-                                        <span class="flex items-center gap-1">
-                                            <Icon
-                                                name="heroicons:map"
-                                                class="h-3 w-3"
-                                            />
-                                            {{
-                                                formatWaypointDistance(
-                                                    waypoint.distance,
-                                                )
-                                            }}
-                                        </span>
-
-                                        <span
-                                            v-if="
-                                                waypoint.elevation !== undefined
-                                            "
-                                            class="flex items-center gap-1"
-                                        >
-                                            <Icon
-                                                name="heroicons:arrow-trending-up"
-                                                class="h-3 w-3"
-                                            />
-                                            {{
-                                                formatWaypointElevation(
-                                                    waypoint.elevation,
-                                                )
-                                            }}
-                                        </span>
-                                    </div>
-
-                                    <!-- Edit Waypoint Plan Button -->
-                                    <div class="flex flex-1 justify-end">
-                                        <button
-                                            v-if="currentPlanId"
-                                            class="text-(--accent-color) hover:text-(--main-color) transition-colors flex-shrink-0 m-0! p-1! rounded!"
-                                            title="Edit waypoint"
-                                            @click.stop="
-                                                openEditModal(waypoint)
-                                            "
-                                        >
-                                            <Icon
-                                                name="heroicons:pencil"
-                                                class="h-3 w-3"
-                                            />
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Tags Row -->
-                            <div
-                                v-if="waypoint.tags.length > 0"
-                                class="flex gap-1 flex-wrap"
-                            >
-                                <div
-                                    v-for="tagId in waypoint.tags"
-                                    :key="tagId"
-                                    class="w-5 h-5 rounded flex items-center justify-center"
+                                    class="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white"
                                     :style="{
                                         backgroundColor:
-                                            getTagsByIds([tagId])[0]?.color ||
-                                            '#6b7280',
+                                            getWaypointPrimaryColor(waypoint),
                                     }"
-                                    :title="
-                                        getTagsByIds([tagId])[0]?.label || tagId
-                                    "
                                 >
-                                    <Icon
-                                        :name="
-                                            getTagsByIds([tagId])[0]?.icon ||
-                                            'lucide:map-pin'
+                                    <div class="translate-y-0.25">
+                                        {{
+                                            getWaypointDisplayContent(waypoint)
+                                        }}
+                                    </div>
+                                </div>
+                                <div class="flex-col gap-1 w-full">
+                                    <div class="flex items-start gap-2">
+                                        <!-- Waypoint Info -->
+                                        <div
+                                            class="flex items-start justify-between gap-2"
+                                        >
+                                            <div
+                                                class="font-medium text-(--main-color) truncate"
+                                            >
+                                                {{ waypoint.name }}
+                                            </div>
+                                        </div>
+
+                                        <!-- Distance, Elevation, and Edit Button Row -->
+                                        <div
+                                            class="flex w-full items-center justify-between gap-4 mt-0.5 text-xs text-(--sub-color)"
+                                        >
+                                            <div
+                                                class="flex items-center gap-4"
+                                            >
+                                                <span
+                                                    class="flex items-center gap-1"
+                                                >
+                                                    <Icon
+                                                        name="heroicons:map"
+                                                        class="h-3 w-3"
+                                                    />
+                                                    {{
+                                                        formatWaypointDistance(
+                                                            waypoint.distance,
+                                                        )
+                                                    }}
+                                                </span>
+
+                                                <span
+                                                    v-if="
+                                                        waypoint.elevation !==
+                                                        undefined
+                                                    "
+                                                    class="flex items-center gap-1"
+                                                >
+                                                    <Icon
+                                                        name="heroicons:arrow-trending-up"
+                                                        class="h-3 w-3"
+                                                    />
+                                                    {{
+                                                        formatWaypointElevation(
+                                                            waypoint.elevation,
+                                                        )
+                                                    }}
+                                                </span>
+                                            </div>
+
+                                            <!-- Edit Waypoint Plan Button -->
+                                            <div
+                                                class="flex flex-1 justify-end"
+                                            >
+                                                <button
+                                                    v-if="currentPlanId"
+                                                    class="text-(--accent-color) hover:text-(--main-color) transition-colors flex-shrink-0 m-0! p-1! rounded!"
+                                                    title="Edit waypoint"
+                                                    @click.stop="
+                                                        openEditModal(waypoint)
+                                                    "
+                                                >
+                                                    <Icon
+                                                        name="heroicons:pencil"
+                                                        class="h-3 w-3"
+                                                    />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Tags Row -->
+                                    <div
+                                        v-if="waypoint.tags.length > 0"
+                                        class="flex gap-1 flex-wrap"
+                                    >
+                                        <div
+                                            v-for="tagId in waypoint.tags"
+                                            :key="tagId"
+                                            class="w-5 h-5 rounded flex items-center justify-center"
+                                            :style="{
+                                                backgroundColor:
+                                                    getTagsByIds([tagId])[0]
+                                                        ?.color || '#6b7280',
+                                            }"
+                                            :title="
+                                                getTagsByIds([tagId])[0]
+                                                    ?.label || tagId
+                                            "
+                                        >
+                                            <Icon
+                                                :name="
+                                                    getTagsByIds([tagId])[0]
+                                                        ?.icon ||
+                                                    'lucide:map-pin'
+                                                "
+                                                class="h-3 w-3 text-white"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <!-- Notes Display (when present) -->
+                                    <div
+                                        v-if="
+                                            currentPlanId &&
+                                            getWaypointNote?.(waypoint.id)
                                         "
-                                        class="h-3 w-3 text-white"
-                                    />
+                                        class="text-xs text-(--main-color) py-2"
+                                    >
+                                        {{ getWaypointNote(waypoint.id) }}
+                                    </div>
                                 </div>
                             </div>
+                        </div>
 
-                            <!-- Notes Display (when present) -->
-                            <div
-                                v-if="
-                                    currentPlanId &&
-                                    getWaypointNote?.(waypoint.id)
-                                "
-                                class="text-xs text-(--main-color) py-2"
-                            >
-                                {{ getWaypointNote(waypoint.id) }}
+                        <!-- Segment Information (between this waypoint and the next) -->
+                        <div
+                            v-if="index < waypoints.length - 1"
+                            class="flex justify-center my-1"
+                        >
+                            <div class="w-full max-w-48">
+                                <div
+                                    v-if="getSegmentForWaypoint(waypoint.id)"
+                                    class="bg-(--sub-alt-color) border border-(--sub-color) rounded-lg px-2 py-1 text-xs"
+                                >
+                                    <div
+                                        class="flex items-center justify-center gap-4 text-(--sub-color)"
+                                    >
+                                        <!-- Distance -->
+                                        <div
+                                            class="flex items-center gap-1"
+                                            title="Segment distance"
+                                        >
+                                            <Icon
+                                                name="heroicons:arrows-right-left"
+                                                class="h-3 w-3"
+                                            />
+                                            <span class="font-medium">
+                                                {{
+                                                    formatSegmentDistance(
+                                                        getSegmentForWaypoint(
+                                                            waypoint.id,
+                                                        )!.distance,
+                                                    )
+                                                }}
+                                            </span>
+                                        </div>
+
+                                        <!-- Elevation Gain -->
+                                        <div
+                                            v-if="
+                                                getSegmentForWaypoint(
+                                                    waypoint.id,
+                                                )!.elevationGain > 0
+                                            "
+                                            class="flex items-center gap-1 text-green-500"
+                                            title="Elevation gain"
+                                        >
+                                            <Icon
+                                                name="heroicons:arrow-up"
+                                                class="h-3 w-3"
+                                            />
+                                            <span class="font-medium">
+                                                {{
+                                                    formatSegmentElevation(
+                                                        getSegmentForWaypoint(
+                                                            waypoint.id,
+                                                        )!.elevationGain,
+                                                    )
+                                                }}
+                                            </span>
+                                        </div>
+
+                                        <!-- Elevation Loss -->
+                                        <div
+                                            v-if="
+                                                getSegmentForWaypoint(
+                                                    waypoint.id,
+                                                )!.elevationLoss > 0
+                                            "
+                                            class="flex items-center gap-1 text-red-500"
+                                            title="Elevation loss"
+                                        >
+                                            <Icon
+                                                name="heroicons:arrow-down"
+                                                class="h-3 w-3"
+                                            />
+                                            <span class="font-medium">
+                                                {{
+                                                    formatSegmentElevation(
+                                                        getSegmentForWaypoint(
+                                                            waypoint.id,
+                                                        )!.elevationLoss,
+                                                    )
+                                                }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    </template>
                 </div>
             </div>
         </div>
