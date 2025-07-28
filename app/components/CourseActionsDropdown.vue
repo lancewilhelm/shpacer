@@ -2,31 +2,41 @@
 interface Course {
     id: string;
     name: string;
-    description?: string;
+    description?: string | null;
+    userId: string;
     originalFileName: string;
+    originalFileContent: string;
     fileType: string;
-    totalDistance?: number;
-    elevationGain?: number;
-    elevationLoss?: number;
-    raceDate?: string;
-    createdAt: string;
+    geoJsonData: unknown;
+    totalDistance?: number | null;
+    elevationGain?: number | null;
+    elevationLoss?: number | null;
+    raceDate?: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
 }
 
 interface Props {
-    course: Course;
+    course?: Course | null;
 }
 
 interface Emits {
-    (e: "edit-course"): void;
-    (e: "download-file"): void;
-    (e: "delete-course"): void;
+    (e: "edit-course" | "download-file" | "delete-course"): void;
 }
 
-const props = defineProps<Props>();
+const _props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 
-const actions = {
-    edit: {
+interface ActionItem {
+    name: string;
+    action: () => void;
+    icon: string;
+    destructive?: boolean;
+    description?: string;
+}
+
+const actions: ActionItem[] = [
+    {
         name: "Edit Course",
         action: () => {
             emit("edit-course");
@@ -34,7 +44,7 @@ const actions = {
         },
         icon: "heroicons:pencil",
     },
-    download: {
+    {
         name: "Download GPX",
         action: () => {
             emit("download-file");
@@ -42,7 +52,7 @@ const actions = {
         },
         icon: "heroicons:arrow-down-tray",
     },
-    delete: {
+    {
         name: "Delete Course",
         action: () => {
             emit("delete-course");
@@ -51,7 +61,7 @@ const actions = {
         icon: "heroicons:trash",
         destructive: true,
     },
-};
+];
 
 const popupVisible = ref(false);
 const popupRef = ref<HTMLElement | null>(null);
@@ -152,7 +162,10 @@ onBeforeUnmount(() => {
                         >
                             {{ action.name }}
                         </div>
-                        <div class="text-xs text-(--sub-color) mt-1">
+                        <div
+                            v-if="action.description"
+                            class="text-xs text-(--sub-color) mt-1"
+                        >
                             {{ action.description }}
                         </div>
                     </div>

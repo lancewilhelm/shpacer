@@ -113,19 +113,19 @@ export const courses = sqliteTable("courses", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  
+
   // File storage fields
   originalFileName: text("original_file_name").notNull(),
   originalFileContent: text("original_file_content").notNull(),
   fileType: text("file_type").notNull(), // 'gpx' or 'tcx'
   geoJsonData: text("geojson_data", { mode: "json" }).notNull(),
-  
+
   // Course metrics
   totalDistance: integer("total_distance"), // in meters
   elevationGain: integer("elevation_gain"), // in meters
   elevationLoss: integer("elevation_loss"), // in meters
   raceDate: integer("race_date", { mode: "timestamp" }), // optional race date
-  
+
   // Timestamps
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
@@ -152,7 +152,79 @@ export const waypoints = sqliteTable("waypoints", {
   tags: text("tags", { mode: "json" }).notNull().default("[]"), // Array of tag IDs
   icon: text("icon"),
   order: integer("order").notNull(), // order along the route
-  
+
+  // Timestamps
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+// PLANS TABLE
+export const plans = sqliteTable("plans", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => uuidv4()),
+  courseId: text("course_id")
+    .notNull()
+    .references(() => courses.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  pace: integer("pace"), // pace in seconds per kilometer or mile
+  paceUnit: text("pace_unit").notNull().default("min_per_km"), // 'min_per_km' or 'min_per_mi'
+  defaultStoppageTime: integer("default_stoppage_time").default(0), // default stoppage time in seconds
+
+  // Timestamps
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+// WAYPOINT NOTES TABLE
+export const waypointNotes = sqliteTable("waypoint_notes", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => uuidv4()),
+  planId: text("plan_id")
+    .notNull()
+    .references(() => plans.id, { onDelete: "cascade" }),
+  waypointId: text("waypoint_id")
+    .notNull()
+    .references(() => waypoints.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  notes: text("notes").notNull(),
+
+  // Timestamps
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+// WAYPOINT STOPPAGE TIMES TABLE
+export const waypointStoppageTimes = sqliteTable("waypoint_stoppage_times", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => uuidv4()),
+  planId: text("plan_id")
+    .notNull()
+    .references(() => plans.id, { onDelete: "cascade" }),
+  waypointId: text("waypoint_id")
+    .notNull()
+    .references(() => waypoints.id, { onDelete: "cascade" }),
+  stoppageTime: integer("stoppage_time").notNull(), // stoppage time in seconds
+
   // Timestamps
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
@@ -167,9 +239,19 @@ export type InsertUserSettings = InferInsertModel<typeof userSettings>;
 export type InsertGlobalSettings = InferInsertModel<typeof globalSettings>;
 export type InsertCourse = InferInsertModel<typeof courses>;
 export type InsertWaypoint = InferInsertModel<typeof waypoints>;
+export type InsertPlan = InferInsertModel<typeof plans>;
+export type InsertWaypointNote = InferInsertModel<typeof waypointNotes>;
+export type InsertWaypointStoppageTime = InferInsertModel<
+  typeof waypointStoppageTimes
+>;
 
 export type SelectUserSettings = InferSelectModel<typeof userSettings>;
 export type SelectGlobalSettings = InferSelectModel<typeof globalSettings>;
 export type SelectKnowledge = InferSelectModel<typeof knowledge>;
 export type SelectCourse = InferSelectModel<typeof courses>;
 export type SelectWaypoint = InferSelectModel<typeof waypoints>;
+export type SelectPlan = InferSelectModel<typeof plans>;
+export type SelectWaypointNote = InferSelectModel<typeof waypointNotes>;
+export type SelectWaypointStoppageTime = InferSelectModel<
+  typeof waypointStoppageTimes
+>;

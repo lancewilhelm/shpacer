@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import type { SelectCourse } from "~/utils/db/schema";
+import type {
+    SelectCourse,
+    SelectPlan,
+    SelectWaypointNote,
+    SelectWaypointStoppageTime,
+} from "~/utils/db/schema";
 import { formatDistance, formatElevation } from "~/utils/courseMetrics";
 
 // Define the waypoint type that matches what we get from the API
@@ -43,10 +48,26 @@ const {
     data: waypointsData,
     pending: _waypointsPending,
     error: _waypointsError,
-    refresh: _refreshWaypoints,
+    refresh: refreshWaypoints,
 } = await useFetch<{ waypoints: Waypoint[] }>(
     `/api/courses/${courseId}/waypoints`,
 );
+
+// Fetch plans data
+const {
+    data: plansData,
+    pending: _plansPending,
+    error: _plansError,
+    refresh: refreshPlans,
+} = await useFetch<{ plans: SelectPlan[] }>(`/api/courses/${courseId}/plans`);
+
+// Plans state
+const plans = computed(() => plansData.value?.plans || []);
+const currentPlanId = ref<string | null>(null);
+const waypointNotes = ref<SelectWaypointNote[]>([]);
+const waypointStoppageTimes = ref<SelectWaypointStoppageTime[]>([]);
+const planSetupModalOpen = ref(false);
+const editingPlan = ref<SelectPlan | null>(null);
 
 // Store the course and waypoints data in computed properties
 const course = computed(() => courseData.value?.course);
@@ -59,6 +80,31 @@ useHead({
 
 // Course edit modal state
 const courseEditModalOpen = ref(false);
+
+// Fetch waypoint notes and stoppage times when current plan changes
+watchEffect(async () => {
+    if (currentPlanId.value) {
+        try {
+            const [notesResponse, stoppageTimesResponse] = await Promise.all([
+                $fetch(
+                    `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-notes`,
+                ) as Promise<{ notes: SelectWaypointNote[] }>,
+                $fetch(
+                    `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-stoppage-times`,
+                ) as Promise<{ stoppageTimes: SelectWaypointStoppageTime[] }>,
+            ]);
+            waypointNotes.value = notesResponse.notes;
+            waypointStoppageTimes.value = stoppageTimesResponse.stoppageTimes;
+        } catch (error) {
+            console.error("Error fetching waypoint data:", error);
+            waypointNotes.value = [];
+            waypointStoppageTimes.value = [];
+        }
+    } else {
+        waypointNotes.value = [];
+        waypointStoppageTimes.value = [];
+    }
+});
 
 // Panel resizing state
 const isResizing = ref(false);
@@ -302,17 +348,205 @@ function handleCourseUpdated(updatedCourse: SelectCourse) {
 
 function handleWaypointUpdated(_updatedWaypoint: Waypoint) {
     // Refresh waypoints to get the latest data
-    _refreshWaypoints();
+    refreshWaypoints();
+}
+
+// Plan management functions
+function handlePlanSelected(planId: string) {
+    currentPlanId.value = planId || null;
+}
+
+function openPlanSetupModal() {
+    editingPlan.value = null;
+    planSetupModalOpen.value = true;
+}
+
+function openEditPlanModal(plan: SelectPlan) {
+    editingPlan.value = plan;
+    planSetupModalOpen.value = true;
+}
+
+function closePlanSetupModal() {
+    planSetupModalOpen.value = false;
+    editingPlan.value = null;
+}
+
+async function handlePlanCreated(plan: unknown) {
+    await refreshPlans();
+    currentPlanId.value = (plan as SelectPlan).id;
+}
+
+async function handlePlanUpdated(plan: unknown) {
+    const typedPlan = plan as SelectPlan;
+    await refreshPlans();
+    if (currentPlanId.value === typedPlan.id) {
+        // Refresh waypoint notes and stoppage times in case plan details changed
+        try {
+            const [notesResponse, stoppageTimesResponse] = await Promise.all([
+                $fetch(
+                    `/api/courses/${courseId}/plans/${typedPlan.id}/waypoint-notes`,
+                ) as Promise<{ notes: SelectWaypointNote[] }>,
+                $fetch(
+                    `/api/courses/${courseId}/plans/${typedPlan.id}/waypoint-stoppage-times`,
+                ) as Promise<{ stoppageTimes: SelectWaypointStoppageTime[] }>,
+            ]);
+            waypointNotes.value = notesResponse.notes;
+            waypointStoppageTimes.value = stoppageTimesResponse.stoppageTimes;
+        } catch (error) {
+            console.error("Error refreshing waypoint data:", error);
+        }
+    }
+}
+
+async function handlePlanDeleted(planId: string) {
+    try {
+        await $fetch(`/api/courses/${courseId}/plans/${planId}`, {
+            method: "DELETE",
+        });
+
+        await refreshPlans();
+
+        if (currentPlanId.value === planId) {
+            currentPlanId.value = null;
+            waypointNotes.value = [];
+            waypointStoppageTimes.value = [];
+        }
+    } catch (error) {
+        console.error("Error deleting plan:", error);
+    }
+}
+
+// Waypoint notes functions
+function getWaypointNote(waypointId: string): string {
+    const note = waypointNotes.value.find((n) => n.waypointId === waypointId);
+    return note?.notes || "";
+}
+
+function getWaypointStoppageTime(waypointId: string): number {
+    const stoppageTime = waypointStoppageTimes.value.find(
+        (st) => st.waypointId === waypointId,
+    );
+    return stoppageTime?.stoppageTime || 0;
+}
+
+function getDefaultStoppageTime(): number {
+    const currentPlan = plans.value.find((p) => p.id === currentPlanId.value);
+    return currentPlan?.defaultStoppageTime || 0;
+}
+
+async function saveWaypointNote(waypointId: string, notes: string) {
+    if (!currentPlanId.value) return;
+
+    try {
+        const response = await fetch(
+            `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-notes`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    waypointId,
+                    notes: notes.trim(),
+                }),
+            },
+        );
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        // Refresh waypoint notes
+        const notesResponse = (await $fetch(
+            `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-notes`,
+        )) as { notes: SelectWaypointNote[] };
+        waypointNotes.value = notesResponse.notes;
+    } catch (error) {
+        console.error("Error saving waypoint note:", error);
+    }
+}
+
+async function deleteWaypointNote(waypointId: string) {
+    if (!currentPlanId.value) return;
+
+    try {
+        await $fetch(
+            `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-notes/${waypointId}`,
+            {
+                method: "DELETE",
+            },
+        );
+
+        // Refresh waypoint notes
+        const response = (await $fetch(
+            `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-notes`,
+        )) as { notes: SelectWaypointNote[] };
+        waypointNotes.value = response.notes;
+    } catch (error) {
+        console.error("Error deleting waypoint note:", error);
+    }
+}
+
+async function saveWaypointStoppageTime(
+    waypointId: string,
+    stoppageTime: number,
+) {
+    if (!currentPlanId.value) return;
+
+    try {
+        await fetch(
+            `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-stoppage-times`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    waypointId,
+                    stoppageTime,
+                }),
+            },
+        );
+
+        // Refresh waypoint stoppage times
+        const response = (await $fetch(
+            `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-stoppage-times`,
+        )) as { stoppageTimes: SelectWaypointStoppageTime[] };
+        waypointStoppageTimes.value = response.stoppageTimes;
+    } catch (error) {
+        console.error("Error saving waypoint stoppage time:", error);
+    }
+}
+
+async function deleteWaypointStoppageTime(waypointId: string) {
+    if (!currentPlanId.value) return;
+
+    try {
+        await $fetch(
+            `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-stoppage-times/${waypointId}`,
+            {
+                method: "DELETE",
+            },
+        );
+
+        // Refresh waypoint stoppage times
+        const response = (await $fetch(
+            `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-stoppage-times`,
+        )) as { stoppageTimes: SelectWaypointStoppageTime[] };
+        waypointStoppageTimes.value = response.stoppageTimes;
+    } catch (error) {
+        console.error("Error deleting waypoint stoppage time:", error);
+    }
 }
 
 function handleWaypointDeleted(_waypointId: string) {
     // Refresh waypoints to get the latest data after deletion
-    _refreshWaypoints();
+    refreshWaypoints();
 }
 
 function handleWaypointCreated(_createdWaypoint: Waypoint) {
     // Refresh waypoints to get the latest data after creation
-    _refreshWaypoints();
+    refreshWaypoints();
 }
 
 // Cleanup resize listeners on unmount
@@ -380,12 +614,24 @@ onUnmounted(() => {
                                 </p>
                             </div>
                         </div>
-                        <CourseActionsDropdown
-                            :course="course"
-                            @edit-course="openCourseEditModal"
-                            @download-file="downloadOriginalFile"
-                            @delete-course="deleteCourse"
-                        />
+                        <div class="flex items-center gap-3">
+                            <PlanSelector
+                                :plans="plans"
+                                :current-plan-id="currentPlanId"
+                                :course-id="courseId"
+                                @plan-selected="handlePlanSelected"
+                                @add-plan="openPlanSetupModal"
+                                @edit-plan="openEditPlanModal"
+                                @delete-plan="handlePlanDeleted"
+                            />
+                            <CourseActionsDropdown
+                                v-if="course"
+                                :course="course"
+                                @edit-course="openCourseEditModal"
+                                @download-file="downloadOriginalFile"
+                                @delete-course="deleteCourse"
+                            />
+                        </div>
                     </div>
 
                     <div class="flex flex-col gap-4">
@@ -486,7 +732,7 @@ onUnmounted(() => {
                                     name="heroicons:calendar"
                                     class="h-4 w-4"
                                 />
-                                {{ formatDate(course.createdAt) }}
+                                {{ formatDate(course.createdAt || new Date()) }}
                             </span>
                             <span class="flex items-center gap-1 uppercase">
                                 <Icon name="heroicons:tag" class="h-4 w-4" />
@@ -583,9 +829,25 @@ onUnmounted(() => {
                             <WaypointList
                                 :waypoints="waypoints"
                                 :selected-waypoint="selectedWaypoint"
+                                :current-plan-id="currentPlanId"
+                                :get-waypoint-note="getWaypointNote"
+                                :get-waypoint-stoppage-time="
+                                    getWaypointStoppageTime
+                                "
+                                :get-default-stoppage-time="
+                                    getDefaultStoppageTime
+                                "
                                 @waypoint-select="handleWaypointSelect"
                                 @waypoint-hover="handleWaypointHover"
                                 @waypoint-leave="handleWaypointLeave"
+                                @save-waypoint-note="saveWaypointNote"
+                                @delete-waypoint-note="deleteWaypointNote"
+                                @save-waypoint-stoppage-time="
+                                    saveWaypointStoppageTime
+                                "
+                                @delete-waypoint-stoppage-time="
+                                    deleteWaypointStoppageTime
+                                "
                             />
                         </div>
                     </div>
@@ -604,6 +866,27 @@ onUnmounted(() => {
             @waypoint-updated="handleWaypointUpdated"
             @waypoint-deleted="handleWaypointDeleted"
             @waypoint-created="handleWaypointCreated"
+        />
+
+        <!-- Plan Setup Modal -->
+        <PlanSetupModal
+            :is-open="planSetupModalOpen"
+            :course-id="courseId"
+            :existing-plan="
+                editingPlan
+                    ? {
+                          id: editingPlan.id,
+                          name: editingPlan.name,
+                          pace: editingPlan.pace || undefined,
+                          paceUnit: editingPlan.paceUnit,
+                          defaultStoppageTime:
+                              editingPlan.defaultStoppageTime || undefined,
+                      }
+                    : null
+            "
+            @close="closePlanSetupModal"
+            @plan-created="handlePlanCreated"
+            @plan-updated="handlePlanUpdated"
         />
     </div>
 </template>
