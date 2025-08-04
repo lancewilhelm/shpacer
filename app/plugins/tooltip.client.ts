@@ -1,5 +1,5 @@
-import { vTooltip } from '~/composables/useTooltip'
+import { vTooltip } from "~/composables/useTooltip";
 
 export default defineNuxtPlugin((nuxtApp) => {
-  nuxtApp.vueApp.directive('tooltip', vTooltip)
-})
+  nuxtApp.vueApp.directive("tooltip", vTooltip);
+});

@@ -230,7 +230,6 @@ export const vTooltip = {
   },
 
   updated(el: HTMLElement, binding: DirectiveBinding) {
-    // If content changed, rebind the tooltip
     const { unbindTooltip, bindTooltip } = useTooltip();
 
     let content = "";
