@@ -233,77 +233,64 @@ function getSegmentForWaypoint(waypointId: string): WaypointSegment | null {
                                     </div>
                                 </div>
                                 <div class="flex-col gap-1 w-full">
-                                    <div class="flex items-start gap-2">
+                                    <div
+                                        class="flex items-start gap-2 w-full justify-between"
+                                    >
                                         <!-- Waypoint Info -->
                                         <div
-                                            class="flex items-start justify-between gap-2"
+                                            class="font-medium text-(--main-color) truncate"
                                         >
-                                            <div
-                                                class="font-medium text-(--main-color) truncate"
-                                            >
-                                                {{ waypoint.name }}
-                                            </div>
+                                            {{ waypoint.name }}
                                         </div>
 
-                                        <!-- Distance, Elevation, and Edit Button Row -->
-                                        <div
-                                            class="flex w-full items-center justify-between gap-4 mt-0.5 text-xs text-(--sub-color)"
+                                        <!-- Edit Waypoint Plan Button -->
+                                        <button
+                                            v-if="currentPlanId"
+                                            class="text-(--sub-color) transition-colors flex-shrink-0 m-0! p-1! rounded!"
+                                            title="Edit waypoint"
+                                            @click.stop="
+                                                openEditModal(waypoint)
+                                            "
                                         >
-                                            <div
-                                                class="flex items-center gap-4"
-                                            >
-                                                <span
-                                                    class="flex items-center gap-1"
-                                                >
-                                                    <Icon
-                                                        name="heroicons:map"
-                                                        class="h-3 w-3"
-                                                    />
-                                                    {{
-                                                        formatWaypointDistance(
-                                                            waypoint.distance,
-                                                        )
-                                                    }}
-                                                </span>
+                                            <Icon
+                                                name="heroicons:pencil"
+                                                class="h-3 w-3"
+                                            />
+                                        </button>
+                                    </div>
 
-                                                <span
-                                                    v-if="
-                                                        waypoint.elevation !==
-                                                        undefined
-                                                    "
-                                                    class="flex items-center gap-1"
-                                                >
-                                                    <Icon
-                                                        name="heroicons:arrow-trending-up"
-                                                        class="h-3 w-3"
-                                                    />
-                                                    {{
-                                                        formatWaypointElevation(
-                                                            waypoint.elevation,
-                                                        )
-                                                    }}
-                                                </span>
-                                            </div>
+                                    <!-- Distance and Elevation -->
+                                    <div
+                                        class="flex items-center gap-4 text-(--sub-color) text-sm mb-1"
+                                    >
+                                        <span class="flex items-center gap-1">
+                                            <Icon
+                                                name="heroicons:map"
+                                                class="h-3 w-3"
+                                            />
+                                            {{
+                                                formatWaypointDistance(
+                                                    waypoint.distance,
+                                                )
+                                            }}
+                                        </span>
 
-                                            <!-- Edit Waypoint Plan Button -->
-                                            <div
-                                                class="flex flex-1 justify-end"
-                                            >
-                                                <button
-                                                    v-if="currentPlanId"
-                                                    class="text-(--accent-color) hover:text-(--main-color) transition-colors flex-shrink-0 m-0! p-1! rounded!"
-                                                    title="Edit waypoint"
-                                                    @click.stop="
-                                                        openEditModal(waypoint)
-                                                    "
-                                                >
-                                                    <Icon
-                                                        name="heroicons:pencil"
-                                                        class="h-3 w-3"
-                                                    />
-                                                </button>
-                                            </div>
-                                        </div>
+                                        <span
+                                            v-if="
+                                                waypoint.elevation !== undefined
+                                            "
+                                            class="flex items-center gap-1"
+                                        >
+                                            <Icon
+                                                name="heroicons:arrow-trending-up"
+                                                class="h-3 w-3"
+                                            />
+                                            {{
+                                                formatWaypointElevation(
+                                                    waypoint.elevation,
+                                                )
+                                            }}
+                                        </span>
                                     </div>
 
                                     <!-- Tags Row -->
@@ -353,12 +340,12 @@ function getSegmentForWaypoint(waypointId: string): WaypointSegment | null {
                         <!-- Segment Information (between this waypoint and the next) -->
                         <div
                             v-if="index < waypoints.length - 1"
-                            class="flex justify-center my-1"
+                            class="flex justify-center my-1 border-t border-b border-dotted text-(--sub-color)"
                         >
                             <div class="w-full max-w-48">
                                 <div
                                     v-if="getSegmentForWaypoint(waypoint.id)"
-                                    class="bg-(--sub-alt-color) border border-(--sub-color) rounded-lg px-2 py-1 text-xs"
+                                    class="px-2 py-1 text-xs"
                                 >
                                     <div
                                         class="flex items-center justify-center gap-4 text-(--sub-color)"
@@ -390,7 +377,7 @@ function getSegmentForWaypoint(waypointId: string): WaypointSegment | null {
                                                     waypoint.id,
                                                 )!.elevationGain > 0
                                             "
-                                            class="flex items-center gap-1 text-green-500"
+                                            class="flex items-center gap-1 text-(--sub-color)"
                                             title="Elevation gain"
                                         >
                                             <Icon
@@ -415,7 +402,7 @@ function getSegmentForWaypoint(waypointId: string): WaypointSegment | null {
                                                     waypoint.id,
                                                 )!.elevationLoss > 0
                                             "
-                                            class="flex items-center gap-1 text-red-500"
+                                            class="flex items-center gap-1 text-(--sub-color)"
                                             title="Elevation loss"
                                         >
                                             <Icon
