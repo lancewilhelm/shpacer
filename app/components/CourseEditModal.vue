@@ -1658,24 +1658,6 @@ function canMoveDown(waypoint: Waypoint): boolean {
                                             : "Create Waypoint"
                                     }}
                                 </button>
-                                <button
-                                    v-else
-                                    class="w-full px-3 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50"
-                                    :disabled="
-                                        updatingWaypointIds.has(
-                                            selectedWaypointForEdit.id,
-                                        )
-                                    "
-                                    @click="saveWaypointChanges"
-                                >
-                                    {{
-                                        updatingWaypointIds.has(
-                                            selectedWaypointForEdit.id,
-                                        )
-                                            ? "Saving..."
-                                            : "Save Changes"
-                                    }}
-                                </button>
 
                                 <p class="text-xs text-(--sub-color) mt-2">
                                     Enter a distance, use arrow buttons for
@@ -1701,7 +1683,7 @@ function canMoveDown(waypoint: Waypoint): boolean {
                                 />
                             </div>
 
-                            <!-- Delete Button -->
+                            <!-- Save and Delete Buttons -->
                             <div
                                 v-if="
                                     canDeleteWaypoint(
@@ -1709,45 +1691,27 @@ function canMoveDown(waypoint: Waypoint): boolean {
                                         editableWaypoints,
                                     )
                                 "
-                                class="pt-4 border-t border-(--sub-color)"
+                                class="flex gap-2 pt-4 border-t border-(--sub-color)"
                             >
                                 <button
-                                    class="w-full px-3 py-2 border border-(--error-color) text-(--error-color) rounded-lg hover:bg-(--error-color) hover:text-(--bg-color) transition-colors disabled:opacity-50"
+                                    class="flex-1 px-3 py-2 bg-(--main-color) text-(--bg-color) rounded-lg transition-opacity disabled:opacity-50"
                                     :disabled="
-                                        deletingWaypointIds.has(
+                                        updatingWaypointIds.has(
                                             selectedWaypointForEdit.id,
                                         )
                                     "
-                                    @click="
-                                        deleteWaypoint(selectedWaypointForEdit)
-                                    "
+                                    @click="saveWaypointChanges"
                                 >
-                                    <Icon
-                                        name="heroicons:trash"
-                                        class="h-4 w-4 mr-2"
-                                    />
                                     {{
-                                        deletingWaypointIds.has(
+                                        updatingWaypointIds.has(
                                             selectedWaypointForEdit.id,
                                         )
-                                            ? "Deleting..."
-                                            : "Delete Waypoint"
+                                            ? "Saving..."
+                                            : "Save"
                                     }}
                                 </button>
-                            </div>
-
-                            <!-- Delete Button -->
-                            <div
-                                v-if="
-                                    canDeleteWaypoint(
-                                        selectedWaypointForEdit,
-                                        editableWaypoints,
-                                    )
-                                "
-                                class="pt-4 border-t border-(--sub-color)"
-                            >
                                 <button
-                                    class="w-full px-3 py-2 border border-(--error-color) text-(--error-color) rounded-lg hover:bg-(--error-color) hover:text-(--bg-color) transition-colors disabled:opacity-50"
+                                    class="w-min px-3 py-2 border border-(--error-color) text-(--error-color) rounded-lg hover:bg-(--error-color)! transition-colors disabled:opacity-50 flex items-center justify-center"
                                     :disabled="
                                         deletingWaypointIds.has(
                                             selectedWaypointForEdit.id,
@@ -1759,15 +1723,8 @@ function canMoveDown(waypoint: Waypoint): boolean {
                                 >
                                     <Icon
                                         name="heroicons:trash"
-                                        class="h-4 w-4 mr-2"
+                                        class="h-4 w-4"
                                     />
-                                    {{
-                                        deletingWaypointIds.has(
-                                            selectedWaypointForEdit.id,
-                                        )
-                                            ? "Deleting..."
-                                            : "Delete Waypoint"
-                                    }}
                                 </button>
                             </div>
 
