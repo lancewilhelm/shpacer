@@ -1224,9 +1224,9 @@ function canMoveDown(waypoint: Waypoint): boolean {
         <div class="w-full h-full flex flex-col">
             <!-- Header -->
             <div class="flex items-center justify-between">
-                <h2 class="text-2xl font-bold text-(--main-color)">
+                <div class="text-2xl font-bold text-(--main-color)">
                     Edit Course
-                </h2>
+                </div>
                 <button
                     class="p-2 text-(--sub-color) hover:text-(--main-color) transition-colors"
                     @click="closeModal"
@@ -1432,18 +1432,27 @@ function canMoveDown(waypoint: Waypoint): boolean {
                     <!-- Waypoint Edit Panel -->
                     <div
                         v-if="selectedWaypointForEdit"
-                        class="flex-1 overflow-hidden"
+                        class="flex-1 overflow-hidden flex flex-col"
                     >
-                        <div class="flex items-center justify-between mb-4">
-                            <h3
-                                class="text-lg font-semibold text-(--main-color)"
+                        <div
+                            class="flex items-center justify-between mb-2 flex-shrink-0"
+                        >
+                            <div
+                                class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white"
+                                :style="{
+                                    backgroundColor: getWaypointPrimaryColor(
+                                        selectedWaypointForEdit,
+                                        editableWaypoints,
+                                    ),
+                                }"
                             >
                                 {{
-                                    newWaypointBeingCreated
-                                        ? "Create New Waypoint"
-                                        : "Edit Waypoint"
+                                    getWaypointDisplayContent(
+                                        selectedWaypointForEdit,
+                                        editableWaypoints,
+                                    )
                                 }}
-                            </h3>
+                            </div>
                             <button
                                 class="p-1 text-(--sub-color) hover:text-(--main-color) transition-colors"
                                 @click="
@@ -1456,296 +1465,264 @@ function canMoveDown(waypoint: Waypoint): boolean {
                             </button>
                         </div>
 
-                        <div class="space-y-4">
-                            <!-- Waypoint Type Badge -->
-                            <div class="flex items-center gap-3">
-                                <div
-                                    class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white"
-                                    :style="{
-                                        backgroundColor:
-                                            getWaypointPrimaryColor(
-                                                selectedWaypointForEdit,
-                                                editableWaypoints,
-                                            ),
-                                    }"
-                                >
-                                    {{
-                                        getWaypointDisplayContent(
-                                            selectedWaypointForEdit,
-                                            editableWaypoints,
-                                        )
-                                    }}
-                                </div>
-                                <span
-                                    class="text-xs px-2 py-1 rounded-full text-(--bg-color) font-medium"
-                                    :style="{
-                                        backgroundColor:
-                                            getWaypointPrimaryColor(
-                                                selectedWaypointForEdit,
-                                                editableWaypoints,
-                                            ),
-                                    }"
-                                >
-                                    {{
-                                        getWaypointDisplayContent(
-                                            selectedWaypointForEdit,
-                                            editableWaypoints,
-                                        ) === "S"
-                                            ? "Start"
-                                            : getWaypointDisplayContent(
-                                                    selectedWaypointForEdit,
-                                                    editableWaypoints,
-                                                ) === "F"
-                                              ? "Finish"
-                                              : "Waypoint"
-                                    }}
-                                </span>
-                            </div>
-
-                            <!-- Name -->
-                            <div>
-                                <label
-                                    class="block text-sm font-medium text-(--main-color) mb-2"
-                                >
-                                    Waypoint Name
-                                </label>
-                                <input
-                                    v-model="selectedWaypointForEdit.name"
-                                    type="text"
-                                    class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
-                                    @blur="
-                                        !newWaypointBeingCreated &&
-                                        updateWaypoint(selectedWaypointForEdit)
-                                    "
-                                />
-                            </div>
-
-                            <!-- Distance -->
-                            <div>
-                                <label
-                                    class="block text-sm font-medium text-(--main-color) mb-2"
-                                >
-                                    Distance on Course
-                                </label>
-
-                                <!-- Current Distance Display -->
-                                <div
-                                    class="mb-2 text-sm text-(--sub-color) bg-(--sub-alt-color) px-3 py-2 rounded-lg"
-                                >
-                                    Current:
-                                    {{
-                                        formatDistance(
-                                            selectedWaypointForEdit.distance,
-                                            userSettingsStore.settings.units
-                                                .distance,
-                                        )
-                                    }}
-                                </div>
-
-                                <!-- Distance Input -->
-                                <div class="flex items-center gap-2 mb-2">
-                                    <input
-                                        v-model="editingWaypointDistance"
-                                        type="number"
-                                        min="0"
-                                        :step="
-                                            userSettingsStore.settings.units
-                                                .distance === 'miles'
-                                                ? '0.001'
-                                                : '0.1'
-                                        "
-                                        class="flex-1 px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
-                                        :placeholder="`Enter distance in ${userSettingsStore.settings.units.distance}`"
-                                        @blur="updateWaypointFromDistanceInput"
-                                        @keyup.enter="
-                                            updateWaypointFromDistanceInput
-                                        "
-                                    />
-                                    <button
-                                        class="px-3 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity text-sm"
-                                        @click="updateWaypointFromDistanceInput"
-                                    >
-                                        Update
-                                    </button>
-                                </div>
-
-                                <!-- Step Size Control -->
-                                <div class="flex items-center gap-2 mb-2">
+                        <div class="flex-1 overflow-y-auto">
+                            <div class="space-y-4">
+                                <!-- Name -->
+                                <div>
                                     <label
-                                        class="text-xs text-(--sub-color) whitespace-nowrap"
-                                        >Step size:</label
+                                        class="block text-sm font-medium text-(--main-color) mb-2"
                                     >
+                                        Waypoint Name
+                                    </label>
                                     <input
-                                        v-model.number="editingStepSize"
-                                        type="number"
-                                        min="0.001"
-                                        :step="
-                                            userSettingsStore.settings.units
-                                                .distance === 'miles'
-                                                ? '0.001'
-                                                : '0.1'
+                                        v-model="selectedWaypointForEdit.name"
+                                        type="text"
+                                        class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
+                                        @blur="
+                                            !newWaypointBeingCreated &&
+                                            updateWaypoint(
+                                                selectedWaypointForEdit,
+                                            )
                                         "
-                                        class="w-20 px-2 py-1 text-xs border border-(--sub-color) rounded bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
                                     />
-                                    <span class="text-xs text-(--sub-color)">{{
-                                        userSettingsStore.settings.units
-                                            .distance
-                                    }}</span>
                                 </div>
 
-                                <!-- Quick Adjustment Buttons -->
-                                <div class="flex items-center gap-1 mb-2">
-                                    <button
-                                        v-tooltip="
-                                            `Move waypoint up ${editingStepSize} ${userSettingsStore.settings.units.distance}`
-                                        "
-                                        class="p-2 text-(--sub-color) hover:text-(--main-color) transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-(--sub-color) rounded"
-                                        :disabled="
-                                            !canMoveUp(
-                                                selectedWaypointForEdit,
-                                            ) ||
-                                            updatingWaypointIds.has(
-                                                selectedWaypointForEdit.id,
-                                            )
-                                        "
-                                        @click="
-                                            adjustWaypointDistance(
-                                                selectedWaypointForEdit,
-                                                'up',
-                                            )
-                                        "
+                                <!-- Distance -->
+                                <div>
+                                    <label
+                                        class="block text-sm font-medium text-(--main-color) mb-2"
                                     >
-                                        <Icon name="heroicons:arrow-up" />
-                                    </button>
-                                    <button
-                                        v-tooltip="
-                                            `Move waypoint down ${editingStepSize} ${userSettingsStore.settings.units.distance}`
-                                        "
-                                        class="p-2 text-(--sub-color) hover:text-(--main-color) transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-(--sub-color) rounded"
-                                        :disabled="
-                                            !canMoveDown(
-                                                selectedWaypointForEdit,
-                                            ) ||
-                                            updatingWaypointIds.has(
-                                                selectedWaypointForEdit.id,
-                                            )
-                                        "
-                                        @click="
-                                            adjustWaypointDistance(
-                                                selectedWaypointForEdit,
-                                                'down',
-                                            )
-                                        "
+                                        Distance on Course
+                                    </label>
+
+                                    <!-- Current Distance Display -->
+                                    <div
+                                        class="mb-2 text-sm text-(--sub-color) bg-(--sub-alt-color) px-3 py-2 rounded-lg"
                                     >
-                                        <Icon name="heroicons:arrow-down" />
-                                    </button>
-                                    <span
-                                        class="text-xs text-(--sub-color) ml-2"
-                                        >±{{ editingStepSize }}
+                                        Current:
                                         {{
-                                            userSettingsStore.settings.units
-                                                .distance
-                                        }}</span
+                                            formatDistance(
+                                                selectedWaypointForEdit.distance,
+                                                userSettingsStore.settings.units
+                                                    .distance,
+                                            )
+                                        }}
+                                    </div>
+
+                                    <!-- Distance Input -->
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <input
+                                            v-model="editingWaypointDistance"
+                                            type="number"
+                                            min="0"
+                                            :step="
+                                                userSettingsStore.settings.units
+                                                    .distance === 'miles'
+                                                    ? '0.001'
+                                                    : '0.1'
+                                            "
+                                            class="flex-1 px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
+                                            :placeholder="`Enter distance in ${userSettingsStore.settings.units.distance}`"
+                                            @blur="
+                                                updateWaypointFromDistanceInput
+                                            "
+                                            @keyup.enter="
+                                                updateWaypointFromDistanceInput
+                                            "
+                                        />
+                                        <button
+                                            class="px-3 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity text-sm"
+                                            @click="
+                                                updateWaypointFromDistanceInput
+                                            "
+                                        >
+                                            Update
+                                        </button>
+                                    </div>
+
+                                    <!-- Step Size Control -->
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <label
+                                            class="text-xs text-(--sub-color) whitespace-nowrap"
+                                            >Step size:</label
+                                        >
+                                        <input
+                                            v-model.number="editingStepSize"
+                                            type="number"
+                                            min="0.001"
+                                            :step="
+                                                userSettingsStore.settings.units
+                                                    .distance === 'miles'
+                                                    ? '0.001'
+                                                    : '0.1'
+                                            "
+                                            class="w-20 px-2 py-1 text-xs border border-(--sub-color) rounded bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
+                                        />
+                                        <span
+                                            class="text-xs text-(--sub-color)"
+                                            >{{
+                                                userSettingsStore.settings.units
+                                                    .distance
+                                            }}</span
+                                        >
+                                    </div>
+
+                                    <!-- Quick Adjustment Buttons -->
+                                    <div class="flex items-center gap-1 mb-2">
+                                        <button
+                                            v-tooltip="
+                                                `Move waypoint up ${editingStepSize} ${userSettingsStore.settings.units.distance}`
+                                            "
+                                            class="p-2 text-(--sub-color) hover:text-(--main-color) transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-(--sub-color) rounded"
+                                            :disabled="
+                                                !canMoveUp(
+                                                    selectedWaypointForEdit,
+                                                ) ||
+                                                updatingWaypointIds.has(
+                                                    selectedWaypointForEdit.id,
+                                                )
+                                            "
+                                            @click="
+                                                adjustWaypointDistance(
+                                                    selectedWaypointForEdit,
+                                                    'up',
+                                                )
+                                            "
+                                        >
+                                            <Icon name="heroicons:arrow-up" />
+                                        </button>
+                                        <button
+                                            v-tooltip="
+                                                `Move waypoint down ${editingStepSize} ${userSettingsStore.settings.units.distance}`
+                                            "
+                                            class="p-2 text-(--sub-color) hover:text-(--main-color) transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-(--sub-color) rounded"
+                                            :disabled="
+                                                !canMoveDown(
+                                                    selectedWaypointForEdit,
+                                                ) ||
+                                                updatingWaypointIds.has(
+                                                    selectedWaypointForEdit.id,
+                                                )
+                                            "
+                                            @click="
+                                                adjustWaypointDistance(
+                                                    selectedWaypointForEdit,
+                                                    'down',
+                                                )
+                                            "
+                                        >
+                                            <Icon name="heroicons:arrow-down" />
+                                        </button>
+                                        <span
+                                            class="text-xs text-(--sub-color) ml-2"
+                                            >±{{ editingStepSize }}
+                                            {{
+                                                userSettingsStore.settings.units
+                                                    .distance
+                                            }}</span
+                                        >
+                                    </div>
+
+                                    <!-- Save Button -->
+                                    <button
+                                        v-if="newWaypointBeingCreated"
+                                        class="w-full px-3 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50"
+                                        :disabled="creatingWaypoint"
+                                        @click="saveNewWaypoint"
                                     >
+                                        {{
+                                            creatingWaypoint
+                                                ? "Creating..."
+                                                : "Create Waypoint"
+                                        }}
+                                    </button>
+
+                                    <p class="text-xs text-(--sub-color) mt-2">
+                                        Enter a distance, use arrow buttons for
+                                        quick adjustments, or click on the route
+                                        line to place the waypoint
+                                    </p>
                                 </div>
 
-                                <!-- Save Button -->
-                                <button
-                                    v-if="newWaypointBeingCreated"
-                                    class="w-full px-3 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50"
-                                    :disabled="creatingWaypoint"
-                                    @click="saveNewWaypoint"
+                                <!-- Tags Selector -->
+                                <div class="pt-4 border-t border-(--sub-color)">
+                                    <label
+                                        class="block text-sm font-medium text-(--main-color) mb-3"
+                                    >
+                                        Waypoint Tags
+                                    </label>
+                                    <WaypointTagSelector
+                                        :selected-tags="
+                                            selectedWaypointForEdit.tags || []
+                                        "
+                                        @update:selected-tags="
+                                            updateWaypointTags($event)
+                                        "
+                                    />
+                                </div>
+
+                                <!-- Save and Delete Buttons -->
+                                <div
+                                    class="flex gap-2 pt-4 border-t border-(--sub-color)"
                                 >
-                                    {{
-                                        creatingWaypoint
-                                            ? "Creating..."
-                                            : "Create Waypoint"
-                                    }}
-                                </button>
+                                    <button
+                                        class="flex-1 px-3 py-2 bg-(--main-color) text-(--bg-color) rounded-lg transition-opacity disabled:opacity-50"
+                                        :disabled="
+                                            updatingWaypointIds.has(
+                                                selectedWaypointForEdit.id,
+                                            )
+                                        "
+                                        @click="saveWaypointChanges"
+                                    >
+                                        {{
+                                            updatingWaypointIds.has(
+                                                selectedWaypointForEdit.id,
+                                            )
+                                                ? "Saving..."
+                                                : "Save"
+                                        }}
+                                    </button>
+                                    <button
+                                        v-if="
+                                            canDeleteWaypoint(
+                                                selectedWaypointForEdit,
+                                                editableWaypoints,
+                                            )
+                                        "
+                                        class="w-min px-3 py-2 border border-(--error-color) text-(--error-color) rounded-lg hover:bg-(--error-color)! transition-colors disabled:opacity-50 flex items-center justify-center"
+                                        :disabled="
+                                            deletingWaypointIds.has(
+                                                selectedWaypointForEdit.id,
+                                            )
+                                        "
+                                        @click="
+                                            deleteWaypoint(
+                                                selectedWaypointForEdit,
+                                            )
+                                        "
+                                    >
+                                        <Icon
+                                            name="heroicons:trash"
+                                            class="h-4 w-4"
+                                        />
+                                    </button>
+                                </div>
 
-                                <p class="text-xs text-(--sub-color) mt-2">
-                                    Enter a distance, use arrow buttons for
-                                    quick adjustments, or click on the route
-                                    line to place the waypoint
-                                </p>
-                            </div>
-
-                            <!-- Tags Selector -->
-                            <div class="pt-4 border-t border-(--sub-color)">
-                                <label
-                                    class="block text-sm font-medium text-(--main-color) mb-3"
-                                >
-                                    Waypoint Tags
-                                </label>
-                                <WaypointTagSelector
-                                    :selected-tags="
-                                        selectedWaypointForEdit.tags || []
-                                    "
-                                    @update:selected-tags="
-                                        updateWaypointTags($event)
-                                    "
-                                />
-                            </div>
-
-                            <!-- Save and Delete Buttons -->
-                            <div
-                                v-if="
-                                    canDeleteWaypoint(
-                                        selectedWaypointForEdit,
-                                        editableWaypoints,
-                                    )
-                                "
-                                class="flex gap-2 pt-4 border-t border-(--sub-color)"
-                            >
-                                <button
-                                    class="flex-1 px-3 py-2 bg-(--main-color) text-(--bg-color) rounded-lg transition-opacity disabled:opacity-50"
-                                    :disabled="
+                                <!-- Update Status -->
+                                <div
+                                    v-if="
                                         updatingWaypointIds.has(
                                             selectedWaypointForEdit.id,
                                         )
                                     "
-                                    @click="saveWaypointChanges"
-                                >
-                                    {{
-                                        updatingWaypointIds.has(
-                                            selectedWaypointForEdit.id,
-                                        )
-                                            ? "Saving..."
-                                            : "Save"
-                                    }}
-                                </button>
-                                <button
-                                    class="w-min px-3 py-2 border border-(--error-color) text-(--error-color) rounded-lg hover:bg-(--error-color)! transition-colors disabled:opacity-50 flex items-center justify-center"
-                                    :disabled="
-                                        deletingWaypointIds.has(
-                                            selectedWaypointForEdit.id,
-                                        )
-                                    "
-                                    @click="
-                                        deleteWaypoint(selectedWaypointForEdit)
-                                    "
+                                    class="flex items-center gap-2 text-xs text-(--sub-color)"
                                 >
                                     <Icon
-                                        name="heroicons:trash"
-                                        class="h-4 w-4"
+                                        name="svg-spinners:6-dots-scale"
+                                        class="h-3 w-3"
                                     />
-                                </button>
-                            </div>
-
-                            <!-- Update Status -->
-                            <div
-                                v-if="
-                                    updatingWaypointIds.has(
-                                        selectedWaypointForEdit.id,
-                                    )
-                                "
-                                class="flex items-center gap-2 text-xs text-(--sub-color)"
-                            >
-                                <Icon
-                                    name="svg-spinners:6-dots-scale"
-                                    class="h-3 w-3"
-                                />
-                                <span>Updating...</span>
+                                    <span>Updating...</span>
+                                </div>
                             </div>
                         </div>
                     </div>

@@ -748,11 +748,11 @@ onUnmounted(() => {
                     <div class="flex-1 flex flex-col overflow-hidden">
                         <!-- Elevation Chart Section -->
                         <div class="p-4 border-b border-(--sub-color)">
-                            <h2
-                                class="text-lg font-semibold text-(--main-color) mb-3"
+                            <!-- <div
+                                class="text-lg font-semibold text-(--main-color)"
                             >
                                 Elevation Profile
-                            </h2>
+                            </div> -->
                             <ElevationChart
                                 :geo-json-data="geoJsonData"
                                 :height="200"
