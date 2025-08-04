@@ -200,8 +200,8 @@ onBeforeUnmount(() => {
                                 class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
                             >
                                 <button
+                                    v-tooltip="'Edit plan'"
                                     class="p-1 rounded hover:bg-black/10 transition-colors"
-                                    title="Edit plan"
                                     @click="editPlan(plan, $event)"
                                 >
                                     <Icon
@@ -210,8 +210,8 @@ onBeforeUnmount(() => {
                                     />
                                 </button>
                                 <button
+                                    v-tooltip="'Delete plan'"
                                     class="p-1 rounded hover:bg-black/10 transition-colors text-(--error-color)"
-                                    title="Delete plan"
                                     @click="deletePlan(plan.id, $event)"
                                 >
                                     <Icon

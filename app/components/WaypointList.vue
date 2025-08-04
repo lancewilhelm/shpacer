@@ -246,8 +246,8 @@ function getSegmentForWaypoint(waypointId: string): WaypointSegment | null {
                                         <!-- Edit Waypoint Plan Button -->
                                         <button
                                             v-if="currentPlanId"
+                                            v-tooltip="'Edit waypoint'"
                                             class="text-(--sub-color) transition-colors flex-shrink-0 m-0! p-1! rounded!"
-                                            title="Edit waypoint"
                                             @click.stop="
                                                 openEditModal(waypoint)
                                             "
@@ -301,16 +301,16 @@ function getSegmentForWaypoint(waypointId: string): WaypointSegment | null {
                                         <div
                                             v-for="tagId in waypoint.tags"
                                             :key="tagId"
+                                            v-tooltip="
+                                                getTagsByIds([tagId])[0]
+                                                    ?.label || tagId
+                                            "
                                             class="w-5 h-5 rounded flex items-center justify-center"
                                             :style="{
                                                 backgroundColor:
                                                     getTagsByIds([tagId])[0]
                                                         ?.color || '#6b7280',
                                             }"
-                                            :title="
-                                                getTagsByIds([tagId])[0]
-                                                    ?.label || tagId
-                                            "
                                         >
                                             <Icon
                                                 :name="
@@ -352,8 +352,8 @@ function getSegmentForWaypoint(waypointId: string): WaypointSegment | null {
                                     >
                                         <!-- Distance -->
                                         <div
+                                            v-tooltip="'Segment distance'"
                                             class="flex items-center gap-1"
-                                            title="Segment distance"
                                         >
                                             <Icon
                                                 name="heroicons:arrows-right-left"
@@ -377,8 +377,8 @@ function getSegmentForWaypoint(waypointId: string): WaypointSegment | null {
                                                     waypoint.id,
                                                 )!.elevationGain > 0
                                             "
+                                            v-tooltip="'Elevation gain'"
                                             class="flex items-center gap-1 text-(--sub-color)"
-                                            title="Elevation gain"
                                         >
                                             <Icon
                                                 name="heroicons:arrow-up"
@@ -402,8 +402,8 @@ function getSegmentForWaypoint(waypointId: string): WaypointSegment | null {
                                                     waypoint.id,
                                                 )!.elevationLoss > 0
                                             "
+                                            v-tooltip="'Elevation loss'"
                                             class="flex items-center gap-1 text-(--sub-color)"
-                                            title="Elevation loss"
                                         >
                                             <Icon
                                                 name="heroicons:arrow-down"

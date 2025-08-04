@@ -1596,6 +1596,9 @@ function canMoveDown(waypoint: Waypoint): boolean {
                                 <!-- Quick Adjustment Buttons -->
                                 <div class="flex items-center gap-1 mb-2">
                                     <button
+                                        v-tooltip="
+                                            `Move waypoint up ${editingStepSize} ${userSettingsStore.settings.units.distance}`
+                                        "
                                         class="p-2 text-(--sub-color) hover:text-(--main-color) transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-(--sub-color) rounded"
                                         :disabled="
                                             !canMoveUp(
@@ -1605,7 +1608,6 @@ function canMoveDown(waypoint: Waypoint): boolean {
                                                 selectedWaypointForEdit.id,
                                             )
                                         "
-                                        :title="`Move waypoint up ${editingStepSize} ${userSettingsStore.settings.units.distance}`"
                                         @click="
                                             adjustWaypointDistance(
                                                 selectedWaypointForEdit,
@@ -1616,6 +1618,9 @@ function canMoveDown(waypoint: Waypoint): boolean {
                                         <Icon name="heroicons:arrow-up" />
                                     </button>
                                     <button
+                                        v-tooltip="
+                                            `Move waypoint down ${editingStepSize} ${userSettingsStore.settings.units.distance}`
+                                        "
                                         class="p-2 text-(--sub-color) hover:text-(--main-color) transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-(--sub-color) rounded"
                                         :disabled="
                                             !canMoveDown(
@@ -1625,7 +1630,6 @@ function canMoveDown(waypoint: Waypoint): boolean {
                                                 selectedWaypointForEdit.id,
                                             )
                                         "
-                                        :title="`Move waypoint down ${editingStepSize} ${userSettingsStore.settings.units.distance}`"
                                         @click="
                                             adjustWaypointDistance(
                                                 selectedWaypointForEdit,
@@ -1758,9 +1762,9 @@ function canMoveDown(waypoint: Waypoint): boolean {
                                 Waypoints
                             </div>
                             <button
+                                v-tooltip="'Add new waypoint'"
                                 class="p-2 bg-(--sub-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50"
                                 :disabled="creatingWaypoint"
-                                title="Add new waypoint"
                                 @click="startManualWaypointCreation"
                             >
                                 <Icon name="heroicons:plus" class="h-4 w-4" />
@@ -1827,13 +1831,15 @@ function canMoveDown(waypoint: Waypoint): boolean {
                                                                     editableWaypoints,
                                                                 )
                                                             "
+                                                            v-tooltip="
+                                                                'Delete waypoint'
+                                                            "
                                                             class="text-(--error-color) transition-colors flex-shrink-0 m-0! p-1! rounded!"
                                                             :disabled="
                                                                 deletingWaypointIds.has(
                                                                     waypoint.id,
                                                                 )
                                                             "
-                                                            title="Delete waypoint"
                                                             @click.stop="
                                                                 deleteWaypoint(
                                                                     waypoint,
@@ -1905,22 +1911,23 @@ function canMoveDown(waypoint: Waypoint): boolean {
                                                         <div
                                                             v-for="tagId in waypoint.tags"
                                                             :key="tagId"
-                                                            class="w-5 h-5 rounded flex items-center justify-center"
-                                                            :style="{
-                                                                backgroundColor:
-                                                                    getTagsByIds(
-                                                                        [tagId],
-                                                                    )[0]
-                                                                        ?.color ||
-                                                                    '#6b7280',
-                                                            }"
-                                                            :title="
+                                                            v-tooltip="
                                                                 getTagsByIds([
                                                                     tagId,
                                                                 ])[0]?.label ||
                                                                 tagId
                                                             "
                                                         >
+                                                            class="w-5 h-5
+                                                            rounded flex
+                                                            items-center
+                                                            justify-center"
+                                                            :style="{
+                                                            backgroundColor:
+                                                            getTagsByIds(
+                                                            [tagId], )[0]
+                                                            ?.color ||
+                                                            '#6b7280', }"
                                                             <Icon
                                                                 :name="
                                                                     getTagsByIds(
