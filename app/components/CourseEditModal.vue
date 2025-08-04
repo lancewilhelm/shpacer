@@ -1917,17 +1917,16 @@ function canMoveDown(waypoint: Waypoint): boolean {
                                                                 ])[0]?.label ||
                                                                 tagId
                                                             "
-                                                        >
-                                                            class="w-5 h-5
-                                                            rounded flex
-                                                            items-center
-                                                            justify-center"
+                                                            class="w-5 h-5 rounded flex items-center justify-center"
                                                             :style="{
-                                                            backgroundColor:
-                                                            getTagsByIds(
-                                                            [tagId], )[0]
-                                                            ?.color ||
-                                                            '#6b7280', }"
+                                                                backgroundColor:
+                                                                    getTagsByIds(
+                                                                        [tagId],
+                                                                    )[0]
+                                                                        ?.color ||
+                                                                    '#6b7280',
+                                                            }"
+                                                        >
                                                             <Icon
                                                                 :name="
                                                                     getTagsByIds(
