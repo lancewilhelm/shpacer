@@ -717,7 +717,7 @@ onUnmounted(() => {
                         </div>
 
                         <!-- File Info -->
-                        <div
+                        <!-- <div
                             class="flex items-center gap-4 text-sm text-(--sub-color)"
                         >
                             <span class="flex items-center gap-1">
@@ -738,7 +738,7 @@ onUnmounted(() => {
                                 <Icon name="heroicons:tag" class="h-4 w-4" />
                                 {{ course.fileType }}
                             </span>
-                        </div>
+                        </div> -->
                     </div>
                 </div>
 
