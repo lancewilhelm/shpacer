@@ -71,6 +71,13 @@ export const STANDARD_WAYPOINT_TAGS: WaypointTag[] = [
     description: "Stream, river, or water crossing",
     color: "#06b6d4",
   },
+  {
+    id: "spectator-viewing",
+    label: "Spectator viewing",
+    icon: "lucide:eye",
+    description: "Spectator viewing area",
+    color: "#8b5cf6",
+  },
 ];
 
 // Helper function to get tag by ID

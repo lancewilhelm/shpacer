@@ -1024,7 +1024,10 @@ function calculateElevationAtDistance(distance: number): number {
     return interpolatedPoint?.elevation || 0;
 }
 
-function adjustWaypointDistance(waypoint: Waypoint, direction: "up" | "down") {
+function adjustWaypointDistance(
+    waypoint: Waypoint,
+    direction: "forward" | "backward",
+) {
     // Set stable map center if not already set
     if (!stableMapCenter.value && waypoint) {
         stableMapCenter.value = [waypoint.lat, waypoint.lng];
@@ -1040,7 +1043,7 @@ function adjustWaypointDistance(waypoint: Waypoint, direction: "up" | "down") {
             : editingStepSize.value * 1000; // Convert kilometers to meters
 
     const adjustment =
-        direction === "up" ? -stepSizeInMeters : stepSizeInMeters;
+        direction === "forward" ? stepSizeInMeters : -stepSizeInMeters;
     const newDistance = Math.max(0, waypoint.distance + adjustment);
 
     // Calculate new position based on distance
@@ -1188,7 +1191,7 @@ function saveWaypointChanges() {
     preventMapCentering.value = false;
 }
 
-function canMoveUp(waypoint: Waypoint): boolean {
+function canMoveForward(waypoint: Waypoint): boolean {
     if (isStartOrFinishWaypoint(waypoint, props.waypoints)) {
         const sortedWaypoints = [...props.waypoints].sort(
             (a, b) => a.order - b.order,
@@ -1196,26 +1199,26 @@ function canMoveUp(waypoint: Waypoint): boolean {
         const waypointIndex = sortedWaypoints.findIndex(
             (w) => w.id === waypoint.id,
         );
-        // Start waypoint (index 0) cannot move up
-        if (waypointIndex === 0) return false;
-    }
-    return waypoint.distance > 100; // Minimum distance from start
-}
-
-function canMoveDown(waypoint: Waypoint): boolean {
-    if (isStartOrFinishWaypoint(waypoint, props.waypoints)) {
-        const sortedWaypoints = [...props.waypoints].sort(
-            (a, b) => a.order - b.order,
-        );
-        const waypointIndex = sortedWaypoints.findIndex(
-            (w) => w.id === waypoint.id,
-        );
-        // Finish waypoint (last index) cannot move down
+        // Finish waypoint (last index) cannot move forward
         if (waypointIndex === sortedWaypoints.length - 1) return false;
     }
     const course = props.course;
     if (!course?.totalDistance) return true;
     return waypoint.distance < course.totalDistance - 100; // Minimum distance from finish
+}
+
+function canMoveBackward(waypoint: Waypoint): boolean {
+    if (isStartOrFinishWaypoint(waypoint, props.waypoints)) {
+        const sortedWaypoints = [...props.waypoints].sort(
+            (a, b) => a.order - b.order,
+        );
+        const waypointIndex = sortedWaypoints.findIndex(
+            (w) => w.id === waypoint.id,
+        );
+        // Start waypoint (index 0) cannot move backward
+        if (waypointIndex === 0) return false;
+    }
+    return waypoint.distance > 100; // Minimum distance from start
 }
 </script>
 
@@ -1469,11 +1472,6 @@ function canMoveDown(waypoint: Waypoint): boolean {
                             <div class="space-y-4">
                                 <!-- Name -->
                                 <div>
-                                    <label
-                                        class="block text-sm font-medium text-(--main-color) mb-2"
-                                    >
-                                        Waypoint Name
-                                    </label>
                                     <input
                                         v-model="selectedWaypointForEdit.name"
                                         type="text"
@@ -1496,7 +1494,7 @@ function canMoveDown(waypoint: Waypoint): boolean {
                                     </label>
 
                                     <!-- Current Distance Display -->
-                                    <div
+                                    <!-- <div
                                         class="mb-2 text-sm text-(--sub-color) bg-(--sub-alt-color) px-3 py-2 rounded-lg"
                                     >
                                         Current:
@@ -1507,7 +1505,7 @@ function canMoveDown(waypoint: Waypoint): boolean {
                                                     .distance,
                                             )
                                         }}
-                                    </div>
+                                    </div> -->
 
                                     <!-- Distance Input -->
                                     <div class="flex items-center gap-2 mb-2">
@@ -1541,11 +1539,54 @@ function canMoveDown(waypoint: Waypoint): boolean {
                                     </div>
 
                                     <!-- Step Size Control -->
-                                    <div class="flex items-center gap-2 mb-2">
-                                        <label
-                                            class="text-xs text-(--sub-color) whitespace-nowrap"
-                                            >Step size:</label
+                                    <div
+                                        class="w-full flex items-center justify-center gap-2 mb-2"
+                                    >
+                                        <button
+                                            v-tooltip="
+                                                `Move waypoint forward ${editingStepSize} ${userSettingsStore.settings.units.distance}`
+                                            "
+                                            class="p-2 transition-colors disabled:opacity-50 border rounded hover:bg-(--text-color)! hover:text-(--bg-color)!"
+                                            :disabled="
+                                                !canMoveForward(
+                                                    selectedWaypointForEdit,
+                                                ) ||
+                                                updatingWaypointIds.has(
+                                                    selectedWaypointForEdit.id,
+                                                )
+                                            "
+                                            @click="
+                                                adjustWaypointDistance(
+                                                    selectedWaypointForEdit,
+                                                    'forward',
+                                                )
+                                            "
                                         >
+                                            <Icon name="heroicons:plus" />
+                                        </button>
+                                        <button
+                                            v-tooltip="
+                                                `Move waypoint backward ${editingStepSize} ${userSettingsStore.settings.units.distance}`
+                                            "
+                                            class="p-2 transition-colors disabled:opacity-50 border rounded hover:bg-(--text-color)! hover:text-(--bg-color)!"
+                                            :disabled="
+                                                !canMoveBackward(
+                                                    selectedWaypointForEdit,
+                                                ) ||
+                                                updatingWaypointIds.has(
+                                                    selectedWaypointForEdit.id,
+                                                )
+                                            "
+                                            @click="
+                                                adjustWaypointDistance(
+                                                    selectedWaypointForEdit,
+                                                    'backward',
+                                                )
+                                            "
+                                        >
+                                            <Icon name="heroicons:minus" />
+                                        </button>
+                                        ±
                                         <input
                                             v-model.number="editingStepSize"
                                             type="number"
@@ -1567,81 +1608,7 @@ function canMoveDown(waypoint: Waypoint): boolean {
                                         >
                                     </div>
 
-                                    <!-- Quick Adjustment Buttons -->
-                                    <div class="flex items-center gap-1 mb-2">
-                                        <button
-                                            v-tooltip="
-                                                `Move waypoint up ${editingStepSize} ${userSettingsStore.settings.units.distance}`
-                                            "
-                                            class="p-2 text-(--sub-color) hover:text-(--main-color) transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-(--sub-color) rounded"
-                                            :disabled="
-                                                !canMoveUp(
-                                                    selectedWaypointForEdit,
-                                                ) ||
-                                                updatingWaypointIds.has(
-                                                    selectedWaypointForEdit.id,
-                                                )
-                                            "
-                                            @click="
-                                                adjustWaypointDistance(
-                                                    selectedWaypointForEdit,
-                                                    'up',
-                                                )
-                                            "
-                                        >
-                                            <Icon name="heroicons:arrow-up" />
-                                        </button>
-                                        <button
-                                            v-tooltip="
-                                                `Move waypoint down ${editingStepSize} ${userSettingsStore.settings.units.distance}`
-                                            "
-                                            class="p-2 text-(--sub-color) hover:text-(--main-color) transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-(--sub-color) rounded"
-                                            :disabled="
-                                                !canMoveDown(
-                                                    selectedWaypointForEdit,
-                                                ) ||
-                                                updatingWaypointIds.has(
-                                                    selectedWaypointForEdit.id,
-                                                )
-                                            "
-                                            @click="
-                                                adjustWaypointDistance(
-                                                    selectedWaypointForEdit,
-                                                    'down',
-                                                )
-                                            "
-                                        >
-                                            <Icon name="heroicons:arrow-down" />
-                                        </button>
-                                        <span
-                                            class="text-xs text-(--sub-color) ml-2"
-                                            >±{{ editingStepSize }}
-                                            {{
-                                                userSettingsStore.settings.units
-                                                    .distance
-                                            }}</span
-                                        >
-                                    </div>
-
                                     <!-- Save Button -->
-                                    <button
-                                        v-if="newWaypointBeingCreated"
-                                        class="w-full px-3 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50"
-                                        :disabled="creatingWaypoint"
-                                        @click="saveNewWaypoint"
-                                    >
-                                        {{
-                                            creatingWaypoint
-                                                ? "Creating..."
-                                                : "Create Waypoint"
-                                        }}
-                                    </button>
-
-                                    <p class="text-xs text-(--sub-color) mt-2">
-                                        Enter a distance, use arrow buttons for
-                                        quick adjustments, or click on the route
-                                        line to place the waypoint
-                                    </p>
                                 </div>
 
                                 <!-- Tags Selector -->
@@ -1662,7 +1629,20 @@ function canMoveDown(waypoint: Waypoint): boolean {
                                 </div>
 
                                 <!-- Save and Delete Buttons -->
+                                <button
+                                    v-if="newWaypointBeingCreated"
+                                    class="w-full px-3 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50"
+                                    :disabled="creatingWaypoint"
+                                    @click="saveNewWaypoint"
+                                >
+                                    {{
+                                        creatingWaypoint
+                                            ? "Creating..."
+                                            : "Create Waypoint"
+                                    }}
+                                </button>
                                 <div
+                                    v-else
                                     class="flex gap-2 pt-4 border-t border-(--sub-color)"
                                 >
                                     <button

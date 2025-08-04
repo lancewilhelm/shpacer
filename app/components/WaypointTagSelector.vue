@@ -37,7 +37,7 @@ function isTagSelected(tagId: string): boolean {
 
 <template>
     <div class="space-y-3">
-        <div class="flex flex-col gap-1">
+        <div class="grid gap-1">
             <div
                 v-for="tag in STANDARD_WAYPOINT_TAGS"
                 :key="tag.id"
@@ -46,7 +46,7 @@ function isTagSelected(tagId: string): boolean {
                     placement: 'left',
                     showArrow: true,
                 }"
-                class="w-full relative rounded-lg border-2 transition-all duration-200 flex items-center justify-between group p-0! px-1! cursor-pointer"
+                class="w-full text-center relative rounded-lg border-2 transition-all duration-200 flex items-center justify-between group p-0! px-1! cursor-pointer"
                 :style="{
                     backgroundColor: isTagSelected(tag.id)
                         ? tag.color
