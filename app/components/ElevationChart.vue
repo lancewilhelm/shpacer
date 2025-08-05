@@ -1,38 +1,3 @@
-<template>
-    <div class="elevation-chart-container">
-        <div
-            ref="chartContainer"
-            class="elevation-chart"
-            :class="{ 'creation-mode': creationMode }"
-        />
-
-        <!-- Creation mode indicator -->
-        <div v-if="creationMode" class="creation-mode-indicator">
-            <Icon name="heroicons:plus-circle" class="h-4 w-4" />
-            <span>Click on the elevation profile to add a waypoint</span>
-        </div>
-
-        <!-- Custom tooltip -->
-        <div
-            ref="tooltip"
-            class="elevation-tooltip"
-            :class="{
-                'tooltip-visible': tooltipVisible,
-                'tooltip-from-map': tooltipFromMap,
-            }"
-        >
-            <div class="tooltip-distance">{{ tooltipData.distance }}</div>
-            <div class="tooltip-elevation">{{ tooltipData.elevation }}</div>
-            <div class="tooltip-grade">{{ tooltipData.grade }}</div>
-        </div>
-
-        <div v-if="!hasElevationData" class="no-elevation-warning">
-            <Icon name="heroicons:exclamation-triangle" class="h-4 w-4" />
-            <span>No elevation data available for this course</span>
-        </div>
-    </div>
-</template>
-
 <script setup lang="ts">
 import * as d3 from "d3";
 import {
@@ -875,6 +840,41 @@ onMounted(() => {
     }
 });
 </script>
+
+<template>
+    <div class="elevation-chart-container">
+        <div
+            ref="chartContainer"
+            class="elevation-chart"
+            :class="{ 'creation-mode': creationMode }"
+        />
+
+        <!-- Creation mode indicator -->
+        <div v-if="creationMode" class="creation-mode-indicator">
+            <Icon name="heroicons:plus-circle" class="h-4 w-4" />
+            <span>Click on the elevation profile to add a waypoint</span>
+        </div>
+
+        <!-- Custom tooltip -->
+        <div
+            ref="tooltip"
+            class="elevation-tooltip"
+            :class="{
+                'tooltip-visible': tooltipVisible,
+                'tooltip-from-map': tooltipFromMap,
+            }"
+        >
+            <div class="tooltip-distance">{{ tooltipData.distance }}</div>
+            <div class="tooltip-elevation">{{ tooltipData.elevation }}</div>
+            <div class="tooltip-grade">{{ tooltipData.grade }}</div>
+        </div>
+
+        <div v-if="!hasElevationData" class="no-elevation-warning">
+            <Icon name="heroicons:exclamation-triangle" class="h-4 w-4" />
+            <span>No elevation data available for this course</span>
+        </div>
+    </div>
+</template>
 
 <style scoped>
 .elevation-chart-container {

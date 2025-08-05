@@ -121,7 +121,15 @@ watchEffect(async () => {
             waypointNotes.value = notesResponse.notes;
             waypointStoppageTimes.value = stoppageTimesResponse.stoppageTimes;
         } catch (error) {
-            console.error("Error fetching waypoint data:", error);
+            // Silently handle auth errors during navigation, log others
+            if (
+                error &&
+                typeof error === "object" &&
+                "statusCode" in error &&
+                error.statusCode !== 401
+            ) {
+                console.error("Error fetching waypoint data:", error);
+            }
             waypointNotes.value = [];
             waypointStoppageTimes.value = [];
         }
@@ -224,20 +232,6 @@ async function deleteCourse() {
 }
 
 /**
- * Format a date for display
- * @param date Date | string | number
- */
-function formatDate(date: Date | string | number) {
-    return new Date(date).toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-    });
-}
-
-/**
  * Format a race date for display
  * @param date Date | string | number | null
  */
@@ -297,6 +291,22 @@ function handleElevationHover(event: {
 
 // Reset elevation hover point when leaving the chart
 function handleElevationLeave() {
+    elevationHoverPoint.value = null;
+}
+
+// Handle pace chart hover events (reuse elevation hover point state)
+function handlePaceHover(event: {
+    lat: number;
+    lng: number;
+    distance: number;
+    elevation: number;
+    grade: number;
+}) {
+    elevationHoverPoint.value = event;
+}
+
+// Reset pace hover point when leaving the chart
+function handlePaceLeave() {
     elevationHoverPoint.value = null;
 }
 
@@ -802,7 +812,7 @@ onUnmounted(() => {
                     <!-- Left Panel: Charts and Map -->
                     <div class="flex-1 flex flex-col overflow-hidden">
                         <!-- Elevation Chart Section -->
-                        <div class="p-4 border-b border-(--sub-color)">
+                        <div class="px-4 py-2 border-b border-(--sub-color)">
                             <!-- <div
                                 class="text-lg font-semibold text-(--main-color)"
                             >
@@ -819,6 +829,24 @@ onUnmounted(() => {
                                 @elevation-hover="handleElevationHover"
                                 @elevation-leave="handleElevationLeave"
                                 @waypoint-click="handleElevationWaypointClick"
+                            />
+                        </div>
+
+                        <!-- Pace Chart Section (only visible when there's a current plan) -->
+                        <div
+                            v-if="currentPlan"
+                            class="px-4 py-2 border-b border-(--sub-color)"
+                        >
+                            <PaceChart
+                                :geo-json-data="geoJsonData"
+                                :height="200"
+                                :map-hover-distance="mapHoverDistance"
+                                :selected-waypoint-distance="
+                                    selectedWaypoint?.distance || null
+                                "
+                                :plan="currentPlan"
+                                @pace-hover="handlePaceHover"
+                                @pace-leave="handlePaceLeave"
                             />
                         </div>
 
