@@ -29,6 +29,7 @@ definePageMeta({
 
 // Get the course ID from the route parameters
 const route = useRoute();
+const router = useRouter();
 const courseId = route.params.id as string;
 
 // Import necessary stores
@@ -64,6 +65,25 @@ const {
 // Plans state
 const plans = computed(() => plansData.value?.plans || []);
 const currentPlanId = ref<string | null>(null);
+
+// Initialize plan from URL query parameter
+watchEffect(() => {
+    const planIdFromUrl = route.query.plan as string | undefined;
+    if (planIdFromUrl) {
+        // Check if the plan exists in the current plans
+        if (plans.value.some((p) => p.id === planIdFromUrl)) {
+            currentPlanId.value = planIdFromUrl;
+        } else if (plans.value.length > 0) {
+            // Plan doesn't exist, remove it from URL
+            const query = { ...route.query };
+            delete query.plan;
+            router.replace({
+                path: route.path,
+                query,
+            });
+        }
+    }
+});
 const waypointNotes = ref<SelectWaypointNote[]>([]);
 const waypointStoppageTimes = ref<SelectWaypointStoppageTime[]>([]);
 const planSetupModalOpen = ref(false);
@@ -359,6 +379,19 @@ function handleWaypointUpdated(_updatedWaypoint: Waypoint) {
 // Plan management functions
 function handlePlanSelected(planId: string) {
     currentPlanId.value = planId || null;
+
+    // Update URL with plan query parameter
+    const query = { ...route.query };
+    if (planId) {
+        query.plan = planId;
+    } else {
+        delete query.plan;
+    }
+
+    router.replace({
+        path: route.path,
+        query,
+    });
 }
 
 function openPlanSetupModal() {
@@ -378,7 +411,16 @@ function closePlanSetupModal() {
 
 async function handlePlanCreated(plan: unknown) {
     await refreshPlans();
-    currentPlanId.value = (plan as SelectPlan).id;
+    const planId = (plan as SelectPlan).id;
+    currentPlanId.value = planId;
+
+    // Update URL with new plan
+    const query = { ...route.query };
+    query.plan = planId;
+    router.replace({
+        path: route.path,
+        query,
+    });
 }
 
 async function handlePlanUpdated(plan: unknown) {
@@ -415,6 +457,14 @@ async function handlePlanDeleted(planId: string) {
             currentPlanId.value = null;
             waypointNotes.value = [];
             waypointStoppageTimes.value = [];
+
+            // Remove plan from URL
+            const query = { ...route.query };
+            delete query.plan;
+            router.replace({
+                path: route.path,
+                query,
+            });
         }
     } catch (error) {
         console.error("Error deleting plan:", error);
