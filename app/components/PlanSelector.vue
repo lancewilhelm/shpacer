@@ -99,7 +99,7 @@ onBeforeUnmount(() => {
     <div class="flex items-center gap-2">
         <!-- Add Plan Button -->
         <button
-            class="flex items-center gap-2 px-3 py-2 border border-(--main-color) text-(--main-color) rounded-lg hover:bg-(--main-color) hover:text-(--bg-color) transition-colors text-sm font-medium"
+            class="flex items-center gap-2 px-3 py-2 border border-(--main-color) text-(--main-color) rounded-sm hover:bg-(--main-color) hover:text-(--bg-color) transition-colors text-sm font-medium"
             @click="addPlan"
         >
             <Icon name="heroicons:plus" class="h-4 w-4" />
@@ -109,7 +109,7 @@ onBeforeUnmount(() => {
         <!-- Plan Selector Dropdown (only show if there are plans) -->
         <div v-if="plans.length > 0" ref="dropdownRef" class="relative">
             <button
-                class="flex items-center gap-2 px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) hover:bg-(--sub-color)/10 transition-colors text-sm"
+                class="flex items-center gap-2 px-3 py-2 border border-(--sub-color) rounded-sm bg-(--bg-color) text-(--main-color) hover:bg-(--sub-color)/10 transition-colors text-sm"
                 @click="dropdownOpen = !dropdownOpen"
             >
                 <Icon
@@ -148,9 +148,6 @@ onBeforeUnmount(() => {
                             <Icon name="heroicons:eye-slash" class="h-4 w-4" />
                             <span class="font-medium">No Plan</span>
                         </div>
-                        <div v-if="!currentPlanId" class="flex items-center">
-                            <Icon name="heroicons:check" class="h-4 w-4" />
-                        </div>
                     </div>
 
                     <!-- Divider -->
@@ -187,18 +184,8 @@ onBeforeUnmount(() => {
                         </div>
 
                         <div class="flex items-center gap-1 ml-2">
-                            <!-- Selected indicator -->
-                            <div
-                                v-if="currentPlanId === plan.id"
-                                class="flex items-center"
-                            >
-                                <Icon name="heroicons:check" class="h-4 w-4" />
-                            </div>
-
                             <!-- Action buttons -->
-                            <div
-                                class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
+                            <div class="flex items-center gap-1">
                                 <button
                                     v-tooltip="'Edit plan'"
                                     class="p-1 rounded hover:bg-black/10 transition-colors"

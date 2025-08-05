@@ -260,7 +260,7 @@ onBeforeUnmount(() => {
                         type="text"
                         required
                         placeholder="e.g., Marathon Race Plan"
-                        class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) placeholder--(--sub-color) focus:outline-none focus:ring-2 focus:ring-(--accent-color) focus:border-transparent"
+                        class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) placeholder--(--sub-color) focus:outline-none focus:ring-2 focus:ring-(--main-color) focus:border-transparent"
                         :disabled="isSubmitting"
                     />
                 </div>
@@ -280,12 +280,12 @@ onBeforeUnmount(() => {
                             type="text"
                             placeholder="7:30"
                             pattern="\d{1,2}:\d{2}"
-                            class="flex-1 px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) placeholder--(--sub-color) focus:outline-none focus:ring-2 focus:ring-(--accent-color) focus:border-transparent"
+                            class="flex-1 px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) placeholder--(--sub-color) focus:outline-none focus:ring-2 focus:ring-(--main-color) focus:border-transparent"
                             :disabled="isSubmitting"
                         />
                         <select
                             v-model="formData.paceUnit"
-                            class="px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:outline-none focus:ring-2 focus:ring-(--accent-color) focus:border-transparent"
+                            class="px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:outline-none focus:ring-2 focus:ring-(--main-color) focus:border-transparent"
                             :disabled="isSubmitting"
                         >
                             <option value="min_per_km">min/km</option>
@@ -311,7 +311,7 @@ onBeforeUnmount(() => {
                         type="text"
                         placeholder="2:00"
                         pattern="\d{1,2}:\d{2}"
-                        class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) placeholder--(--sub-color) focus:outline-none focus:ring-2 focus:ring-(--accent-color) focus:border-transparent"
+                        class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) placeholder--(--sub-color) focus:outline-none focus:ring-2 focus:ring-(--main-color) focus:border-transparent"
                         :disabled="isSubmitting"
                     />
                     <p class="text-xs text-(--sub-color) mt-1">

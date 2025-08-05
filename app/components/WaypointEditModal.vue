@@ -50,7 +50,17 @@ const emit = defineEmits<Emits>();
 // Form state
 const formData = ref({
     notes: "",
-    stoppageTime: "",
+    stoppageMinutes: 0,
+    stoppageSeconds: 0,
+});
+
+// Computed property for formatted seconds display
+const formattedSeconds = computed({
+    get: () => formData.value.stoppageSeconds.toString().padStart(2, "0"),
+    set: (value: string) => {
+        const num = parseInt(value) || 0;
+        formData.value.stoppageSeconds = Math.min(Math.max(num, 0), 59);
+    },
 });
 
 const isSubmitting = ref(false);
@@ -63,10 +73,11 @@ watch([() => props.isOpen, () => props.waypoint], () => {
 
         if (canHaveStoppageTime(props.waypoint)) {
             const currentTime = getEffectiveStoppageTime(props.waypoint);
-            formData.value.stoppageTime =
-                formatStoppageTimeForInput(currentTime);
+            formData.value.stoppageMinutes = Math.floor(currentTime / 60);
+            formData.value.stoppageSeconds = currentTime % 60;
         } else {
-            formData.value.stoppageTime = "";
+            formData.value.stoppageMinutes = 0;
+            formData.value.stoppageSeconds = 0;
         }
         error.value = "";
     }
@@ -82,7 +93,7 @@ function canHaveStoppageTime(waypoint: Waypoint): boolean {
 
 function getEffectiveStoppageTime(waypoint: Waypoint): number {
     const customTime = props.getWaypointStoppageTime?.(waypoint.id);
-    if (customTime && customTime > 0) {
+    if (customTime !== undefined && customTime !== null) {
         return customTime;
     }
     // Only apply default to intermediate waypoints
@@ -90,43 +101,49 @@ function getEffectiveStoppageTime(waypoint: Waypoint): number {
     return props.getDefaultStoppageTime?.() || 0;
 }
 
-function formatStoppageTimeForInput(seconds: number): string {
-    if (!seconds) return "";
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
+function incrementMinutes() {
+    formData.value.stoppageMinutes = Math.min(
+        formData.value.stoppageMinutes + 1,
+        99,
+    );
 }
 
-function parseStoppageTimeToSeconds(timeString: string): number | null {
-    if (!timeString.trim()) return null;
-
-    const parts = timeString.split(":");
-    if (parts.length !== 2) return null;
-
-    const minutes = parseInt(parts[0]!);
-    const seconds = parseInt(parts[1]!);
-
-    if (isNaN(minutes) || isNaN(seconds) || seconds >= 60 || seconds < 0)
-        return null;
-
-    return minutes * 60 + seconds;
+function decrementMinutes() {
+    formData.value.stoppageMinutes = Math.max(
+        formData.value.stoppageMinutes - 1,
+        0,
+    );
 }
 
-function validateStoppageTimeInput(timeString: string): boolean {
-    if (!timeString.trim()) return true; // Empty is valid (optional field)
+function incrementSeconds() {
+    if (formData.value.stoppageSeconds >= 59) {
+        formData.value.stoppageSeconds = 0;
+        incrementMinutes();
+    } else {
+        formData.value.stoppageSeconds++;
+    }
+}
 
-    const timeRegex = /^\d{1,2}:\d{2}$/;
-    return timeRegex.test(timeString);
+function decrementSeconds() {
+    if (formData.value.stoppageSeconds <= 0) {
+        if (formData.value.stoppageMinutes > 0) {
+            formData.value.stoppageSeconds = 59;
+            decrementMinutes();
+        }
+    } else {
+        formData.value.stoppageSeconds--;
+    }
 }
 
 async function handleSave() {
     if (!props.waypoint) return;
 
+    // Validate that seconds are within valid range
     if (
-        formData.value.stoppageTime &&
-        !validateStoppageTimeInput(formData.value.stoppageTime)
+        formData.value.stoppageSeconds < 0 ||
+        formData.value.stoppageSeconds > 59
     ) {
-        error.value = "Stoppage time must be in MM:SS format (e.g., 2:00)";
+        error.value = "Seconds must be between 0 and 59";
         return;
     }
 
@@ -145,19 +162,16 @@ async function handleSave() {
 
         // Save stoppage time (only for intermediate waypoints)
         if (canHaveStoppageTime(props.waypoint)) {
-            const timeString = formData.value.stoppageTime.trim();
-            const timeInSeconds = parseStoppageTimeToSeconds(timeString);
+            const totalSeconds =
+                formData.value.stoppageMinutes * 60 +
+                formData.value.stoppageSeconds;
 
-            if (timeInSeconds !== null && timeInSeconds > 0) {
-                emit(
-                    "save-waypoint-stoppage-time",
-                    props.waypoint.id,
-                    timeInSeconds,
-                );
-            } else {
-                // If time is empty or zero, delete the custom time (use default)
-                emit("delete-waypoint-stoppage-time", props.waypoint.id);
-            }
+            // Always save the stoppage time, even if it's 0
+            emit(
+                "save-waypoint-stoppage-time",
+                props.waypoint.id,
+                totalSeconds,
+            );
         }
 
         emit("close");
@@ -193,45 +207,27 @@ onBeforeUnmount(() => {
 
 <template>
     <ModalWindow :open="isOpen" @close="handleClose">
-        <div class="p-6 max-w-md w-full">
-            <h2 class="text-xl font-semibold text-(--main-color) mb-4">
-                Edit Waypoint
-            </h2>
-
-            <div v-if="waypoint" class="mb-4">
+        <div class="max-w-md w-full">
+            <div v-if="waypoint" class="mb-2">
                 <h3 class="font-medium text-(--main-color)">
                     {{ waypoint.name }}
                 </h3>
-                <p class="text-sm text-(--sub-color)">
-                    {{
-                        waypoint.order === 0
-                            ? "Start"
-                            : waypoint.order ===
-                                    Math.max(
-                                        ...(waypoints?.map((w) => w.order) || [
-                                            0,
-                                        ]),
-                                    ) && waypoint.order > 0
-                              ? "Finish"
-                              : `Waypoint ${waypoint.order}`
-                    }}
-                </p>
             </div>
 
-            <form class="space-y-4" @submit.prevent="handleSave">
+            <form @submit.prevent="handleSave">
                 <!-- Notes Section -->
                 <div>
-                    <label
+                    <h6
                         for="waypoint-notes"
                         class="block text-sm font-medium text-(--main-color) mb-1"
                     >
                         Notes
-                    </label>
+                    </h6>
                     <textarea
                         id="waypoint-notes"
                         v-model="formData.notes"
                         placeholder="Add notes for this waypoint..."
-                        class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) placeholder--(--sub-color) focus:outline-none focus:ring-2 focus:ring-(--accent-color) focus:border-transparent resize-none"
+                        class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) placeholder--(--sub-color) focus:outline-none focus:ring-2 focus:ring-(--main-color) focus:border-transparent resize-none"
                         rows="4"
                         :disabled="isSubmitting"
                     ></textarea>
@@ -239,32 +235,75 @@ onBeforeUnmount(() => {
 
                 <!-- Stoppage Time Section (only for intermediate waypoints) -->
                 <div v-if="waypoint && canHaveStoppageTime(waypoint)">
-                    <label
-                        for="stoppage-time"
+                    <h6
                         class="block text-sm font-medium text-(--main-color) mb-1"
                     >
                         Stoppage Time
-                    </label>
-                    <input
-                        id="stoppage-time"
-                        v-model="formData.stoppageTime"
-                        type="text"
-                        placeholder="2:00"
-                        pattern="\d{1,2}:\d{2}"
-                        class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) placeholder--(--sub-color) focus:outline-none focus:ring-2 focus:ring-(--accent-color) focus:border-transparent"
-                        :disabled="isSubmitting"
-                    />
-                    <p class="text-xs text-(--sub-color) mt-1">
-                        Format: MM:SS (e.g., 2:00 for 2 minutes). Leave empty to
-                        use default
-                        <span v-if="getDefaultStoppageTime?.()">
-                            ({{
-                                formatStoppageTimeForInput(
-                                    getDefaultStoppageTime(),
-                                )
-                            }})
-                        </span>
-                    </p>
+                    </h6>
+                    <div class="w-full flex gap-0.5 items-center">
+                        <!-- Minutes Input -->
+                        <div class="flex flex-col items-center">
+                            <button
+                                type="button"
+                                :disabled="isSubmitting"
+                                class="w-10 h-8 flex items-center justify-center border border-(--sub-color) rounded bg-(--bg-color) text-(--main-color) hover:bg-(--sub-color)/10 transition-colors disabled:opacity-50 my-0.25!"
+                                @click="incrementMinutes"
+                            >
+                                +
+                            </button>
+                            <input
+                                v-model.number="formData.stoppageMinutes"
+                                type="text"
+                                inputmode="numeric"
+                                class="w-10 px-2 py-1 text-center border border-(--sub-color) rounded-sm! bg-(--bg-color) text-(--main-color) focus:outline-none focus:ring-2 focus:ring-(--main-color) focus:border-transparent my-1"
+                                :disabled="isSubmitting"
+                            />
+                            <button
+                                type="button"
+                                :disabled="isSubmitting"
+                                class="w-10 h-8 flex items-center justify-center border border-(--sub-color) rounded bg-(--bg-color) text-(--main-color) hover:bg-(--sub-color)/10 transition-colors disabled:opacity-50 my-0.25!"
+                                @click="decrementMinutes"
+                            >
+                                -
+                            </button>
+                            <span class="text-xs text-(--sub-color) mt-1"
+                                >min</span
+                            >
+                        </div>
+                        <div class="-translate-y-2.5 text-(--text-color)">
+                            :
+                        </div>
+
+                        <!-- Seconds Input -->
+                        <div class="flex flex-col items-center">
+                            <button
+                                type="button"
+                                :disabled="isSubmitting"
+                                class="w-10 h-8 flex items-center justify-center border border-(--sub-color) rounded bg-(--bg-color) text-(--main-color) hover:bg-(--sub-color)/10 transition-colors disabled:opacity-50 my-0.25!"
+                                @click="incrementSeconds"
+                            >
+                                +
+                            </button>
+                            <input
+                                v-model="formattedSeconds"
+                                type="text"
+                                inputmode="numeric"
+                                class="w-10 px-2 py-1 text-center border border-(--sub-color) rounded bg-(--bg-color) text-(--main-color) focus:outline-none focus:ring-2 focus:ring-(--main-color) focus:border-transparent my-1"
+                                :disabled="isSubmitting"
+                            />
+                            <button
+                                type="button"
+                                :disabled="isSubmitting"
+                                class="w-10 h-8 flex items-center justify-center border border-(--sub-color) rounded bg-(--bg-color) text-(--main-color) hover:bg-(--sub-color)/10 transition-colors disabled:opacity-50 my-0.25!"
+                                @click="decrementSeconds"
+                            >
+                                -
+                            </button>
+                            <span class="text-xs text-(--sub-color) mt-1"
+                                >sec</span
+                            >
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Error Message -->
@@ -273,15 +312,7 @@ onBeforeUnmount(() => {
                 </div>
 
                 <!-- Action Buttons -->
-                <div class="flex gap-3 pt-4">
-                    <button
-                        type="button"
-                        class="flex-1 px-4 py-2 border border-(--sub-color) rounded-lg text-(--main-color) hover:bg-(--sub-color)/10 transition-colors"
-                        :disabled="isSubmitting"
-                        @click="handleClose"
-                    >
-                        Cancel
-                    </button>
+                <div class="flex gap-3 pt-2">
                     <button
                         type="submit"
                         :disabled="isSubmitting"
@@ -297,7 +328,15 @@ onBeforeUnmount(() => {
                             />
                             Saving...
                         </span>
-                        <span v-else> Save Changes </span>
+                        <span v-else>Save</span>
+                    </button>
+                    <button
+                        type="button"
+                        class="flex-1 px-4 py-2 border border-(--sub-color) rounded-lg text-(--main-color) hover:bg-(--sub-color)/10 transition-colors"
+                        :disabled="isSubmitting"
+                        @click="handleClose"
+                    >
+                        Cancel
                     </button>
                 </div>
             </form>

@@ -9,6 +9,13 @@ import {
 import type { WaypointSegment } from "~/utils/waypointSegments";
 import { extractElevationProfile } from "~/utils/elevationProfile";
 import type { ElevationPoint } from "~/utils/elevationProfile";
+import {
+    calculateAllElapsedTimes,
+    formatElapsedTime,
+    getWaypointDelay,
+    formatDelayTime,
+} from "~/utils/timeCalculations";
+import type { SelectPlan, SelectWaypointStoppageTime } from "~/utils/db/schema";
 
 // Define a waypoint type that matches what we get from the API
 type Waypoint = {
@@ -27,6 +34,8 @@ interface Props {
     waypoints?: Waypoint[];
     selectedWaypoint?: Waypoint | null;
     currentPlanId?: string | null;
+    currentPlan?: SelectPlan | null;
+    waypointStoppageTimes?: SelectWaypointStoppageTime[];
     getWaypointNote?: (waypointId: string) => string;
     getWaypointStoppageTime?: (waypointId: string) => number;
     getDefaultStoppageTime?: () => number;
@@ -47,6 +56,8 @@ const _props = withDefaults(defineProps<Props>(), {
     waypoints: () => [],
     selectedWaypoint: null,
     currentPlanId: null,
+    currentPlan: null,
+    waypointStoppageTimes: () => [],
     getWaypointNote: () => () => "",
     getWaypointStoppageTime: () => () => 0,
     getDefaultStoppageTime: () => () => 0,
@@ -57,6 +68,8 @@ const {
     waypoints,
     selectedWaypoint,
     currentPlanId,
+    currentPlan,
+    waypointStoppageTimes,
     getWaypointNote,
     getWaypointStoppageTime,
     getDefaultStoppageTime,
@@ -181,6 +194,46 @@ function formatSegmentElevation(meters: number) {
 function getSegmentForWaypoint(waypointId: string): WaypointSegment | null {
     return getSegmentAfterWaypoint(waypointId, waypointSegments.value);
 }
+
+// Time calculation functions
+const elapsedTimes = computed(() => {
+    if (
+        !currentPlan.value ||
+        !currentPlan.value.pace ||
+        !waypoints.value.length
+    ) {
+        return {};
+    }
+
+    return calculateAllElapsedTimes({
+        plan: currentPlan.value,
+        waypoints: waypoints.value,
+        waypointStoppageTimes: waypointStoppageTimes.value,
+        getDefaultStoppageTime: getDefaultStoppageTime.value,
+    });
+});
+
+function getElapsedTimeForWaypoint(waypointId: string): string {
+    const elapsedSeconds = elapsedTimes.value[waypointId];
+    return elapsedSeconds ? formatElapsedTime(elapsedSeconds) : "00:00:00";
+}
+
+function getDelayForWaypoint(waypointId: string): string {
+    const delaySeconds = getWaypointDelay(
+        waypointId,
+        waypointStoppageTimes.value,
+        getDefaultStoppageTime.value(),
+        waypoints.value,
+    );
+    return formatDelayTime(delaySeconds);
+}
+
+function isStartOrFinishWaypoint(waypoint: Waypoint): boolean {
+    if (waypoint.order === 0) return true; // Start waypoint
+    const maxOrder = Math.max(...(waypoints.value?.map((w) => w.order) || [0]));
+    if (waypoint.order === maxOrder && waypoint.order > 0) return true; // Finish waypoint
+    return false;
+}
 </script>
 
 <template>
@@ -290,6 +343,52 @@ function getSegmentForWaypoint(waypointId: string): WaypointSegment | null {
                                                     waypoint.elevation,
                                                 )
                                             }}
+                                        </span>
+                                    </div>
+
+                                    <!-- Time Information (when plan is selected) -->
+                                    <div
+                                        v-if="currentPlan && currentPlan.pace"
+                                        class="flex items-center gap-4 text-(--main-color) text-sm mb-1"
+                                    >
+                                        <span class="flex items-center gap-1">
+                                            <Icon
+                                                name="heroicons:clock"
+                                                class="h-3 w-3"
+                                            />
+                                            <span class="font-medium">
+                                                {{
+                                                    getElapsedTimeForWaypoint(
+                                                        waypoint.id,
+                                                    )
+                                                }}
+                                            </span>
+                                        </span>
+
+                                        <span
+                                            v-if="
+                                                !isStartOrFinishWaypoint(
+                                                    waypoint,
+                                                ) &&
+                                                (getWaypointStoppageTime?.(
+                                                    waypoint.id,
+                                                ) > 0 ||
+                                                    getDefaultStoppageTime?.() >
+                                                        0)
+                                            "
+                                            class="flex items-center gap-1 text-(--main-color)"
+                                        >
+                                            <Icon
+                                                name="heroicons:pause"
+                                                class="h-3 w-3"
+                                            />
+                                            <span class="text-xs">
+                                                {{
+                                                    getDelayForWaypoint(
+                                                        waypoint.id,
+                                                    )
+                                                }}
+                                            </span>
                                         </span>
                                     </div>
 

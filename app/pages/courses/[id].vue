@@ -72,6 +72,11 @@ const editingPlan = ref<SelectPlan | null>(null);
 // Store the course and waypoints data in computed properties
 const course = computed(() => courseData.value?.course);
 const waypoints = computed(() => waypointsData.value?.waypoints || []);
+const currentPlan = computed(() =>
+    currentPlanId.value
+        ? plans.value.find((p) => p.id === currentPlanId.value)
+        : null,
+);
 
 // Set the page title dynamically based on the course name
 useHead({
@@ -614,7 +619,7 @@ onUnmounted(() => {
                                 </p>
                             </div>
                         </div>
-                        <div class="flex items-center gap-3">
+                        <div class="flex items-center gap-2">
                             <PlanSelector
                                 :plans="plans"
                                 :current-plan-id="currentPlanId"
@@ -702,7 +707,7 @@ onUnmounted(() => {
                             </div>
                             <div
                                 v-if="formatRaceDate(course.raceDate)"
-                                class="flex items-center gap-2 text-(--accent-color)"
+                                class="flex items-center gap-2 text-(--main-color)"
                             >
                                 <Icon name="heroicons:flag" class="h-5 w-5" />
                                 <div class="flex flex-col">
@@ -830,6 +835,8 @@ onUnmounted(() => {
                                 :waypoints="waypoints"
                                 :selected-waypoint="selectedWaypoint"
                                 :current-plan-id="currentPlanId"
+                                :current-plan="currentPlan"
+                                :waypoint-stoppage-times="waypointStoppageTimes"
                                 :get-waypoint-note="getWaypointNote"
                                 :get-waypoint-stoppage-time="
                                     getWaypointStoppageTime
