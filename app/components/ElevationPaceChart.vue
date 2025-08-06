@@ -84,7 +84,6 @@ const userSettingsStore = useUserSettingsStore();
 const chartContainer = ref<HTMLElement>();
 const paceChartContainer = ref<HTMLElement>();
 const tooltip = ref<HTMLElement>();
-const paceTooltip = ref<HTMLElement>();
 
 // Tooltip state
 const tooltipVisible = ref(false);
@@ -93,17 +92,15 @@ const tooltipData = ref({
     distance: "",
     elevation: "",
     grade: "",
+    actualPace: "",
 });
 
-// Pace chart tooltip state
-const paceTooltipVisible = ref(false);
-const paceTooltipFromMap = ref(false);
-const paceTooltipData = ref({
-    distance: "",
-    actualPace: "",
-    targetPace: "",
-    grade: "",
-});
+// Shared hover sync state for chart-to-chart hover
+const chartHoverDistance = ref<number | null>(null);
+const chartHoverSource = ref<"elevation" | "pace" | null>(null);
+
+// Pace chart height factor (0.8 = 80% of elevation chart height)
+const paceChartHeightFactor = 0.8;
 
 // Chart state
 let svg: d3.Selection<SVGSVGElement, unknown, null, undefined> | null = null;
@@ -137,6 +134,20 @@ let paceCrosshair: d3.Selection<
     undefined
 > | null = null;
 let paceMapHoverCrosshair: d3.Selection<
+    SVGLineElement,
+    unknown,
+    null,
+    undefined
+> | null = null;
+
+// Sync crosshairs
+let elevationSyncCrosshair: d3.Selection<
+    SVGLineElement,
+    unknown,
+    null,
+    undefined
+> | null = null;
+let paceSyncCrosshair: d3.Selection<
     SVGLineElement,
     unknown,
     null,
@@ -356,7 +367,9 @@ function initChart() {
     const width = containerRect.width;
     const height = props.height;
 
-    const margin = { top: 40, right: 30, bottom: 40, left: 60 }; // Increased top margin for waypoint circles
+    // Reduce bottom margin when pace chart is actually shown
+    const bottomMargin = props.showPaceChart && hasPaceData.value ? 20 : 40;
+    const margin = { top: 40, right: 30, bottom: bottomMargin, left: 60 }; // Increased top margin for waypoint circles
     const innerWidth = width - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
 
@@ -456,12 +469,15 @@ function initChart() {
             ),
         );
 
-    g.append("g")
-        .attr("transform", `translate(0,${innerHeight})`)
-        .call(xAxis)
-        .selectAll("text")
-        .style("fill", "var(--sub-color)")
-        .style("font-size", "12px");
+    // Show x-axis when pace chart is not actually displayed
+    if (!(props.showPaceChart && hasPaceData.value)) {
+        g.append("g")
+            .attr("transform", `translate(0,${innerHeight})`)
+            .call(xAxis)
+            .selectAll("text")
+            .style("fill", "var(--sub-color)")
+            .style("font-size", "12px");
+    }
 
     g.append("g")
         .call(yAxis)
@@ -527,6 +543,17 @@ function initChart() {
         .style("opacity", 0)
         .style("pointer-events", "none");
 
+    // Add sync crosshair for hover sync from pace chart
+    elevationSyncCrosshair = g
+        .append("line")
+        .attr("class", "elevation-sync-crosshair")
+        .attr("y1", 0)
+        .attr("y2", innerHeight)
+        .style("stroke", "var(--main-color)")
+        .style("stroke-width", 1)
+        .style("opacity", 0)
+        .style("pointer-events", "none");
+
     // Add waypoint crosshair line (initially hidden)
     waypointCrosshair = g
         .append("line")
@@ -568,18 +595,139 @@ function initChart() {
         .style("font-size", "12px")
         .text("Elevation");
 
-    g.append("text")
-        .attr(
-            "transform",
-            `translate(${innerWidth / 2}, ${innerHeight + margin.bottom})`,
-        )
-        .style("text-anchor", "middle")
-        .style("fill", "var(--sub-color)")
-        .style("font-size", "12px")
-        .text("Distance");
+    // Show distance label when pace chart is not actually displayed
+    if (!(props.showPaceChart && hasPaceData.value)) {
+        g.append("text")
+            .attr(
+                "transform",
+                `translate(${innerWidth / 2}, ${innerHeight + margin.bottom})`,
+            )
+            .style("text-anchor", "middle")
+            .style("fill", "var(--sub-color)")
+            .style("font-size", "12px")
+            .text("Distance");
+    }
 }
 
-// Initialize the pace chart
+// Show crosshair and tooltip on elevation chart from pace chart hover
+function showElevationChartHover(distance: number) {
+    if (
+        !xScale ||
+        !elevationSyncCrosshair ||
+        !hasElevationData.value ||
+        !tooltip.value
+    )
+        return;
+
+    const x = xScale(distance);
+    // Ensure crosshair is within bounds
+    if (
+        x >= 0 &&
+        x <= (chartContainer.value?.getBoundingClientRect().width || 0) - 90
+    ) {
+        elevationSyncCrosshair
+            .attr("x1", x)
+            .attr("x2", x)
+            .style("opacity", 0.8);
+    }
+
+    // Show tooltip for elevation chart
+    const interpolatedPoint = interpolateAtDistance(elevationPoints, distance);
+    if (interpolatedPoint) {
+        const grade = calculateGradeAtDistance(
+            elevationPoints,
+            interpolatedPoint.distance,
+            200,
+        );
+        const gradeFormatted =
+            grade >= 0 ? `+${grade.toFixed(1)}%` : `${grade.toFixed(1)}%`;
+
+        // Find closest pace data point if available
+        let actualPace = "";
+        if (hasPaceData.value && actualPaceData.value.length > 0) {
+            const closestPacePoint = actualPaceData.value.reduce(
+                (prev, curr) =>
+                    Math.abs(curr.distance - distance) <
+                    Math.abs(prev.distance - distance)
+                        ? curr
+                        : prev,
+            );
+            if (closestPacePoint) {
+                const paceWithUnits =
+                    userSettingsStore.settings.units.distance === "miles"
+                        ? formatPace(closestPacePoint.actualPace) + "/mi"
+                        : formatPace(closestPacePoint.actualPace) + "/km";
+                actualPace = paceWithUnits;
+            }
+        }
+
+        tooltipData.value = {
+            distance: formatDistance(
+                interpolatedPoint.distance,
+                userSettingsStore.settings.units.distance,
+            ),
+            elevation: formatElevation(
+                interpolatedPoint.elevation,
+                userSettingsStore.settings.units.elevation,
+            ),
+            grade: gradeFormatted,
+            actualPace: actualPace,
+        };
+
+        // Position tooltip
+        const containerRect = chartContainer.value!.getBoundingClientRect();
+        const tooltipEl = tooltip.value;
+        const margin = { top: 20, right: 30, bottom: 40, left: 60 };
+
+        const chartX = x + margin.left;
+        const chartY = margin.top + 10;
+
+        const tooltipWidth = tooltipEl.offsetWidth;
+        const finalX = Math.min(
+            chartX,
+            containerRect.width - tooltipWidth - 10,
+        );
+
+        tooltipEl.style.left = `${finalX}px`;
+        tooltipEl.style.top = `${chartY}px`;
+
+        tooltipVisible.value = true;
+        tooltipFromMap.value = false;
+    }
+}
+
+// Show crosshair and tooltip on pace chart from elevation chart hover
+function showPaceChartHover(distance: number) {
+    if (!paceXScale || !paceSyncCrosshair || !hasPaceData.value) return;
+
+    const x = paceXScale(distance);
+    // Ensure crosshair is within bounds
+    if (
+        x >= 0 &&
+        x <= (paceChartContainer.value?.getBoundingClientRect().width || 0) - 90
+    ) {
+        paceSyncCrosshair.attr("x1", x).attr("x2", x).style("opacity", 0.8);
+    }
+}
+
+// Hide chart hover sync
+function hideChartHoverSync() {
+    if (elevationSyncCrosshair) {
+        elevationSyncCrosshair.style("opacity", 0);
+    }
+    if (paceSyncCrosshair) {
+        paceSyncCrosshair.style("opacity", 0);
+    }
+
+    // Only hide elevation tooltip if not from map hover and not from direct chart hover
+    if (!props.mapHoverDistance) {
+        // Check if elevation tooltip should be hidden
+        if (!crosshair || crosshair.style("opacity") === "0") {
+            tooltipVisible.value = false;
+        }
+    }
+}
+
 function initPaceChart() {
     if (
         !paceChartContainer.value ||
@@ -594,9 +742,9 @@ function initPaceChart() {
     const container = paceChartContainer.value;
     const containerRect = container.getBoundingClientRect();
     const width = containerRect.width;
-    const height = props.height;
+    const height = props.height * paceChartHeightFactor;
 
-    const margin = { top: 20, right: 30, bottom: 40, left: 60 };
+    const margin = { top: 0, right: 30, bottom: 40, left: 60 };
     const innerWidth = width - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
 
@@ -656,7 +804,7 @@ function initPaceChart() {
         .append("line")
         .attr("y1", 0)
         .attr("y2", innerHeight)
-        .style("stroke", "var(--text-color)")
+        .style("stroke", "var(--main-color)")
         .style("stroke-width", 1)
         .style("opacity", 0)
         .style("pointer-events", "none");
@@ -667,7 +815,18 @@ function initPaceChart() {
         .attr("y1", 0)
         .attr("y2", innerHeight)
         .style("stroke", "var(--main-color)")
-        .style("stroke-width", 2)
+        .style("stroke-width", 1)
+        .style("opacity", 0)
+        .style("pointer-events", "none");
+
+    // Add sync crosshair for hover sync from elevation chart
+    paceSyncCrosshair = g
+        .append("line")
+        .attr("class", "pace-sync-crosshair")
+        .attr("y1", 0)
+        .attr("y2", innerHeight)
+        .style("stroke", "var(--main-color)")
+        .style("stroke-width", 1)
         .style("opacity", 0)
         .style("pointer-events", "none");
 
@@ -707,8 +866,8 @@ function initPaceChart() {
         .attr("height", innerHeight)
         .style("fill", "none")
         .style("pointer-events", "all")
-        .on("mousemove", (event) => handlePaceMouseMove(event))
-        .on("mouseleave", () => handlePaceMouseLeave());
+        .on("mousemove", handlePaceMouseMove)
+        .on("mouseleave", handlePaceMouseLeave);
 
     // Add axis labels
     g.append("text")
@@ -740,7 +899,11 @@ function handleMouseMove(event: MouseEvent) {
     const distance = xScale.invert(mouseX);
 
     // Show crosshair
-    crosshair.attr("x1", mouseX).attr("x2", mouseX).style("opacity", 1);
+    crosshair.attr("x1", mouseX).attr("x2", mouseX).style("opacity", 0.8);
+
+    // Update chart hover sync state
+    chartHoverDistance.value = distance;
+    chartHoverSource.value = "elevation";
 
     // Interpolate elevation and coordinates at this distance
     const interpolatedPoint = interpolateAtDistance(elevationPoints, distance);
@@ -755,6 +918,25 @@ function handleMouseMove(event: MouseEvent) {
         const gradeFormatted =
             grade >= 0 ? `+${grade.toFixed(1)}%` : `${grade.toFixed(1)}%`;
 
+        // Find closest pace data point if available
+        let actualPace = "";
+        if (hasPaceData.value && actualPaceData.value.length > 0) {
+            const closestPacePoint = actualPaceData.value.reduce(
+                (prev, curr) =>
+                    Math.abs(curr.distance - distance) <
+                    Math.abs(prev.distance - distance)
+                        ? curr
+                        : prev,
+            );
+            if (closestPacePoint) {
+                const paceWithUnits =
+                    userSettingsStore.settings.units.distance === "miles"
+                        ? formatPace(closestPacePoint.actualPace) + "/mi"
+                        : formatPace(closestPacePoint.actualPace) + "/km";
+                actualPace = paceWithUnits;
+            }
+        }
+
         // Update tooltip data
         tooltipData.value = {
             distance: formatDistance(
@@ -766,6 +948,7 @@ function handleMouseMove(event: MouseEvent) {
                 userSettingsStore.settings.units.elevation,
             ),
             grade: gradeFormatted,
+            actualPace: actualPace,
         };
 
         // Position tooltip
@@ -808,11 +991,23 @@ function handleMouseLeave() {
     // Hide chart crosshair
     crosshair.style("opacity", 0);
 
-    // Only hide tooltip if map crosshair is also not visible
-    if (!mapHoverCrosshair || mapHoverCrosshair.style("opacity") === "0") {
+    // Clear chart hover sync state if this chart was the source
+    if (chartHoverSource.value === "elevation") {
+        chartHoverDistance.value = null;
+        chartHoverSource.value = null;
+    }
+
+    // Only hide tooltip if map crosshair is not visible and we're not syncing from pace chart
+    if (
+        (!mapHoverCrosshair || mapHoverCrosshair.style("opacity") === "0") &&
+        chartHoverSource.value !== "pace"
+    ) {
         tooltipVisible.value = false;
         tooltipFromMap.value = false;
-    } else {
+    } else if (
+        mapHoverCrosshair &&
+        mapHoverCrosshair.style("opacity") !== "0"
+    ) {
         // If map crosshair is still visible, mark tooltip as from map
         tooltipFromMap.value = true;
     }
@@ -849,7 +1044,7 @@ function updateMapHoverCrosshair() {
         props.mapHoverDistance !== undefined
     ) {
         const x = xScale(props.mapHoverDistance);
-        mapHoverCrosshair.attr("x1", x).attr("x2", x).style("opacity", 0.7); // Slightly less opacity to distinguish from chart hover
+        mapHoverCrosshair.attr("x1", x).attr("x2", x).style("opacity", 0.8);
 
         // Show tooltip for map hover as well
         const interpolatedPoint = interpolateAtDistance(
@@ -878,9 +1073,31 @@ function updateMapHoverCrosshair() {
                     userSettingsStore.settings.units.elevation,
                 ),
                 grade: gradeFormatted,
+                actualPace: "",
             };
 
-            // Position tooltip at the map hover crosshair
+            // Find closest pace data point if available
+            let actualPace = "";
+            if (hasPaceData.value && actualPaceData.value.length > 0) {
+                const closestPacePoint = actualPaceData.value.reduce(
+                    (prev, curr) =>
+                        Math.abs(curr.distance - props.mapHoverDistance!) <
+                        Math.abs(prev.distance - props.mapHoverDistance!)
+                            ? curr
+                            : prev,
+                );
+                if (closestPacePoint) {
+                    const paceWithUnits =
+                        userSettingsStore.settings.units.distance === "miles"
+                            ? formatPace(closestPacePoint.actualPace) + "/mi"
+                            : formatPace(closestPacePoint.actualPace) + "/km";
+                    actualPace = paceWithUnits;
+                }
+            }
+
+            tooltipData.value.actualPace = actualPace;
+
+            // Position tooltip
             const containerRect = chartContainer.value!.getBoundingClientRect();
             const tooltipEl = tooltip.value;
             const margin = { top: 20, right: 30, bottom: 40, left: 60 };
@@ -899,7 +1116,7 @@ function updateMapHoverCrosshair() {
             tooltipEl.style.left = `${finalX}px`;
             tooltipEl.style.top = `${chartY}px`;
 
-            // Show tooltip with slightly less opacity to distinguish from chart hover
+            // Show tooltip
             tooltipVisible.value = true;
             tooltipFromMap.value = true; // This is from map hover
         }
@@ -917,65 +1134,30 @@ function updateMapHoverCrosshair() {
 
 // Handle mouse movement over the pace chart
 function handlePaceMouseMove(event: MouseEvent) {
-    if (!paceXScale || !paceCrosshair || !paceTooltip.value) return;
+    if (!paceXScale || !paceCrosshair) return;
 
     const [mouseX] = d3.pointer(event);
     const distance = paceXScale.invert(mouseX);
 
     // Show crosshair
-    paceCrosshair.attr("x1", mouseX).attr("x2", mouseX).style("opacity", 1);
+    paceCrosshair.attr("x1", mouseX).attr("x2", mouseX).style("opacity", 0.8);
 
-    // Interpolate elevation and coordinates at this distance
-    const interpolatedPoint = interpolateAtDistance(elevationPoints, distance);
-    if (!interpolatedPoint) return;
-
-    // Find closest pace data point
-    const closestPacePoint = actualPaceData.value.reduce((prev, curr) =>
-        Math.abs(curr.distance - distance) < Math.abs(prev.distance - distance)
-            ? curr
-            : prev,
-    );
-
-    if (!closestPacePoint) return;
-
-    // Calculate grade at this distance
-    const grade = calculateGradeAtDistance(elevationPoints, distance);
-
-    // Update tooltip content
-    paceTooltipData.value = {
-        distance: formatDistance(
-            distance,
-            userSettingsStore.settings.units.distance,
-        ),
-        actualPace: formatPace(closestPacePoint.actualPace),
-        targetPace: props.plan?.pace ? formatPace(props.plan.pace) : "",
-        grade: `${grade > 0 ? "+" : ""}${grade.toFixed(1)}%`,
-    };
-
-    // Position tooltip
-    const tooltipElement = paceTooltip.value;
-    const containerRect = paceChartContainer.value!.getBoundingClientRect();
-    const tooltipRect = tooltipElement.getBoundingClientRect();
-
-    let left = mouseX + 10;
-    if (left + tooltipRect.width > containerRect.width) {
-        left = mouseX - tooltipRect.width - 10;
-    }
-
-    tooltipElement.style.left = `${left}px`;
-    tooltipElement.style.top = `${event.offsetY - tooltipRect.height - 10}px`;
-
-    paceTooltipVisible.value = true;
-    paceTooltipFromMap.value = false;
+    // Update chart hover sync state
+    chartHoverDistance.value = distance;
+    chartHoverSource.value = "pace";
 
     // Emit hover event
-    emit("pace-hover", {
-        lat: interpolatedPoint.lat,
-        lng: interpolatedPoint.lng,
-        distance,
-        elevation: interpolatedPoint.elevation,
-        grade,
-    });
+    const interpolatedPoint = interpolateAtDistance(elevationPoints, distance);
+    if (interpolatedPoint) {
+        const grade = calculateGradeAtDistance(elevationPoints, distance);
+        emit("pace-hover", {
+            lat: interpolatedPoint.lat,
+            lng: interpolatedPoint.lng,
+            distance,
+            elevation: interpolatedPoint.elevation,
+            grade,
+        });
+    }
 }
 
 // Handle mouse leave from pace chart
@@ -984,8 +1166,13 @@ function handlePaceMouseLeave() {
         paceCrosshair.style("opacity", 0);
     }
 
-    paceTooltipVisible.value = false;
-    paceTooltipFromMap.value = false;
+    // Clear chart hover sync state if this chart was the source
+    if (chartHoverSource.value === "pace") {
+        chartHoverDistance.value = null;
+        chartHoverSource.value = null;
+    }
+
+    // Pace chart no longer shows tooltips - they're handled by elevation chart
 
     // Emit leave event
     emit("pace-leave");
@@ -997,59 +1184,11 @@ function updatePaceMapHoverCrosshair() {
 
     if (props.mapHoverDistance !== null) {
         const x = paceXScale(props.mapHoverDistance);
-
         // Show crosshair at hover position
         paceMapHoverCrosshair.attr("x1", x).attr("x2", x).style("opacity", 0.8);
-
-        // Show tooltip if we have pace data at this distance
-        const closestPacePoint = actualPaceData.value.reduce((prev, curr) =>
-            Math.abs(curr.distance - props.mapHoverDistance!) <
-            Math.abs(prev.distance - props.mapHoverDistance!)
-                ? curr
-                : prev,
-        );
-
-        if (closestPacePoint && paceTooltip.value && paceChartContainer.value) {
-            // Calculate grade at this distance
-            const grade = calculateGradeAtDistance(
-                elevationPoints,
-                props.mapHoverDistance,
-            );
-
-            // Update tooltip content
-            paceTooltipData.value = {
-                distance: formatDistance(
-                    props.mapHoverDistance,
-                    userSettingsStore.settings.units.distance,
-                ),
-                actualPace: formatPace(closestPacePoint.actualPace),
-                targetPace: props.plan?.pace ? formatPace(props.plan.pace) : "",
-                grade: `${grade > 0 ? "+" : ""}${grade.toFixed(1)}%`,
-            };
-
-            // Position tooltip at crosshair
-            const tooltipElement = paceTooltip.value;
-            const containerRect =
-                paceChartContainer.value.getBoundingClientRect();
-            const tooltipRect = tooltipElement.getBoundingClientRect();
-
-            let left = x + 10;
-            if (left + tooltipRect.width > containerRect.width) {
-                left = x - tooltipRect.width - 10;
-            }
-
-            tooltipElement.style.left = `${left}px`;
-            tooltipElement.style.top = "10px";
-
-            paceTooltipVisible.value = true;
-            paceTooltipFromMap.value = true;
-        }
     } else {
         // Hide crosshair when not hovering
         paceMapHoverCrosshair.style("opacity", 0);
-        if (!paceTooltipFromMap.value) {
-            paceTooltipVisible.value = false;
-        }
     }
 }
 
@@ -1080,6 +1219,29 @@ function updateWaypointCrosshair() {
             const gradeFormatted =
                 grade >= 0 ? `+${grade.toFixed(1)}%` : `${grade.toFixed(1)}%`;
 
+            // Find closest pace data point if available
+            let actualPace = "";
+            if (hasPaceData.value && actualPaceData.value.length > 0) {
+                const closestPacePoint = actualPaceData.value.reduce(
+                    (prev, curr) =>
+                        Math.abs(
+                            curr.distance - props.selectedWaypointDistance!,
+                        ) <
+                        Math.abs(
+                            prev.distance - props.selectedWaypointDistance!,
+                        )
+                            ? curr
+                            : prev,
+                );
+                if (closestPacePoint) {
+                    const paceWithUnits =
+                        userSettingsStore.settings.units.distance === "miles"
+                            ? formatPace(closestPacePoint.actualPace) + "/mi"
+                            : formatPace(closestPacePoint.actualPace) + "/km";
+                    actualPace = paceWithUnits;
+                }
+            }
+
             // Update tooltip data
             tooltipData.value = {
                 distance: formatDistance(
@@ -1091,6 +1253,7 @@ function updateWaypointCrosshair() {
                     userSettingsStore.settings.units.elevation,
                 ),
                 grade: gradeFormatted,
+                actualPace: actualPace,
             };
 
             // Position tooltip at the waypoint crosshair
@@ -1112,9 +1275,9 @@ function updateWaypointCrosshair() {
             tooltipEl.style.left = `${finalX}px`;
             tooltipEl.style.top = `${chartY}px`;
 
-            // Show tooltip for waypoint
+            // Show tooltip for selected waypoint
             tooltipVisible.value = true;
-            tooltipFromMap.value = false; // This is from waypoint selection
+            tooltipFromMap.value = true;
         }
     } else {
         waypointCrosshair.style("opacity", 0);
@@ -1168,10 +1331,17 @@ watch(
     { deep: true },
 );
 
-// Watch for plan changes and reinitialize pace chart
+// Watch for plan changes and reinitialize charts
 watch(
     () => props.plan,
     () => {
+        // Re-initialize elevation chart to show/hide x-axis based on plan
+        if (hasElevationData.value) {
+            nextTick(() => {
+                initChart();
+            });
+        }
+        // Re-initialize pace chart if needed
         if (hasPaceData.value && props.showPaceChart) {
             nextTick(() => {
                 initPaceChart();
@@ -1185,6 +1355,13 @@ watch(
 watch(
     () => props.showPaceChart,
     () => {
+        // Re-initialize elevation chart to show/hide x-axis based on showPaceChart
+        if (hasElevationData.value) {
+            nextTick(() => {
+                initChart();
+            });
+        }
+        // Re-initialize pace chart if needed
         if (hasPaceData.value && props.showPaceChart) {
             nextTick(() => {
                 initPaceChart();
@@ -1192,6 +1369,22 @@ watch(
         }
     },
 );
+
+// Watch for chart hover sync changes
+watch([chartHoverDistance, chartHoverSource], ([distance, source]) => {
+    if (distance === null || source === null) {
+        // Hide chart hover sync
+        hideChartHoverSync();
+        return;
+    }
+
+    // Show crosshairs and tooltips on the opposite chart
+    if (source === "elevation" && hasPaceData.value && props.showPaceChart) {
+        showPaceChartHover(distance);
+    } else if (source === "pace" && hasElevationData.value) {
+        showElevationChartHover(distance);
+    }
+});
 
 // Watch for map hover distance changes
 watch(
@@ -1308,6 +1501,9 @@ onMounted(() => {
                 <div class="tooltip-distance">{{ tooltipData.distance }}</div>
                 <div class="tooltip-elevation">{{ tooltipData.elevation }}</div>
                 <div class="tooltip-grade">{{ tooltipData.grade }}</div>
+                <div v-if="tooltipData.actualPace" class="tooltip-pace">
+                    {{ tooltipData.actualPace }}
+                </div>
             </div>
 
             <div v-if="!hasElevationData" class="no-elevation-warning">
@@ -1330,27 +1526,6 @@ onMounted(() => {
                 </div>
             </div>
             <div v-else ref="paceChartContainer" class="pace-chart" />
-
-            <!-- Pace tooltip -->
-            <div
-                ref="paceTooltip"
-                class="pace-tooltip"
-                :class="{
-                    'tooltip-visible': paceTooltipVisible,
-                    'tooltip-from-map': paceTooltipFromMap,
-                }"
-            >
-                <div class="tooltip-distance">
-                    {{ paceTooltipData.distance }}
-                </div>
-                <div class="tooltip-actual-pace">
-                    {{ paceTooltipData.actualPace }}
-                </div>
-                <div class="tooltip-target-pace">
-                    {{ paceTooltipData.targetPace }} avg
-                </div>
-                <div class="tooltip-grade">{{ paceTooltipData.grade }}</div>
-            </div>
         </div>
     </div>
 </template>
@@ -1360,7 +1535,6 @@ onMounted(() => {
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 16px;
 }
 
 .elevation-chart-container {
@@ -1390,7 +1564,6 @@ onMounted(() => {
 
 .pace-chart {
     width: 100%;
-    min-height: 200px;
 }
 
 .elevation-tooltip {
@@ -1429,8 +1602,14 @@ onMounted(() => {
 }
 
 .tooltip-grade {
+    color: var(--sub-color);
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.tooltip-pace {
     color: var(--main-color);
-    font-size: 0.7rem;
+    font-size: 11px;
     font-weight: 500;
 }
 
