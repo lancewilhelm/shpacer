@@ -239,18 +239,7 @@ function isStartOrFinishWaypoint(waypoint: Waypoint): boolean {
 <template>
     <div class="h-full flex flex-col">
         <div class="flex-1 overflow-y-auto">
-            <div
-                v-if="(waypoints?.length || 0) === 0"
-                class="p-4 text-center text-(--sub-color)"
-            >
-                <Icon
-                    name="heroicons:map-pin"
-                    class="h-8 w-8 mx-auto mb-2 opacity-50"
-                />
-                <p class="text-sm">No waypoints found</p>
-            </div>
-
-            <div v-else class="flex">
+            <div class="flex">
                 <!-- Waypoint List Column -->
                 <div class="flex-1 space-y-1 p-1">
                     <template
@@ -306,7 +295,7 @@ function isStartOrFinishWaypoint(waypoint: Waypoint): boolean {
                                             "
                                         >
                                             <Icon
-                                                name="heroicons:pencil"
+                                                name="lucide:pencil"
                                                 class="h-3 w-3"
                                             />
                                         </button>
@@ -318,8 +307,8 @@ function isStartOrFinishWaypoint(waypoint: Waypoint): boolean {
                                     >
                                         <span class="flex items-center gap-1">
                                             <Icon
-                                                name="heroicons:map"
-                                                class="h-3 w-3"
+                                                name="lucide:arrow-right-to-line"
+                                                class="h-3 w-3 -translate-y-0.25"
                                             />
                                             {{
                                                 formatWaypointDistance(
@@ -335,8 +324,8 @@ function isStartOrFinishWaypoint(waypoint: Waypoint): boolean {
                                             class="flex items-center gap-1"
                                         >
                                             <Icon
-                                                name="heroicons:arrow-trending-up"
-                                                class="h-3 w-3"
+                                                name="lucide:mountain-snow"
+                                                class="h-3 w-3 -translate-y-0.25"
                                             />
                                             {{
                                                 formatWaypointElevation(
@@ -353,8 +342,8 @@ function isStartOrFinishWaypoint(waypoint: Waypoint): boolean {
                                     >
                                         <span class="flex items-center gap-1">
                                             <Icon
-                                                name="heroicons:clock"
-                                                class="h-3 w-3"
+                                                name="lucide:clock"
+                                                class="h-3 w-3 -translate-y-0.25"
                                             />
                                             <span class="font-medium">
                                                 {{
@@ -379,8 +368,8 @@ function isStartOrFinishWaypoint(waypoint: Waypoint): boolean {
                                             class="flex items-center gap-1 text-(--main-color)"
                                         >
                                             <Icon
-                                                name="heroicons:pause"
-                                                class="h-3 w-3"
+                                                name="lucide:pause"
+                                                class="h-3 w-3 -translate-y-0.25"
                                             />
                                             <span class="text-xs">
                                                 {{
@@ -455,8 +444,8 @@ function isStartOrFinishWaypoint(waypoint: Waypoint): boolean {
                                             class="flex items-center gap-1"
                                         >
                                             <Icon
-                                                name="heroicons:arrows-right-left"
-                                                class="h-3 w-3"
+                                                name="lucide:move-horizontal"
+                                                class="h-3 w-3 -translate-y-0.25"
                                             />
                                             <span class="font-medium">
                                                 {{
@@ -480,8 +469,8 @@ function isStartOrFinishWaypoint(waypoint: Waypoint): boolean {
                                             class="flex items-center gap-1 text-(--sub-color)"
                                         >
                                             <Icon
-                                                name="heroicons:arrow-up"
-                                                class="h-3 w-3"
+                                                name="lucide:arrow-up"
+                                                class="h-3 w-3 -translate-y-0.25"
                                             />
                                             <span class="font-medium">
                                                 {{
@@ -505,8 +494,8 @@ function isStartOrFinishWaypoint(waypoint: Waypoint): boolean {
                                             class="flex items-center gap-1 text-(--sub-color)"
                                         >
                                             <Icon
-                                                name="heroicons:arrow-down"
-                                                class="h-3 w-3"
+                                                name="lucide:arrow-down"
+                                                class="h-3 w-3 -translate-y-0.25"
                                             />
                                             <span class="font-medium">
                                                 {{

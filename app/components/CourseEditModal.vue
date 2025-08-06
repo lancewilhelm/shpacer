@@ -1234,7 +1234,7 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                     class="p-2 text-(--sub-color) hover:text-(--main-color) transition-colors"
                     @click="closeModal"
                 >
-                    <Icon name="heroicons:x-mark" class="h-6 w-6" />
+                    <Icon name="lucide:x" class="h-6 w-6 scale-150" />
                 </button>
             </div>
 
@@ -1464,7 +1464,10 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                                         : clearWaypointSelection()
                                 "
                             >
-                                <Icon name="heroicons:x-mark" class="h-5 w-5" />
+                                <Icon
+                                    name="lucide:x"
+                                    class="h-5 w-5 scale-150"
+                                />
                             </button>
                         </div>
 
@@ -1562,7 +1565,7 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                                                 )
                                             "
                                         >
-                                            <Icon name="heroicons:plus" />
+                                            <Icon name="lucide:plus" />
                                         </button>
                                         <button
                                             v-tooltip="
@@ -1584,7 +1587,7 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                                                 )
                                             "
                                         >
-                                            <Icon name="heroicons:minus" />
+                                            <Icon name="lucide:minus" />
                                         </button>
                                         ±
                                         <input
@@ -1682,7 +1685,7 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                                         "
                                     >
                                         <Icon
-                                            name="heroicons:trash"
+                                            name="lucide:trash-2"
                                             class="h-4 w-4"
                                         />
                                     </button>
@@ -1724,7 +1727,7 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                                 :disabled="creatingWaypoint"
                                 @click="startManualWaypointCreation"
                             >
-                                <Icon name="heroicons:plus" class="h-4 w-4" />
+                                <Icon name="lucide:plus" class="h-4 w-4" />
                             </button>
                         </div>
 
@@ -1804,7 +1807,7 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                                                             "
                                                         >
                                                             <Icon
-                                                                name="heroicons:trash"
+                                                                name="lucide:trash-2"
                                                                 class="h-3 w-3"
                                                             />
                                                         </button>
@@ -1818,8 +1821,8 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                                                             class="flex items-center gap-1"
                                                         >
                                                             <Icon
-                                                                name="heroicons:map"
-                                                                class="h-3 w-3"
+                                                                name="lucide:arrow-right-to-line"
+                                                                class="h-3 w-3 -translate-y-0.25"
                                                             />
                                                             {{
                                                                 formatDistance(
@@ -1840,8 +1843,8 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                                                             class="flex items-center gap-1"
                                                         >
                                                             <Icon
-                                                                name="heroicons:arrow-trending-up"
-                                                                class="h-3 w-3"
+                                                                name="lucide:mountain-snow"
+                                                                class="h-3 w-3 -translate-y-0.25"
                                                             />
                                                             {{
                                                                 formatElevation(

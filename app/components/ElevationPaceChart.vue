@@ -1485,7 +1485,7 @@ onMounted(() => {
 
             <!-- Creation mode indicator -->
             <div v-if="creationMode" class="creation-mode-indicator">
-                <Icon name="heroicons:plus-circle" class="h-4 w-4" />
+                <Icon name="lucide:circle-plus" class="h-4 w-4" />
                 <span>Click on the elevation profile to add a waypoint</span>
             </div>
 
@@ -1507,7 +1507,7 @@ onMounted(() => {
             </div>
 
             <div v-if="!hasElevationData" class="no-elevation-warning">
-                <Icon name="heroicons:exclamation-triangle" class="h-4 w-4" />
+                <Icon name="lucide:triangle-alert" class="h-4 w-4" />
                 <span>No elevation data available for this course</span>
             </div>
         </div>

@@ -269,7 +269,7 @@ defineExpose({
 
             <div class="flex flex-col items-center gap-4">
                 <Icon
-                    name="heroicons:cloud-arrow-up"
+                    name="lucide:cloud-upload"
                     class="h-12 w-12 text-(--main-color) scale-200"
                 />
 
@@ -307,8 +307,8 @@ defineExpose({
             >
                 <div class="flex items-center gap-2">
                     <Icon
-                        name="heroicons:document"
-                        class="h-4 w-4 text-(--main-color)"
+                        name="lucide:file-chart-line"
+                        class="h-4 w-4 text-(--main-color) scale-125"
                     />
                     <span class="text-sm text-(--main-color)">{{
                         uploadedFile.name
@@ -320,14 +320,14 @@ defineExpose({
                         class="text-(--main-color) hover:text-(--main-color) opacity-70 hover:opacity-100 transition-opacity p-1"
                         @click="viewGeoJson"
                     >
-                        <Icon name="heroicons:eye" class="h-4 w-4" />
+                        <Icon name="lucide:eye" class="h-4 w-4 scale-125" />
                     </button>
                     <button
                         v-tooltip="'Remove file'"
                         class="text-(--error-color) hover:text-(--error-color) opacity-70 hover:opacity-100 transition-opacity p-1"
                         @click="removeFile(uploadedFile.name)"
                     >
-                        <Icon name="heroicons:x-mark" class="h-4 w-4" />
+                        <Icon name="lucide:x" class="h-4 w-4 scale-125" />
                     </button>
                 </div>
             </div>
@@ -346,8 +346,8 @@ defineExpose({
                             @click="copyGeoJsonToClipboard"
                         >
                             <Icon
-                                name="heroicons:clipboard-document"
-                                class="h-4 w-4 inline mr-1"
+                                name="lucide:clipboard-copy"
+                                class="h-4 w-4 inline mr-1 scale-125"
                             />
                             Copy
                         </button>
@@ -355,7 +355,7 @@ defineExpose({
                             class="text-(--sub-color) hover:text-(--main-color) transition-colors"
                             @click="closeGeoJsonModal"
                         >
-                            <Icon name="heroicons:x-mark" class="h-5 w-5" />
+                            <Icon name="lucide:x" class="h-5 w-5 scale-150" />
                         </button>
                     </div>
                 </div>

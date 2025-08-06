@@ -102,7 +102,10 @@ onBeforeUnmount(() => {
             class="flex items-center gap-2 px-3 py-2 border border-(--main-color) text-(--main-color) rounded-sm hover:bg-(--main-color) hover:text-(--bg-color) transition-colors text-sm font-medium"
             @click="addPlan"
         >
-            <Icon name="heroicons:plus" class="h-4 w-4" />
+            <Icon
+                name="lucide:plus"
+                class="h-4 w-4 scale-125 -translate-y-0.25"
+            />
             Add Plan
         </button>
 
@@ -113,8 +116,8 @@ onBeforeUnmount(() => {
                 @click="dropdownOpen = !dropdownOpen"
             >
                 <Icon
-                    name="heroicons:clipboard-document-list"
-                    class="h-4 w-4"
+                    name="lucide:clipboard-list"
+                    class="h-4 w-4 scale-125 -translate-y-0.25"
                 />
                 <span class="font-medium">
                     {{ currentPlan ? currentPlan.name : "Select Plan" }}
@@ -145,7 +148,7 @@ onBeforeUnmount(() => {
                         @click="selectPlan('')"
                     >
                         <div class="flex items-center gap-2">
-                            <Icon name="heroicons:eye-slash" class="h-4 w-4" />
+                            <Icon name="lucide:eye-off" class="h-4 w-4" />
                             <span class="font-medium">No Plan</span>
                         </div>
                     </div>
@@ -167,10 +170,6 @@ onBeforeUnmount(() => {
                     >
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center gap-2">
-                                <Icon
-                                    name="heroicons:clipboard-document-list"
-                                    class="h-4 w-4 flex-shrink-0"
-                                />
                                 <span class="font-medium truncate">{{
                                     plan.name
                                 }}</span>
@@ -192,7 +191,7 @@ onBeforeUnmount(() => {
                                     @click="editPlan(plan, $event)"
                                 >
                                     <Icon
-                                        name="heroicons:pencil"
+                                        name="lucide:pencil"
                                         class="h-3 w-3"
                                     />
                                 </button>
@@ -202,7 +201,7 @@ onBeforeUnmount(() => {
                                     @click="deletePlan(plan.id, $event)"
                                 >
                                     <Icon
-                                        name="heroicons:trash"
+                                        name="lucide:trash-2"
                                         class="h-3 w-3"
                                     />
                                 </button>

@@ -318,7 +318,6 @@ export function generateStartFinishWaypoints(
           typeof startElevation === "number" ? startElevation : undefined,
         distance: 0,
         tags: [], // No tags by default
-        icon: "heroicons:play",
         order: 0,
       });
     }
@@ -370,7 +369,6 @@ export function generateStartFinishWaypoints(
           typeof finishElevation === "number" ? finishElevation : undefined,
         distance: totalDistance,
         tags: [], // No tags by default
-        icon: "heroicons:flag",
         order: 999999,
       });
     }

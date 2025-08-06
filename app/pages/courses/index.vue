@@ -45,10 +45,6 @@ function formatRaceDate(date: Date | string | number | null) {
     });
 }
 
-function getFileTypeIcon(fileType: string) {
-    return fileType === "gpx" ? "heroicons:map" : "heroicons:chart-bar";
-}
-
 function formatCourseDistance(meters: number) {
     return formatDistance(meters, userSettingsStore.settings.units.distance);
 }
@@ -79,7 +75,10 @@ function formatCourseElevation(meters: number) {
                     to="/courses/new"
                     class="px-4 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity flex items-center gap-2"
                 >
-                    <Icon name="heroicons:plus" class="h-5 w-5" />
+                    <Icon
+                        name="lucide:plus"
+                        class="h-5 w-5 scale-125 -translate-y-0.25"
+                    />
                     New Course
                 </NuxtLink>
             </div>
@@ -97,7 +96,7 @@ function formatCourseElevation(meters: number) {
             >
                 <div class="text-center">
                     <Icon
-                        name="heroicons:exclamation-triangle"
+                        name="lucide:triangle-alert"
                         class="h-12 w-12 text-(--error-color) mx-auto mb-4"
                     />
                     <p class="text-(--error-color)">Failed to load courses</p>
@@ -116,7 +115,7 @@ function formatCourseElevation(meters: number) {
             >
                 <div class="text-center">
                     <Icon
-                        name="heroicons:map"
+                        name="lucide:map"
                         class="h-16 w-16 text-(--sub-color) mx-auto mb-4 scale-300"
                     />
                     <h3 class="text-xl font-semibold text-(--main-color) mb-2">
@@ -148,30 +147,6 @@ function formatCourseElevation(meters: number) {
                         <!-- Content -->
                         <div class="flex flex-col flex-1 min-w-0">
                             <!-- Header -->
-                            <div class="flex items-start justify-between mb-2">
-                                <div class="flex items-center gap-2">
-                                    <Icon
-                                        :name="getFileTypeIcon(course.fileType)"
-                                        class="h-4 w-4 text-(--main-color)"
-                                    />
-                                    <span
-                                        class="text-xs text-(--main-color) uppercase"
-                                        >{{ course.fileType }}</span
-                                    >
-                                </div>
-                                <div
-                                    v-if="formatRaceDate(course.raceDate)"
-                                    class="flex items-center gap-1 text-xs text-(--main-color)"
-                                >
-                                    <Icon
-                                        name="heroicons:flag"
-                                        class="h-3 w-3"
-                                    />
-                                    <span>{{
-                                        formatRaceDate(course.raceDate)
-                                    }}</span>
-                                </div>
-                            </div>
 
                             <!-- Title -->
                             <h3
@@ -188,6 +163,22 @@ function formatCourseElevation(meters: number) {
                                 {{ course.description }}
                             </p>
 
+                            <!--Race Date-->
+                            <div class="flex items-start mb-2">
+                                <div
+                                    v-if="course.raceDate"
+                                    class="flex items-center gap-1 text-xs text-(--main-color)"
+                                >
+                                    <Icon
+                                        name="lucide:calendar"
+                                        class="h-3 w-3 -translate-y-0.25"
+                                    />
+                                    <span>{{
+                                        formatRaceDate(course.raceDate)
+                                    }}</span>
+                                </div>
+                            </div>
+
                             <!-- Metrics -->
                             <div class="flex items-center gap-3 mb-2 text-xs">
                                 <div
@@ -195,8 +186,8 @@ function formatCourseElevation(meters: number) {
                                     class="flex items-center gap-1 text-(--main-color)"
                                 >
                                     <Icon
-                                        name="heroicons:map-pin"
-                                        class="h-3 w-3"
+                                        name="lucide:move-horizontal"
+                                        class="h-3 w-3 -translate-y-0.25"
                                     />
                                     <span>{{
                                         formatCourseDistance(
@@ -209,8 +200,8 @@ function formatCourseElevation(meters: number) {
                                     class="flex items-center gap-1 text-(--main-color)"
                                 >
                                     <Icon
-                                        name="heroicons:arrow-trending-up"
-                                        class="h-3 w-3"
+                                        name="lucide:arrow-up"
+                                        class="h-3 w-3 -translate-y-0.25"
                                     />
                                     <span>{{
                                         formatCourseElevation(
@@ -223,8 +214,8 @@ function formatCourseElevation(meters: number) {
                                     class="flex items-center gap-1 text-(--main-color)"
                                 >
                                     <Icon
-                                        name="heroicons:arrow-trending-down"
-                                        class="h-3 w-3"
+                                        name="lucide:arrow-down"
+                                        class="h-3 w-3 -translate-y-0.25"
                                     />
                                     <span>{{
                                         formatCourseElevation(

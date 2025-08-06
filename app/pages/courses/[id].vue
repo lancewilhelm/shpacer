@@ -640,7 +640,7 @@ onUnmounted(() => {
             >
                 <div class="text-center">
                     <Icon
-                        name="heroicons:exclamation-triangle"
+                        name="lucide:triangle-alert"
                         class="h-16 w-16 text-(--error-color) mx-auto mb-4"
                     />
                     <h2 class="text-xl font-semibold text-(--main-color) mb-2">
@@ -666,7 +666,10 @@ onUnmounted(() => {
                         to="/courses"
                         class="text-(--sub-color) hover:text-(--main-color) transition-colors rounded flex items-center w-min mb-4"
                     >
-                        <Icon name="heroicons:arrow-left" class="h-5 w-5" />
+                        <Icon
+                            name="lucide:arrow-left"
+                            class="h-5 w-5 scale-150"
+                        />
                     </NuxtLink>
                     <div class="flex items-center justify-between gap-4 mb-4">
                         <div class="flex-1">
@@ -707,8 +710,8 @@ onUnmounted(() => {
                                 class="flex items-center gap-2 text-(--main-color)"
                             >
                                 <Icon
-                                    name="heroicons:map-pin"
-                                    class="h-5 w-5 scale-150"
+                                    name="lucide:map-pin"
+                                    class="h-5 w-5 scale-150 -translate-y-0.5"
                                 />
                                 <div class="flex flex-col">
                                     <span class="font-medium">{{
@@ -728,8 +731,8 @@ onUnmounted(() => {
                                 class="flex items-center gap-2 text-(--main-color)"
                             >
                                 <Icon
-                                    name="heroicons:arrow-trending-up"
-                                    class="h-5 w-5 scale-150"
+                                    name="lucide:arrow-up"
+                                    class="h-5 w-5 scale-150 -translate-y-0.5"
                                 />
                                 <div class="flex flex-col">
                                     <span class="font-medium">{{
@@ -749,8 +752,8 @@ onUnmounted(() => {
                                 class="flex items-center gap-2 text-(--main-color)"
                             >
                                 <Icon
-                                    name="heroicons:arrow-trending-down"
-                                    class="h-5 w-5 scale-150"
+                                    name="lucide:arrow-down"
+                                    class="h-5 w-5 scale-150 -translate-y-0.5"
                                 />
                                 <div class="flex flex-col">
                                     <span class="font-medium">{{
@@ -769,7 +772,10 @@ onUnmounted(() => {
                                 v-if="formatRaceDate(course.raceDate)"
                                 class="flex items-center gap-2 text-(--main-color)"
                             >
-                                <Icon name="heroicons:flag" class="h-5 w-5" />
+                                <Icon
+                                    name="lucide:calendar-clock"
+                                    class="h-5 w-5 scale-150 -translate-y-0.5"
+                                />
                                 <div class="flex flex-col">
                                     <span class="font-medium">{{
                                         formatRaceDate(course.raceDate)
@@ -787,20 +793,20 @@ onUnmounted(() => {
                         >
                             <span class="flex items-center gap-1">
                                 <Icon
-                                    name="heroicons:document"
+                                    name="lucide:file"
                                     class="h-4 w-4"
                                 />
                                 {{ course.originalFileName }}
                             </span>
                             <span class="flex items-center gap-1">
                                 <Icon
-                                    name="heroicons:calendar"
+                                    name="lucide:calendar"
                                     class="h-4 w-4"
                                 />
                                 {{ formatDate(course.createdAt || new Date()) }}
                             </span>
                             <span class="flex items-center gap-1 uppercase">
-                                <Icon name="heroicons:tag" class="h-4 w-4" />
+                                <Icon name="lucide:tag" class="h-4 w-4" />
                                 {{ course.fileType }}
                             </span>
                         </div> -->

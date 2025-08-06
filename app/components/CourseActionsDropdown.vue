@@ -42,7 +42,7 @@ const actions: ActionItem[] = [
             emit("edit-course");
             popupVisible.value = false;
         },
-        icon: "heroicons:pencil",
+        icon: "lucide:pencil",
     },
     {
         name: "Download GPX",
@@ -50,7 +50,7 @@ const actions: ActionItem[] = [
             emit("download-file");
             popupVisible.value = false;
         },
-        icon: "heroicons:arrow-down-tray",
+        icon: "lucide:download",
     },
     {
         name: "Delete Course",
@@ -58,7 +58,7 @@ const actions: ActionItem[] = [
             emit("delete-course");
             popupVisible.value = false;
         },
-        icon: "heroicons:trash",
+        icon: "lucide:trash-2",
         destructive: true,
     },
 ];
