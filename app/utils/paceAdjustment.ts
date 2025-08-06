@@ -1,7 +1,7 @@
 import {
   calculateGradeAtDistance,
   type ElevationPoint,
-} from "~/utils/elevationProfile";
+} from "./elevationProfile";
 
 /**
  * Calculates pace adjustment factor based on terrain gradient.

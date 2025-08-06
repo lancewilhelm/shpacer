@@ -157,7 +157,6 @@ export function extractElevationProfile(
           } else if (endToMainStart < 500) {
             allCoordinates.unshift(...segment.reverse());
           }
-        } else {
         }
       }
     }

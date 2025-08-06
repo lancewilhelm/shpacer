@@ -442,10 +442,10 @@ async function handlePlanUpdated(plan: unknown) {
             const [notesResponse, stoppageTimesResponse] = await Promise.all([
                 $fetch(
                     `/api/courses/${courseId}/plans/${typedPlan.id}/waypoint-notes`,
-                ) as Promise<{ notes: SelectWaypointNote[] }>,
+                ) as { notes: SelectWaypointNote[] },
                 $fetch(
                     `/api/courses/${courseId}/plans/${typedPlan.id}/waypoint-stoppage-times`,
-                ) as Promise<{ stoppageTimes: SelectWaypointStoppageTime[] }>,
+                ) as { stoppageTimes: SelectWaypointStoppageTime[] },
             ]);
             waypointNotes.value = notesResponse.notes;
             waypointStoppageTimes.value = stoppageTimesResponse.stoppageTimes;
@@ -811,14 +811,9 @@ onUnmounted(() => {
                 <div class="flex-1 flex overflow-hidden">
                     <!-- Left Panel: Charts and Map -->
                     <div class="flex-1 flex flex-col overflow-hidden">
-                        <!-- Elevation Chart Section -->
+                        <!-- Combined Charts Section -->
                         <div class="px-4 py-2 border-b border-(--sub-color)">
-                            <!-- <div
-                                class="text-lg font-semibold text-(--main-color)"
-                            >
-                                Elevation Profile
-                            </div> -->
-                            <ElevationChart
+                            <ElevationPaceChart
                                 :geo-json-data="geoJsonData"
                                 :height="200"
                                 :map-hover-distance="mapHoverDistance"
@@ -826,27 +821,13 @@ onUnmounted(() => {
                                     selectedWaypoint?.distance || null
                                 "
                                 :waypoints="waypoints"
+                                :plan="currentPlan"
+                                :show-pace-chart="!!currentPlan"
                                 @elevation-hover="handleElevationHover"
                                 @elevation-leave="handleElevationLeave"
-                                @waypoint-click="handleElevationWaypointClick"
-                            />
-                        </div>
-
-                        <!-- Pace Chart Section (only visible when there's a current plan) -->
-                        <div
-                            v-if="currentPlan"
-                            class="px-4 py-2 border-b border-(--sub-color)"
-                        >
-                            <PaceChart
-                                :geo-json-data="geoJsonData"
-                                :height="200"
-                                :map-hover-distance="mapHoverDistance"
-                                :selected-waypoint-distance="
-                                    selectedWaypoint?.distance || null
-                                "
-                                :plan="currentPlan"
                                 @pace-hover="handlePaceHover"
                                 @pace-leave="handlePaceLeave"
+                                @waypoint-click="handleElevationWaypointClick"
                             />
                         </div>
 
