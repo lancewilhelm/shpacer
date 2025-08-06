@@ -174,7 +174,7 @@ export const plans = sqliteTable("plans", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
-  pace: integer("pace"), // pace in seconds per kilometer or mile
+  pace: integer("pace"), // target average pace in seconds per kilometer or mile (grade-adjusted)
   paceUnit: text("pace_unit").notNull().default("min_per_km"), // 'min_per_km' or 'min_per_mi'
   defaultStoppageTime: integer("default_stoppage_time").default(0), // default stoppage time in seconds
 

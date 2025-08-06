@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import * as d3 from "d3";
 import {
+    actualPaceFromGradeAdjusted,
+    calculateActualPacesForTarget,
+} from "~/utils/paceAdjustment";
+import {
     extractElevationProfile,
     interpolateAtDistance,
     type ElevationPoint,
+    calculateGradeAtDistance,
 } from "~/utils/elevationProfile";
 import { formatDistance } from "~/utils/courseMetrics";
 import { useUserSettingsStore } from "~/stores/userSettings";
@@ -45,7 +50,9 @@ const tooltipVisible = ref(false);
 const tooltipFromMap = ref(false);
 const tooltipData = ref({
     distance: "",
-    pace: "",
+    actualPace: "",
+    targetPace: "",
+    grade: "",
 });
 
 // Chart state
@@ -82,6 +89,32 @@ const hasPaceData = computed(() => {
 const totalDistance = computed(() => {
     if (elevationPoints.value.length === 0) return 0;
     return Math.max(...elevationPoints.value.map((p) => p.distance));
+});
+
+// Calculate actual paces needed at each point to achieve target average pace
+const actualPaceData = computed(() => {
+    if (!props.plan || !props.plan.pace || elevationPoints.value.length === 0) {
+        return [];
+    }
+
+    return calculateActualPacesForTarget(
+        elevationPoints.value,
+        props.plan.pace,
+        200, // Use 200m window for smoother pace calculations
+    );
+});
+
+// Get min/max actual paces for scale
+const paceRange = computed(() => {
+    if (actualPaceData.value.length === 0) {
+        return { min: 0, max: 0 };
+    }
+
+    const paces = actualPaceData.value.map((p) => p.actualPace);
+    const min = Math.min(...paces);
+    const max = Math.max(...paces);
+
+    return { min, max };
 });
 
 // Convert pace from seconds per km/mile to a display format
@@ -154,12 +187,12 @@ function initChart() {
         .domain([0, totalDistance.value])
         .range([0, innerWidth]);
 
-    // For pace chart, we want to show a constant pace line
-    const paceValue = props.plan.pace!;
-    const paceBuffer = paceValue * 0.1; // 10% buffer above and below
+    // For pace chart, we want to show the range of actual paces needed
+    const { min: minPace, max: maxPace } = paceRange.value;
+    const paceBuffer = Math.max((maxPace - minPace) * 0.1, minPace * 0.05); // Dynamic buffer
     yScale = d3
         .scaleLinear()
-        .domain([paceValue - paceBuffer, paceValue + paceBuffer])
+        .domain([minPace - paceBuffer, maxPace + paceBuffer])
         .range([innerHeight, 0]);
 
     // Create axes
@@ -204,29 +237,28 @@ function initChart() {
         .style("font-size", "12px")
         .text("Distance");
 
-    // Create pace line (horizontal line at the plan's pace)
+    // Create pace line showing actual paces needed at each point
     const paceLine = d3
-        .line<{ distance: number; pace: number }>()
+        .line<{ distance: number; actualPace: number }>()
         .x((d) => xScale!(d.distance))
-        .y((d) => yScale!(d.pace))
-        .curve(d3.curveLinear);
+        .y((d) => yScale!(d.actualPace))
+        .curve(d3.curveCardinal);
 
-    // Create data points for the pace line
-    const paceData = [
-        { distance: 0, pace: paceValue },
-        { distance: totalDistance.value, pace: paceValue },
-    ];
+    // Use the calculated actual pace data
+    const paceData = actualPaceData.value;
 
-    // Add the pace line
-    g.append("path")
-        .datum(paceData)
-        .attr("fill", "none")
-        .attr("stroke", "var(--main-color)")
-        .attr("stroke-width", 2)
-        .attr("d", paceLine);
+    if (paceData.length > 0) {
+        // Add the pace line
+        g.append("path")
+            .datum(paceData)
+            .attr("fill", "none")
+            .attr("stroke", "var(--main-color)")
+            .attr("stroke-width", 2)
+            .attr("d", paceLine);
+    }
 
     // Add interactive overlay
-    const overlay = g
+    const _overlay = g
         .append("rect")
         .attr("class", "overlay")
         .attr("width", innerWidth)
@@ -289,13 +321,23 @@ function handleMouseMove(event: MouseEvent) {
     );
     if (!interpolatedPoint) return;
 
+    // Calculate actual pace needed at this distance
+    const grade = calculateGradeAtDistance(
+        elevationPoints.value,
+        distance,
+        200,
+    );
+    const actualPace = actualPaceFromGradeAdjusted(props.plan!.pace!, grade);
+
     // Update tooltip data
     tooltipData.value = {
         distance: formatDistance(
             distance,
             userSettingsStore.settings.units.distance,
         ),
-        pace: formatPace(props.plan!.pace!, props.plan!.paceUnit),
+        actualPace: formatPace(actualPace, props.plan!.paceUnit),
+        targetPace: formatPace(props.plan!.pace!, props.plan!.paceUnit),
+        grade: `${grade >= 0 ? "+" : ""}${grade.toFixed(1)}%`,
     };
 
     // Position tooltip
@@ -372,12 +414,25 @@ function updateMapHoverCrosshair() {
             props.mapHoverDistance,
         );
         if (interpolatedPoint) {
+            // Calculate actual pace needed at this distance
+            const grade = calculateGradeAtDistance(
+                elevationPoints.value,
+                props.mapHoverDistance,
+                200,
+            );
+            const actualPace = actualPaceFromGradeAdjusted(
+                props.plan!.pace!,
+                grade,
+            );
+
             tooltipData.value = {
                 distance: formatDistance(
                     props.mapHoverDistance,
                     userSettingsStore.settings.units.distance,
                 ),
-                pace: formatPace(props.plan!.pace!, props.plan!.paceUnit),
+                actualPace: formatPace(actualPace, props.plan!.paceUnit),
+                targetPace: formatPace(props.plan!.pace!, props.plan!.paceUnit),
+                grade: `${grade >= 0 ? "+" : ""}${grade.toFixed(1)}%`,
             };
 
             // Position tooltip at the map hover crosshair
@@ -505,9 +560,10 @@ onUnmounted(() => {
         <div v-if="!hasPaceData" class="no-pace-data">
             <div class="text-center text-(--sub-color)">
                 <Icon name="mdi:speedometer" class="text-2xl mb-2" />
-                <p>No pace data available</p>
+                <p>No target average pace set</p>
                 <p class="text-sm">
-                    Set a pace for this plan to see the pace chart
+                    Set a target average pace for this plan to see the
+                    grade-adjusted actual pace at each point along the course
                 </p>
             </div>
         </div>
@@ -521,7 +577,11 @@ onUnmounted(() => {
             }"
         >
             <div class="tooltip-distance">{{ tooltipData.distance }}</div>
-            <div class="tooltip-pace">{{ tooltipData.pace }}</div>
+            <div class="tooltip-actual-pace">{{ tooltipData.actualPace }}</div>
+            <div class="tooltip-target-pace">
+                {{ tooltipData.targetPace }} avg
+            </div>
+            <div class="tooltip-grade">{{ tooltipData.grade }}</div>
         </div>
     </div>
 </template>
@@ -578,8 +638,21 @@ onUnmounted(() => {
     margin-bottom: 2px;
 }
 
-.tooltip-pace {
-    color: var(--sub-color);
+.tooltip-actual-pace {
+    color: var(--main-color);
     font-size: 0.7rem;
+    font-weight: 500;
+}
+
+.tooltip-target-pace {
+    color: var(--sub-color);
+    font-size: 0.65rem;
+    font-style: italic;
+}
+
+.tooltip-grade {
+    color: var(--main-color);
+    font-size: 0.65rem;
+    font-weight: 500;
 }
 </style>

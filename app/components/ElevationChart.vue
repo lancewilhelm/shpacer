@@ -477,7 +477,7 @@ function initChart() {
         .style("text-anchor", "middle")
         .style("fill", "var(--sub-color)")
         .style("font-size", "12px")
-        .text(`Elevation (${userSettingsStore.settings.units.elevation})`);
+        .text("Elevation");
 
     g.append("text")
         .attr(
@@ -487,7 +487,7 @@ function initChart() {
         .style("text-anchor", "middle")
         .style("fill", "var(--sub-color)")
         .style("font-size", "12px")
-        .text(`Distance (${userSettingsStore.settings.units.distance})`);
+        .text("Distance");
 }
 
 // Handle mouse movement over the chart
@@ -508,6 +508,7 @@ function handleMouseMove(event: MouseEvent) {
         const grade = calculateGradeAtDistance(
             elevationPoints,
             interpolatedPoint.distance,
+            200,
         );
         const gradeFormatted =
             grade >= 0 ? `+${grade.toFixed(1)}%` : `${grade.toFixed(1)}%`;
@@ -619,6 +620,7 @@ function updateMapHoverCrosshair() {
             const grade = calculateGradeAtDistance(
                 elevationPoints,
                 interpolatedPoint.distance,
+                200,
             );
             const gradeFormatted =
                 grade >= 0 ? `+${grade.toFixed(1)}%` : `${grade.toFixed(1)}%`;
@@ -693,6 +695,7 @@ function updateWaypointCrosshair() {
             const grade = calculateGradeAtDistance(
                 elevationPoints,
                 interpolatedPoint.distance,
+                200,
             );
             const gradeFormatted =
                 grade >= 0 ? `+${grade.toFixed(1)}%` : `${grade.toFixed(1)}%`;

@@ -265,14 +265,19 @@ onBeforeUnmount(() => {
                     />
                 </div>
 
-                <!-- Target Pace -->
+                <!-- Target Average Pace -->
                 <div>
                     <label
                         for="plan-pace"
                         class="block text-sm font-medium text-(--main-color) mb-1"
                     >
-                        Target Pace
+                        Target Average Pace
                     </label>
+                    <p class="text-xs text-(--sub-color) mb-2">
+                        Your desired overall average pace for the entire course.
+                        The system will automatically adjust your pace at each
+                        point based on the terrain grade.
+                    </p>
                     <div class="flex gap-2">
                         <input
                             id="plan-pace"
