@@ -188,7 +188,12 @@ const actualPaceData = computed(() => {
         return [];
     }
 
-    return calculateActualPacesForTarget(elevationPoints, props.plan.pace);
+    return calculateActualPacesForTarget(
+        elevationPoints,
+        props.plan.pace,
+        100,
+        300,
+    );
 });
 
 const paceRange = computed(() => {

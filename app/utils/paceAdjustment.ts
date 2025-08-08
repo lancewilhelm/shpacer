@@ -140,32 +140,99 @@ export function calculateActualPacesForTarget(
   elevationPoints: ElevationPoint[],
   targetAveragePace: number,
   windowDistance: number = 100,
+  paceSmoothingDistance: number = 200,
 ): Array<{ distance: number; actualPace: number; grade: number }> {
   if (elevationPoints.length < 2) {
     return [];
   }
 
+  // 1) Compute smoothed grade and per-point adjustment factors
+  const distances: number[] = [];
+  const grades: number[] = [];
+  const factors: number[] = [];
+
+  for (let i = 0; i < elevationPoints.length; i++) {
+    const pt = elevationPoints[i];
+    if (!pt) continue;
+
+    const g = calculateGradeAtDistance(
+      elevationPoints,
+      pt.distance,
+      windowDistance,
+    );
+    const f = paceAdjustment(g);
+
+    distances.push(pt.distance);
+    grades.push(g);
+    factors.push(f);
+  }
+
+  if (distances.length < 2) {
+    return [];
+  }
+
+  // 2) Compute normalization scale using trapezoidal integration of factors over distance
+  let totalDistance = 0;
+  let equivalentDistanceSum = 0;
+  for (let i = 1; i < distances.length; i++) {
+    const dL = distances[i] - distances[i - 1];
+    if (dL <= 0) continue;
+    totalDistance += dL;
+
+    const f0 = factors[i - 1];
+    const f1 = factors[i];
+    // Trapezoid: ∫ f(x) dx ≈ 0.5 * (f0 + f1) * dL
+    equivalentDistanceSum += 0.5 * (f0 + f1) * dL;
+  }
+
+  const normalizationScale =
+    equivalentDistanceSum > 0 ? totalDistance / equivalentDistanceSum : 1.0;
+
+  // 3) Compute normalized actual pace series (targetAveragePace × factor × scale)
+  const rawActualPaces: number[] = factors.map(
+    (f) => targetAveragePace * f * normalizationScale,
+  );
+
+  // 4) Optional smoothing of the pace series over a distance window
+  //    Apply a simple boxcar moving average in distance-space
+  const halfWindow = Math.max(0, paceSmoothingDistance / 2);
+  const smoothedActualPaces: number[] = [];
+
+  if (halfWindow > 0) {
+    for (let i = 0; i < distances.length; i++) {
+      const center = distances[i];
+
+      let sum = 0;
+      let count = 0;
+
+      // Expand left and right while within window
+      // Naive O(N^2) but acceptable for typical chart sizes
+      for (let j = 0; j < distances.length; j++) {
+        const dj = Math.abs(distances[j] - center);
+        if (dj <= halfWindow) {
+          sum += rawActualPaces[j];
+          count += 1;
+        }
+      }
+
+      smoothedActualPaces.push(count > 0 ? sum / count : rawActualPaces[i]);
+    }
+  } else {
+    // No smoothing requested
+    for (let i = 0; i < rawActualPaces.length; i++) {
+      smoothedActualPaces.push(rawActualPaces[i]);
+    }
+  }
+
+  // 5) Build result
   const result: Array<{ distance: number; actualPace: number; grade: number }> =
     [];
 
-  for (let i = 0; i < elevationPoints.length; i++) {
-    const currentPoint = elevationPoints[i];
-    if (!currentPoint) continue;
-
-    // Use smoothed grade calculation with the specified window
-    const gradient = calculateGradeAtDistance(
-      elevationPoints,
-      currentPoint.distance,
-      windowDistance,
-    );
-
-    // Calculate actual pace needed to achieve target average pace on this gradient
-    const actualPace = actualPaceFromGradeAdjusted(targetAveragePace, gradient);
-
+  for (let i = 0; i < distances.length; i++) {
     result.push({
-      distance: currentPoint.distance,
-      actualPace,
-      grade: gradient,
+      distance: distances[i],
+      actualPace: smoothedActualPaces[i],
+      grade: grades[i],
     });
   }
 

@@ -1,10 +1,21 @@
 import type { SelectPlan, SelectWaypointStoppageTime } from "~/utils/db/schema";
+import type { ElevationPoint } from "~/utils/elevationProfile";
+import type { WaypointSegment } from "~/utils/waypointSegments";
+import {
+  calculateGradeAdjustedElapsedTime,
+  calculateAllGradeAdjustedElapsedTimes,
+  type GradeAdjustedTimeCalculationOptions,
+} from "~/utils/gradeAdjustedTimeCalculations";
 
 export interface TimeCalculationOptions {
   plan: SelectPlan;
   waypoints: Array<{ id: string; distance: number; order: number }>;
   waypointStoppageTimes: SelectWaypointStoppageTime[];
   getDefaultStoppageTime: () => number;
+  // Optional parameters for grade-adjusted calculations
+  elevationProfile?: ElevationPoint[];
+  waypointSegments?: WaypointSegment[];
+  useGradeAdjustment?: boolean;
 }
 
 /**
@@ -69,13 +80,37 @@ export function calculateElapsedTimeToWaypoint(
   targetWaypointId: string,
   options: TimeCalculationOptions,
 ): number {
-  const { plan, waypoints, waypointStoppageTimes, getDefaultStoppageTime } =
-    options;
+  const {
+    plan,
+    waypoints,
+    waypointStoppageTimes,
+    getDefaultStoppageTime,
+    elevationProfile,
+    waypointSegments,
+    useGradeAdjustment,
+  } = options;
 
   if (!plan.pace) {
     return 0;
   }
 
+  // Use grade-adjusted calculation if enabled and data is available
+  if (useGradeAdjustment && elevationProfile && waypointSegments) {
+    const gradeAdjustedOptions: GradeAdjustedTimeCalculationOptions = {
+      plan,
+      waypoints,
+      waypointStoppageTimes,
+      elevationProfile,
+      waypointSegments,
+      getDefaultStoppageTime,
+    };
+    return calculateGradeAdjustedElapsedTime(
+      targetWaypointId,
+      gradeAdjustedOptions,
+    );
+  }
+
+  // Fall back to simple calculation
   const pacePerMeter = getPacePerMeter(plan.pace, plan.paceUnit);
   const defaultStoppageTime = getDefaultStoppageTime();
 
@@ -117,7 +152,23 @@ export function calculateElapsedTimeToWaypoint(
 export function calculateAllElapsedTimes(
   options: TimeCalculationOptions,
 ): Record<string, number> {
-  const { waypoints } = options;
+  const { waypoints, elevationProfile, waypointSegments, useGradeAdjustment } =
+    options;
+
+  // Use grade-adjusted calculation if enabled and data is available
+  if (useGradeAdjustment && elevationProfile && waypointSegments) {
+    const gradeAdjustedOptions: GradeAdjustedTimeCalculationOptions = {
+      plan: options.plan,
+      waypoints: options.waypoints,
+      waypointStoppageTimes: options.waypointStoppageTimes,
+      elevationProfile,
+      waypointSegments,
+      getDefaultStoppageTime: options.getDefaultStoppageTime,
+    };
+    return calculateAllGradeAdjustedElapsedTimes(gradeAdjustedOptions);
+  }
+
+  // Fall back to simple calculation
   const result: Record<string, number> = {};
 
   waypoints.forEach((waypoint) => {

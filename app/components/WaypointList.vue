@@ -15,6 +15,7 @@ import {
     getWaypointDelay,
     formatDelayTime,
 } from "~/utils/timeCalculations";
+import { getSegmentPacingInfo } from "~/utils/gradeAdjustedTimeCalculations";
 import type { SelectPlan, SelectWaypointStoppageTime } from "~/utils/db/schema";
 
 // Define a waypoint type that matches what we get from the API
@@ -210,6 +211,10 @@ const elapsedTimes = computed(() => {
         waypoints: waypoints.value,
         waypointStoppageTimes: waypointStoppageTimes.value,
         getDefaultStoppageTime: getDefaultStoppageTime.value,
+        elevationProfile: elevationProfile.value,
+        waypointSegments: waypointSegments.value,
+        useGradeAdjustment:
+            userSettingsStore.settings.pacing?.useGradeAdjustment ?? false,
     });
 });
 
@@ -233,6 +238,106 @@ function isStartOrFinishWaypoint(waypoint: Waypoint): boolean {
     const maxOrder = Math.max(...(waypoints.value?.map((w) => w.order) || [0]));
     if (waypoint.order === maxOrder && waypoint.order > 0) return true; // Finish waypoint
     return false;
+}
+
+function getSegmentPacingData(waypointId: string) {
+    if (
+        !currentPlan.value ||
+        !elevationProfile.value.length ||
+        !waypointSegments.value.length
+    ) {
+        return null;
+    }
+
+    const nextWaypoint = waypoints.value?.find((w, index) => {
+        const currentIndex = waypoints.value?.findIndex(
+            (wp) => wp.id === waypointId,
+        );
+        return currentIndex !== undefined && index === currentIndex + 1;
+    });
+
+    if (!nextWaypoint) {
+        return null;
+    }
+
+    return getSegmentPacingInfo(waypointId, nextWaypoint.id, {
+        plan: currentPlan.value,
+        waypoints: waypoints.value || [],
+        waypointStoppageTimes: waypointStoppageTimes.value || [],
+        elevationProfile: elevationProfile.value,
+        waypointSegments: waypointSegments.value,
+        getDefaultStoppageTime: getDefaultStoppageTime.value,
+    });
+}
+
+function getSegmentTime(waypointId: string): string {
+    const segment = getSegmentForWaypoint(waypointId);
+    if (!segment || !currentPlan.value?.pace) {
+        return "-";
+    }
+
+    const nextWaypoint = waypoints.value?.find((w, index) => {
+        const currentIndex = waypoints.value?.findIndex(
+            (wp) => wp.id === waypointId,
+        );
+        return currentIndex !== undefined && index === currentIndex + 1;
+    });
+
+    if (!nextWaypoint) {
+        return "-";
+    }
+
+    // Calculate current elapsed times for both waypoints
+    const currentElapsed = elapsedTimes.value[waypointId] || 0;
+    const nextElapsed = elapsedTimes.value[nextWaypoint.id] || 0;
+
+    // Subtract stoppage time to get just travel time
+    const nextStoppageTime =
+        getWaypointStoppageTime.value?.(nextWaypoint.id) || 0;
+    const segmentTime = nextElapsed - currentElapsed - nextStoppageTime;
+
+    if (segmentTime <= 0) {
+        return "-";
+    }
+
+    const minutes = Math.floor(segmentTime / 60);
+    const seconds = Math.round(segmentTime % 60);
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function getSegmentPace(waypointId: string): string {
+    const segment = getSegmentForWaypoint(waypointId);
+    if (!segment || !currentPlan.value?.pace) {
+        return "-";
+    }
+
+    let segmentPace = currentPlan.value.pace; // Base pace
+
+    // Apply grade adjustment if enabled
+    if (userSettingsStore.settings.pacing?.useGradeAdjustment) {
+        const pacingData = getSegmentPacingData(waypointId);
+        if (pacingData) {
+            segmentPace = pacingData.adjustedPace;
+        }
+    }
+
+    const minutes = Math.floor(segmentPace / 60);
+    const seconds = Math.round(segmentPace % 60);
+    const paceUnit =
+        currentPlan.value.paceUnit === "min_per_mi" ? "/mi" : "/km";
+
+    return `${minutes}:${seconds.toString().padStart(2, "0")}${paceUnit}`;
+}
+
+function getSegmentGradeDisplay(waypointId: string): string {
+    const pacingData = getSegmentPacingData(waypointId);
+    if (!pacingData) {
+        return "-";
+    }
+
+    const grade = pacingData.averageGrade;
+    const sign = grade >= 0 ? "+" : "";
+    return `${sign}${grade.toFixed(1)}%`;
 }
 </script>
 
@@ -506,6 +611,70 @@ function isStartOrFinishWaypoint(waypoint: Waypoint): boolean {
                                                     )
                                                 }}
                                             </span>
+                                        </div>
+
+                                        <!-- Segment Time and Pace -->
+                                        <div
+                                            v-if="currentPlan"
+                                            class="flex items-center gap-3 text-xs text-(--sub-color) mt-1"
+                                        >
+                                            <!-- Segment Time -->
+                                            <div
+                                                v-tooltip="
+                                                    'Estimated time for this segment'
+                                                "
+                                                class="flex items-center gap-1"
+                                            >
+                                                <Icon
+                                                    name="lucide:clock"
+                                                    class="w-3 h-3"
+                                                />
+                                                <span>{{
+                                                    getSegmentTime(waypoint.id)
+                                                }}</span>
+                                            </div>
+
+                                            <!-- Segment Pace -->
+                                            <div
+                                                v-tooltip="
+                                                    'Pace for this segment'
+                                                "
+                                                class="flex items-center gap-1"
+                                            >
+                                                <Icon
+                                                    name="lucide:activity"
+                                                    class="w-3 h-3"
+                                                />
+                                                <span>{{
+                                                    getSegmentPace(waypoint.id)
+                                                }}</span>
+                                            </div>
+
+                                            <!-- Grade (when grade adjustment is enabled) -->
+                                            <div
+                                                v-if="
+                                                    userSettingsStore.settings
+                                                        .pacing
+                                                        ?.useGradeAdjustment &&
+                                                    getSegmentPacingData(
+                                                        waypoint.id,
+                                                    )
+                                                "
+                                                v-tooltip="
+                                                    'Average grade for this segment'
+                                                "
+                                                class="flex items-center gap-1"
+                                            >
+                                                <Icon
+                                                    name="lucide:trending-up"
+                                                    class="w-3 h-3"
+                                                />
+                                                <span>{{
+                                                    getSegmentGradeDisplay(
+                                                        waypoint.id,
+                                                    )
+                                                }}</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

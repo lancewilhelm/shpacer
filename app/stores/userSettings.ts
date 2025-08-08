@@ -35,6 +35,9 @@ export interface UserSettings {
     distance: DistanceUnit;
     elevation: ElevationUnit;
   };
+  pacing: {
+    useGradeAdjustment: boolean;
+  };
 }
 
 function getDefaultSettings(): UserSettings {
@@ -49,6 +52,9 @@ function getDefaultSettings(): UserSettings {
     units: {
       distance: "kilometers",
       elevation: "meters",
+    },
+    pacing: {
+      useGradeAdjustment: false,
     },
   };
 }
