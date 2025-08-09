@@ -399,7 +399,7 @@ function getSegmentGradeDisplay(waypointId: string): string {
                                     >
                                         <!-- Waypoint Info -->
                                         <div
-                                            class="font-medium text-(--main-color) truncate"
+                                            class="font-medium text-(--main-color) truncate text-ellipsis flex-1 w-0"
                                         >
                                             {{ waypoint.name }}
                                         </div>

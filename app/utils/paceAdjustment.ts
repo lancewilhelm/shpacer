@@ -1,7 +1,4 @@
-import {
-  calculateGradeAtDistance,
-  type ElevationPoint,
-} from "./elevationProfile";
+import type { ElevationPoint } from "./elevationProfile";
 
 /**
  * Calculates pace adjustment factor based on terrain gradient.
@@ -76,98 +73,127 @@ export function calculateActualPacesForTarget(
   windowDistance: number = 100,
   paceSmoothingDistance: number = 200,
 ): Array<{ distance: number; actualPace: number; grade: number }> {
-  if (elevationPoints.length < 2) {
-    return [];
+  const n = elevationPoints.length;
+  if (n < 2) return [];
+
+  const dist = elevationPoints.map((p) => p.distance);
+  const elev = elevationPoints.map((p) => p.elevation);
+
+  // Compute grade per point using O(N) windowed interpolation
+  const grades: number[] = new Array(n).fill(0);
+
+  if (windowDistance === 0) {
+    // Adjacent-segment grade for window = 0
+    for (let i = 0; i < n - 1; i++) {
+      const rise = elev[i + 1]! - elev[i]!;
+      const run = dist[i + 1]! - dist[i]!;
+      grades[i] =
+        run !== 0 ? Math.max(-100, Math.min(100, (rise / run) * 100)) : 0;
+    }
+    grades[n - 1] = grades[n - 2] ?? 0;
+  } else {
+    const halfW = windowDistance / 2;
+
+    // Indices of segments for start and end window boundaries
+    let sIdx = 0;
+    let eIdx = 0;
+
+    for (let i = 0; i < n; i++) {
+      const center = dist[i]!;
+      let startD = center - halfW;
+      let endD = center + halfW;
+
+      // Clamp to data range
+      if (startD < dist[0]!) startD = dist[0]!;
+      if (endD > dist[n - 1]!) endD = dist[n - 1]!;
+
+      // Advance to segments containing the boundaries
+      while (sIdx + 1 < n && dist[sIdx + 1]! < startD) sIdx++;
+      while (eIdx + 1 < n && dist[eIdx + 1]! < endD) eIdx++;
+
+      // Interpolate elevation at startD
+      let elevStart = elev[sIdx]!;
+      if (sIdx + 1 < n && dist[sIdx + 1]! > dist[sIdx]!) {
+        const t = (startD - dist[sIdx]!) / (dist[sIdx + 1]! - dist[sIdx]!);
+        elevStart = elev[sIdx]! + t * (elev[sIdx + 1]! - elev[sIdx]!);
+      }
+
+      // Interpolate elevation at endD
+      let elevEnd = elev[eIdx]!;
+      if (eIdx + 1 < n && dist[eIdx + 1]! > dist[eIdx]!) {
+        const t = (endD - dist[eIdx]!) / (dist[eIdx + 1]! - dist[eIdx]!);
+        elevEnd = elev[eIdx]! + t * (elev[eIdx + 1]! - elev[eIdx]!);
+      }
+
+      const run = endD - startD;
+      const rise = elevEnd - elevStart;
+      grades[i] =
+        run !== 0 ? Math.max(-100, Math.min(100, (rise / run) * 100)) : 0;
+    }
   }
 
-  // 1) Compute smoothed grade and per-point adjustment factors
-  const distances: number[] = [];
-  const grades: number[] = [];
-  const factors: number[] = [];
+  // Convert grade -> adjustment factor
+  const factors = grades.map((g) => paceAdjustment(g));
 
-  for (let i = 0; i < elevationPoints.length; i++) {
-    const pt = elevationPoints[i];
-    if (!pt) continue;
-
-    const g = calculateGradeAtDistance(
-      elevationPoints,
-      pt.distance,
-      windowDistance,
-    );
-    const f = paceAdjustment(g);
-
-    distances.push(pt.distance);
-    grades.push(g);
-    factors.push(f);
-  }
-
-  if (distances.length < 2) {
-    return [];
-  }
-
-  // 2) Compute normalization scale using trapezoidal integration of factors over distance
+  // Normalize to maintain target average pace using trapezoidal integration
   let totalDistance = 0;
   let equivalentDistanceSum = 0;
-  for (let i = 1; i < distances.length; i++) {
-    const dL = distances[i]! - distances[i - 1]!;
+  for (let i = 1; i < n; i++) {
+    const dL = dist[i]! - dist[i - 1]!;
     if (dL <= 0) continue;
     totalDistance += dL;
 
     const f0 = factors[i - 1]!;
     const f1 = factors[i]!;
-    // Trapezoid: ∫ f(x) dx ≈ 0.5 * (f0 + f1) * dL
     equivalentDistanceSum += 0.5 * (f0 + f1) * dL;
   }
-
   const normalizationScale =
     equivalentDistanceSum > 0 ? totalDistance / equivalentDistanceSum : 1.0;
 
-  // 3) Compute normalized actual pace series (targetAveragePace × factor × scale)
+  // Raw grade-adjusted paces
   const rawActualPaces: number[] = factors.map(
     (f) => targetAveragePace * f * normalizationScale,
   );
 
-  // 4) Optional smoothing of the pace series over a distance window
-  //    Apply a simple boxcar moving average in distance-space
-  const halfWindow = Math.max(0, paceSmoothingDistance / 2);
-  const smoothedActualPaces: number[] = [];
+  // Smooth paces using O(N) sliding window in distance-space
+  const smoothedActualPaces: number[] = new Array(n);
+  const halfP = Math.max(0, paceSmoothingDistance / 2);
 
-  if (halfWindow > 0) {
-    for (let i = 0; i < distances.length; i++) {
-      const center = distances[i]!;
+  if (halfP === 0) {
+    for (let i = 0; i < n; i++) smoothedActualPaces[i] = rawActualPaces[i]!;
+  } else {
+    let left = 0;
+    let right = -1;
+    let sum = 0;
+    let count = 0;
 
-      let sum = 0;
-      let count = 0;
+    for (let i = 0; i < n; i++) {
+      const center = dist[i]!;
 
-      // Expand left and right while within window
-      // Naive O(N^2) but acceptable for typical chart sizes
-      for (let j = 0; j < distances.length; j++) {
-        const dj = Math.abs(distances[j]! - center);
-        if (dj <= halfWindow) {
-          sum += rawActualPaces[j]!;
-          count += 1;
-        }
+      while (right + 1 < n && dist[right + 1]! <= center + halfP) {
+        right++;
+        sum += rawActualPaces[right]!;
+        count++;
+      }
+      while (left < n && dist[left]! < center - halfP) {
+        sum -= rawActualPaces[left]!;
+        count--;
+        left++;
       }
 
-      smoothedActualPaces.push(count > 0 ? sum / count : rawActualPaces[i]!);
-    }
-  } else {
-    // No smoothing requested
-    for (let i = 0; i < rawActualPaces.length; i++) {
-      smoothedActualPaces.push(rawActualPaces[i]!);
+      smoothedActualPaces[i] = count > 0 ? sum / count : rawActualPaces[i]!;
     }
   }
 
-  // 5) Build result
+  // Build result
   const result: Array<{ distance: number; actualPace: number; grade: number }> =
-    [];
-
-  for (let i = 0; i < distances.length; i++) {
-    result.push({
-      distance: distances[i]!,
+    new Array(n);
+  for (let i = 0; i < n; i++) {
+    result[i] = {
+      distance: dist[i]!,
       actualPace: smoothedActualPaces[i]!,
       grade: grades[i]!,
-    });
+    };
   }
 
   return result;

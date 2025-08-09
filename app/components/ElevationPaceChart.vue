@@ -165,36 +165,51 @@ const hasElevationData = computed(() => {
 // Smoothed elevation series (distance-window boxcar) using gradeWindowMeters
 const smoothedElevationPoints = computed(() => {
     const window = smoothingConfig.value.gradeWindowMeters;
-    if (window === 0 || elevationPoints.length === 0) return elevationPoints; // No smoothing if 0 or no data
+    const n = elevationPoints.length;
+    if (window === 0 || n === 0) return elevationPoints; // No smoothing if 0 or no data
 
     const half = window / 2;
     const result: ElevationPoint[] = [];
 
-    for (let i = 0; i < elevationPoints.length; i++) {
-        const center = elevationPoints[i]!.distance;
-        let sum = 0;
-        let count = 0;
-        let lat = 0;
-        let lng = 0;
+    // Pre-extract distances for speed
+    const dist = elevationPoints.map((p) => p.distance);
 
-        // Naive O(N^2) boxcar smoothing in distance-space
-        for (let j = 0; j < elevationPoints.length; j++) {
-            const point = elevationPoints[j]!;
-            const dj = Math.abs(point.distance - center);
-            if (dj <= half) {
-                sum += point.elevation;
-                lat += point.lat;
-                lng += point.lng;
-                count += 1;
-            }
+    let left = 0;
+    let right = -1;
+    let sumElev = 0;
+    let sumLat = 0;
+    let sumLng = 0;
+    let count = 0;
+
+    for (let i = 0; i < n; i++) {
+        const center = dist[i]!;
+
+        // Expand right boundary while within [center - half, center + half]
+        while (right + 1 < n && dist[right + 1]! <= center + half) {
+            right++;
+            const p = elevationPoints[right]!;
+            sumElev += p.elevation;
+            sumLat += p.lat;
+            sumLng += p.lng;
+            count++;
+        }
+
+        // Shrink left boundary while outside the window on the left
+        while (left < n && dist[left]! < center - half) {
+            const p = elevationPoints[left]!;
+            sumElev -= p.elevation;
+            sumLat -= p.lat;
+            sumLng -= p.lng;
+            count--;
+            left++;
         }
 
         if (count > 0) {
             result.push({
                 distance: elevationPoints[i]!.distance,
-                elevation: sum / count,
-                lat: lat / count,
-                lng: lng / count,
+                elevation: sumElev / count,
+                lat: sumLat / count,
+                lng: sumLng / count,
                 originalIndex: elevationPoints[i]!.originalIndex,
             });
         } else {
