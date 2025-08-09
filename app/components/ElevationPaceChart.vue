@@ -226,8 +226,17 @@ const totalDistance = computed(() => {
 });
 
 // Per-course smoothing configuration (grade window and pace smoothing)
+const route = useRoute();
+const courseIdForSmoothing = computed(() => {
+    const fromPlan = props.plan?.courseId;
+    const fromRoute = (route.params?.id as string) || undefined;
+    return fromPlan ?? fromRoute;
+});
+
 const smoothingConfig = computed(() => {
-    const s = userSettingsStore.getSmoothingForCourse(props.plan?.courseId);
+    const s = userSettingsStore.getSmoothingForCourse(
+        courseIdForSmoothing.value,
+    );
     return {
         gradeWindowMeters: s.gradeWindowMeters,
         paceSmoothingMeters: s.paceSmoothingMeters,
@@ -1386,6 +1395,24 @@ watch(
 // Watch for unit changes and reinitialize chart
 watch(
     () => userSettingsStore.settings.units,
+    () => {
+        if (hasElevationData.value) {
+            nextTick(() => {
+                initChart();
+            });
+        }
+        if (hasPaceData.value && props.showPaceChart) {
+            nextTick(() => {
+                initPaceChart();
+            });
+        }
+    },
+    { deep: true },
+);
+
+// Watch for smoothing changes and reinitialize charts
+watch(
+    () => userSettingsStore.settings.smoothing,
     () => {
         if (hasElevationData.value) {
             nextTick(() => {
