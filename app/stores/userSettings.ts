@@ -38,6 +38,21 @@ export interface UserSettings {
   pacing: {
     useGradeAdjustment: boolean;
   };
+  smoothing: {
+    defaults: {
+      gradeWindowMeters: number; // Wg (grade smoothing window)
+      sampleStepMeters: number; // Δ (integration sample step)
+      paceSmoothingMeters: number; // Wp (pace chart smoothing window)
+    };
+    perCourse: Record<
+      string,
+      Partial<{
+        gradeWindowMeters: number;
+        sampleStepMeters: number;
+        paceSmoothingMeters: number;
+      }>
+    >;
+  };
 }
 
 function getDefaultSettings(): UserSettings {
@@ -55,6 +70,14 @@ function getDefaultSettings(): UserSettings {
     },
     pacing: {
       useGradeAdjustment: false,
+    },
+    smoothing: {
+      defaults: {
+        gradeWindowMeters: 100, // Wg default
+        sampleStepMeters: 50, // Δ default
+        paceSmoothingMeters: 300, // Wp default
+      },
+      perCourse: {},
     },
   };
 }
@@ -89,6 +112,98 @@ export const useUserSettingsStore = defineStore(
       synced.value = true;
     }
 
+    // Smoothing helpers
+    function getSmoothingForCourse(courseId?: string) {
+      const d = settings.value.smoothing.defaults;
+      if (!courseId) {
+        return {
+          gradeWindowMeters: d.gradeWindowMeters,
+          sampleStepMeters: d.sampleStepMeters,
+          paceSmoothingMeters: d.paceSmoothingMeters,
+        };
+      }
+      const override = settings.value.smoothing.perCourse[courseId] || {};
+      return {
+        gradeWindowMeters: override.gradeWindowMeters ?? d.gradeWindowMeters,
+        sampleStepMeters: override.sampleStepMeters ?? d.sampleStepMeters,
+        paceSmoothingMeters:
+          override.paceSmoothingMeters ?? d.paceSmoothingMeters,
+      };
+    }
+
+    function updateSmoothingDefaults(
+      updated: Partial<{
+        gradeWindowMeters: number;
+        sampleStepMeters: number;
+        paceSmoothingMeters: number;
+      }>,
+    ) {
+      const current = settings.value.smoothing.defaults;
+      const newDefaults = { ...current, ...updated };
+      settings.value = {
+        ...settings.value,
+        smoothing: {
+          ...settings.value.smoothing,
+          defaults: newDefaults,
+        },
+      };
+      updatedAt.value = new Date();
+      synced.value = false;
+      triggerDebouncedSync();
+    }
+
+    function updateCourseSmoothing(
+      courseId: string,
+      updated: Partial<{
+        gradeWindowMeters: number;
+        sampleStepMeters: number;
+        paceSmoothingMeters: number;
+      }>,
+    ) {
+      if (!courseId) return;
+      const current = settings.value.smoothing.perCourse[courseId] || {};
+      const perCourse = {
+        ...settings.value.smoothing.perCourse,
+        [courseId]: { ...current, ...updated },
+      };
+      settings.value = {
+        ...settings.value,
+        smoothing: {
+          ...settings.value.smoothing,
+          perCourse,
+        },
+      };
+      updatedAt.value = new Date();
+      synced.value = false;
+      triggerDebouncedSync();
+    }
+
+    function clearCourseSmoothing(courseId: string) {
+      if (!courseId) return;
+      const perCourse = Object.fromEntries(
+        Object.entries(settings.value.smoothing.perCourse).filter(
+          ([key]) => key !== courseId,
+        ),
+      ) as Record<
+        string,
+        Partial<{
+          gradeWindowMeters: number;
+          sampleStepMeters: number;
+          paceSmoothingMeters: number;
+        }>
+      >;
+      settings.value = {
+        ...settings.value,
+        smoothing: {
+          ...settings.value.smoothing,
+          perCourse,
+        },
+      };
+      updatedAt.value = new Date();
+      synced.value = false;
+      triggerDebouncedSync();
+    }
+
     return {
       settings,
       updatedAt,
@@ -96,6 +211,11 @@ export const useUserSettingsStore = defineStore(
       synced,
       setSynced,
       $reset,
+      // smoothing helpers
+      getSmoothingForCourse,
+      updateSmoothingDefaults,
+      updateCourseSmoothing,
+      clearCourseSmoothing,
     };
   },
   {

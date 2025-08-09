@@ -16,6 +16,8 @@ export interface TimeCalculationOptions {
   elevationProfile?: ElevationPoint[];
   waypointSegments?: WaypointSegment[];
   useGradeAdjustment?: boolean;
+  gradeWindowMeters?: number;
+  sampleStepMeters?: number;
 }
 
 /**
@@ -103,6 +105,8 @@ export function calculateElapsedTimeToWaypoint(
       elevationProfile,
       waypointSegments,
       getDefaultStoppageTime,
+      gradeWindowMeters: options.gradeWindowMeters,
+      sampleStepMeters: options.sampleStepMeters,
     };
     return calculateGradeAdjustedElapsedTime(
       targetWaypointId,
@@ -164,6 +168,8 @@ export function calculateAllElapsedTimes(
       elevationProfile,
       waypointSegments,
       getDefaultStoppageTime: options.getDefaultStoppageTime,
+      gradeWindowMeters: options.gradeWindowMeters,
+      sampleStepMeters: options.sampleStepMeters,
     };
     return calculateAllGradeAdjustedElapsedTimes(gradeAdjustedOptions);
   }

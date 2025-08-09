@@ -191,7 +191,7 @@ async function getSyncBody(type: string, lastSyncTime?: Date) {
   }
 }
 
-async function updateSyncStatus(body: SyncRequest, response: SyncResponse) {
+async function updateSyncStatus(_body: SyncRequest, _response: SyncResponse) {
   const userSettingsStore = useUserSettingsStore();
   const globalSettingsStore = useGlobalSettingsStore();
   userSettingsStore.setSynced(true);

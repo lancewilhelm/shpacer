@@ -162,8 +162,51 @@ const hasElevationData = computed(() => {
     );
 });
 
+// Smoothed elevation series (distance-window boxcar) using gradeWindowMeters
+const smoothedElevationPoints = computed(() => {
+    const window = smoothingConfig.value.gradeWindowMeters;
+    if (window === 0 || elevationPoints.length === 0) return elevationPoints; // No smoothing if 0 or no data
+
+    const half = window / 2;
+    const result: ElevationPoint[] = [];
+
+    for (let i = 0; i < elevationPoints.length; i++) {
+        const center = elevationPoints[i]!.distance;
+        let sum = 0;
+        let count = 0;
+        let lat = 0;
+        let lng = 0;
+
+        // Naive O(N^2) boxcar smoothing in distance-space
+        for (let j = 0; j < elevationPoints.length; j++) {
+            const point = elevationPoints[j]!;
+            const dj = Math.abs(point.distance - center);
+            if (dj <= half) {
+                sum += point.elevation;
+                lat += point.lat;
+                lng += point.lng;
+                count += 1;
+            }
+        }
+
+        if (count > 0) {
+            result.push({
+                distance: elevationPoints[i]!.distance,
+                elevation: sum / count,
+                lat: lat / count,
+                lng: lng / count,
+                originalIndex: elevationPoints[i]!.originalIndex,
+            });
+        } else {
+            // Fallback: use original point if no neighbors found
+            result.push(elevationPoints[i]!);
+        }
+    }
+    return result;
+});
+
 const elevationStats = computed(() => {
-    return getElevationStats(elevationPoints);
+    return getElevationStats(smoothedElevationPoints.value);
 });
 
 // Pace chart computed properties
@@ -182,6 +225,15 @@ const totalDistance = computed(() => {
     return Math.max(...elevationPoints.map((p) => p.distance));
 });
 
+// Per-course smoothing configuration (grade window and pace smoothing)
+const smoothingConfig = computed(() => {
+    const s = userSettingsStore.getSmoothingForCourse(props.plan?.courseId);
+    return {
+        gradeWindowMeters: s.gradeWindowMeters,
+        paceSmoothingMeters: s.paceSmoothingMeters,
+    };
+});
+
 // Calculate actual paces needed at each point to achieve target average pace
 const actualPaceData = computed(() => {
     if (!props.plan || !props.plan.pace || elevationPoints.length === 0) {
@@ -189,10 +241,10 @@ const actualPaceData = computed(() => {
     }
 
     return calculateActualPacesForTarget(
-        elevationPoints,
+        smoothedElevationPoints.value,
         props.plan.pace,
-        100,
-        300,
+        smoothingConfig.value.gradeWindowMeters,
+        smoothingConfig.value.paceSmoothingMeters,
     );
 });
 
@@ -281,7 +333,7 @@ function addWaypointPins() {
     props.waypoints.forEach((waypoint) => {
         // Find elevation at this distance
         const interpolatedPoint = interpolateAtDistance(
-            elevationPoints,
+            smoothedElevationPoints.value,
             waypoint.distance,
         );
         if (!interpolatedPoint) return;
@@ -441,13 +493,13 @@ function initChart() {
         .curve(d3.curveCardinal);
 
     g.append("path")
-        .datum(elevationPoints)
+        .datum(smoothedElevationPoints.value)
         .attr("fill", "url(#elevation-gradient)")
         .attr("d", area);
 
     // Add elevation line
     g.append("path")
-        .datum(elevationPoints)
+        .datum(smoothedElevationPoints.value)
         .attr("fill", "none")
         .attr("stroke", "var(--main-color)")
         .attr("stroke-width", 2)
@@ -637,12 +689,15 @@ function showElevationChartHover(distance: number) {
     }
 
     // Show tooltip for elevation chart
-    const interpolatedPoint = interpolateAtDistance(elevationPoints, distance);
+    const interpolatedPoint = interpolateAtDistance(
+        smoothedElevationPoints.value,
+        distance,
+    );
     if (interpolatedPoint) {
         const grade = calculateGradeAtDistance(
-            elevationPoints,
+            smoothedElevationPoints.value,
             interpolatedPoint.distance,
-            200,
+            smoothingConfig.value.gradeWindowMeters,
         );
         const gradeFormatted =
             grade >= 0 ? `+${grade.toFixed(1)}%` : `${grade.toFixed(1)}%`;
@@ -911,14 +966,17 @@ function handleMouseMove(event: MouseEvent) {
     chartHoverSource.value = "elevation";
 
     // Interpolate elevation and coordinates at this distance
-    const interpolatedPoint = interpolateAtDistance(elevationPoints, distance);
+    const interpolatedPoint = interpolateAtDistance(
+        smoothedElevationPoints.value,
+        distance,
+    );
 
     if (interpolatedPoint) {
         // Calculate grade at this distance
         const grade = calculateGradeAtDistance(
-            elevationPoints,
+            smoothedElevationPoints.value,
             interpolatedPoint.distance,
-            200,
+            smoothingConfig.value.gradeWindowMeters,
         );
         const gradeFormatted =
             grade >= 0 ? `+${grade.toFixed(1)}%` : `${grade.toFixed(1)}%`;
@@ -1053,16 +1111,16 @@ function updateMapHoverCrosshair() {
 
         // Show tooltip for map hover as well
         const interpolatedPoint = interpolateAtDistance(
-            elevationPoints,
+            smoothedElevationPoints.value,
             props.mapHoverDistance,
         );
 
         if (interpolatedPoint) {
             // Calculate grade at this distance
             const grade = calculateGradeAtDistance(
-                elevationPoints,
+                smoothedElevationPoints.value,
                 interpolatedPoint.distance,
-                200,
+                smoothingConfig.value.gradeWindowMeters,
             );
             const gradeFormatted =
                 grade >= 0 ? `+${grade.toFixed(1)}%` : `${grade.toFixed(1)}%`;
@@ -1152,9 +1210,16 @@ function handlePaceMouseMove(event: MouseEvent) {
     chartHoverSource.value = "pace";
 
     // Emit hover event
-    const interpolatedPoint = interpolateAtDistance(elevationPoints, distance);
+    const interpolatedPoint = interpolateAtDistance(
+        smoothedElevationPoints.value,
+        distance,
+    );
     if (interpolatedPoint) {
-        const grade = calculateGradeAtDistance(elevationPoints, distance);
+        const grade = calculateGradeAtDistance(
+            smoothedElevationPoints.value,
+            distance,
+            smoothingConfig.value.gradeWindowMeters,
+        );
         emit("pace-hover", {
             lat: interpolatedPoint.lat,
             lng: interpolatedPoint.lng,
@@ -1210,16 +1275,16 @@ function updateWaypointCrosshair() {
 
         // Show tooltip for selected waypoint
         const interpolatedPoint = interpolateAtDistance(
-            elevationPoints,
+            smoothedElevationPoints.value,
             props.selectedWaypointDistance,
         );
 
         if (interpolatedPoint) {
             // Calculate grade at this distance
             const grade = calculateGradeAtDistance(
-                elevationPoints,
+                smoothedElevationPoints.value,
                 interpolatedPoint.distance,
-                200,
+                smoothingConfig.value.gradeWindowMeters,
             );
             const gradeFormatted =
                 grade >= 0 ? `+${grade.toFixed(1)}%` : `${grade.toFixed(1)}%`;

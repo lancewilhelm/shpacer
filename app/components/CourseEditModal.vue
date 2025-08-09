@@ -56,6 +56,11 @@ const editStartTime = ref("");
 const isUpdating = ref(false);
 const updateError = ref("");
 
+// Per-course smoothing state (defaults from docs: Wg=100m, Δ=50m, Wp=300m)
+const smoothingGradeWindow = ref<number>(100);
+const smoothingSampleStep = ref<number>(50);
+const smoothingPaceWindow = ref<number>(300);
+
 // Waypoint edit state
 const editableWaypoints = ref<Waypoint[]>([]);
 const selectedWaypointForEdit = ref<Waypoint | null>(null);
@@ -156,6 +161,18 @@ watchEffect(() => {
         }
     }
 });
+
+// Initialize per-course smoothing fields when course or settings change
+watch(
+    () => [props.course?.id, userSettingsStore.settings],
+    () => {
+        const s = userSettingsStore.getSmoothingForCourse(props.course?.id);
+        smoothingGradeWindow.value = s.gradeWindowMeters;
+        smoothingSampleStep.value = s.sampleStepMeters;
+        smoothingPaceWindow.value = s.paceSmoothingMeters;
+    },
+    { immediate: true, deep: true },
+);
 
 // Initialize waypoints when they change
 watchEffect(() => {
@@ -377,6 +394,36 @@ async function saveCourseChanges() {
     } finally {
         isUpdating.value = false;
     }
+}
+
+function saveCourseSmoothing() {
+    if (!props.course) return;
+
+    userSettingsStore.updateCourseSmoothing(props.course.id, {
+        gradeWindowMeters:
+            smoothingGradeWindow.value === 0
+                ? 0
+                : Number(smoothingGradeWindow.value) || 100,
+        sampleStepMeters:
+            smoothingSampleStep.value === 0
+                ? 0
+                : Number(smoothingSampleStep.value) || 50,
+        paceSmoothingMeters:
+            smoothingPaceWindow.value === 0
+                ? 0
+                : Number(smoothingPaceWindow.value) || 300,
+    });
+}
+
+function resetCourseSmoothing() {
+    if (!props.course) return;
+
+    userSettingsStore.clearCourseSmoothing(props.course.id);
+
+    const defaults = userSettingsStore.getSmoothingForCourse();
+    smoothingGradeWindow.value = defaults.gradeWindowMeters;
+    smoothingSampleStep.value = defaults.sampleStepMeters;
+    smoothingPaceWindow.value = defaults.paceSmoothingMeters;
 }
 
 async function updateWaypoint(waypoint: Waypoint) {
@@ -1275,7 +1322,7 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                     </p>
                 </div>
 
-                <div class="space-y-4 max-h-96 overflow-y-auto">
+                <div class="space-y-4 h-full overflow-y-auto">
                     <div>
                         <label
                             class="block text-sm font-medium text-(--main-color) mb-2"
@@ -1329,6 +1376,80 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                                 type="time"
                                 class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
                             />
+                        </div>
+                    </div>
+
+                    <!-- Per-course smoothing controls -->
+                    <div
+                        class="space-y-3 p-3 border border-(--sub-color) rounded-lg"
+                    >
+                        <div class="text-sm font-medium text-(--main-color)">
+                            Pacing Smoothing (per-course)
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div>
+                                <label
+                                    class="block text-xs text-(--main-color) mb-1"
+                                >
+                                    Grade smoothing window (meters)
+                                </label>
+                                <input
+                                    v-model.number="smoothingGradeWindow"
+                                    type="number"
+                                    min="0"
+                                    step="10"
+                                    class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
+                                />
+                            </div>
+                            <div>
+                                <label
+                                    class="block text-xs text-(--main-color) mb-1"
+                                >
+                                    Integration sample step (meters)
+                                </label>
+                                <input
+                                    v-model.number="smoothingSampleStep"
+                                    type="number"
+                                    min="0"
+                                    step="10"
+                                    class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
+                                />
+                            </div>
+                            <div>
+                                <label
+                                    class="block text-xs text-(--main-color) mb-1"
+                                >
+                                    Pace chart smoothing (meters)
+                                </label>
+                                <input
+                                    v-model.number="smoothingPaceWindow"
+                                    type="number"
+                                    min="0"
+                                    step="10"
+                                    class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
+                                />
+                            </div>
+                        </div>
+                        <div class="text-xs text-(--sub-color)">
+                            These settings control grade estimation and pace
+                            smoothing for this course. Set to <b>0</b> for no
+                            smoothing (use raw data). Grade smoothing affects
+                            both the elevation and pace charts. Pace smoothing
+                            only affects the pace chart's visual smoothness.
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button
+                                class="px-3 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity"
+                                @click="saveCourseSmoothing"
+                            >
+                                Save Smoothing
+                            </button>
+                            <button
+                                class="px-3 py-2 border border-(--sub-color) text-(--main-color) rounded-lg hover:bg-(--sub-alt-color) transition-colors"
+                                @click="resetCourseSmoothing"
+                            >
+                                Reset to Defaults
+                            </button>
                         </div>
                     </div>
 

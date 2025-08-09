@@ -111,12 +111,12 @@ watchEffect(async () => {
     if (currentPlanId.value) {
         try {
             const [notesResponse, stoppageTimesResponse] = await Promise.all([
-                $fetch(
+                $fetch<{ notes: SelectWaypointNote[] }>(
                     `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-notes`,
-                ) as Promise<{ notes: SelectWaypointNote[] }>,
-                $fetch(
+                ),
+                $fetch<{ stoppageTimes: SelectWaypointStoppageTime[] }>(
                     `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-stoppage-times`,
-                ) as Promise<{ stoppageTimes: SelectWaypointStoppageTime[] }>,
+                ),
             ]);
             waypointNotes.value = notesResponse.notes;
             waypointStoppageTimes.value = stoppageTimesResponse.stoppageTimes;
@@ -440,12 +440,12 @@ async function handlePlanUpdated(plan: unknown) {
         // Refresh waypoint notes and stoppage times in case plan details changed
         try {
             const [notesResponse, stoppageTimesResponse] = await Promise.all([
-                $fetch(
+                $fetch<{ notes: SelectWaypointNote[] }>(
                     `/api/courses/${courseId}/plans/${typedPlan.id}/waypoint-notes`,
-                ) as { notes: SelectWaypointNote[] },
-                $fetch(
+                ),
+                $fetch<{ stoppageTimes: SelectWaypointStoppageTime[] }>(
                     `/api/courses/${courseId}/plans/${typedPlan.id}/waypoint-stoppage-times`,
-                ) as { stoppageTimes: SelectWaypointStoppageTime[] },
+                ),
             ]);
             waypointNotes.value = notesResponse.notes;
             waypointStoppageTimes.value = stoppageTimesResponse.stoppageTimes;
@@ -522,9 +522,9 @@ async function saveWaypointNote(waypointId: string, notes: string) {
         }
 
         // Refresh waypoint notes
-        const notesResponse = (await $fetch(
+        const notesResponse = await $fetch<{ notes: SelectWaypointNote[] }>(
             `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-notes`,
-        )) as { notes: SelectWaypointNote[] };
+        );
         waypointNotes.value = notesResponse.notes;
     } catch (error) {
         console.error("Error saving waypoint note:", error);
@@ -543,9 +543,9 @@ async function deleteWaypointNote(waypointId: string) {
         );
 
         // Refresh waypoint notes
-        const response = (await $fetch(
+        const response = await $fetch<{ notes: SelectWaypointNote[] }>(
             `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-notes`,
-        )) as { notes: SelectWaypointNote[] };
+        );
         waypointNotes.value = response.notes;
     } catch (error) {
         console.error("Error deleting waypoint note:", error);
@@ -574,9 +574,11 @@ async function saveWaypointStoppageTime(
         );
 
         // Refresh waypoint stoppage times
-        const response = (await $fetch(
+        const response = await $fetch<{
+            stoppageTimes: SelectWaypointStoppageTime[];
+        }>(
             `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-stoppage-times`,
-        )) as { stoppageTimes: SelectWaypointStoppageTime[] };
+        );
         waypointStoppageTimes.value = response.stoppageTimes;
     } catch (error) {
         console.error("Error saving waypoint stoppage time:", error);
@@ -595,9 +597,11 @@ async function deleteWaypointStoppageTime(waypointId: string) {
         );
 
         // Refresh waypoint stoppage times
-        const response = (await $fetch(
+        const response = await $fetch<{
+            stoppageTimes: SelectWaypointStoppageTime[];
+        }>(
             `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-stoppage-times`,
-        )) as { stoppageTimes: SelectWaypointStoppageTime[] };
+        );
         waypointStoppageTimes.value = response.stoppageTimes;
     } catch (error) {
         console.error("Error deleting waypoint stoppage time:", error);

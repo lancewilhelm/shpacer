@@ -85,6 +85,16 @@ const userSettingsStore = useUserSettingsStore();
 const editingWaypoint = ref<Waypoint | null>(null);
 const editModalOpen = ref(false);
 
+// Per-course smoothing settings (fallback to defaults if missing)
+const courseIdForSmoothing = computed(
+    () => currentPlan.value?.courseId || null,
+);
+const smoothingConfig = computed(() => {
+    return userSettingsStore.getSmoothingForCourse(
+        courseIdForSmoothing.value || undefined,
+    );
+});
+
 // Extract elevation profile from GeoJSON data
 const elevationProfile = computed((): ElevationPoint[] => {
     if (!geoJsonData.value || geoJsonData.value.length === 0) {
@@ -215,6 +225,8 @@ const elapsedTimes = computed(() => {
         waypointSegments: waypointSegments.value,
         useGradeAdjustment:
             userSettingsStore.settings.pacing?.useGradeAdjustment ?? false,
+        gradeWindowMeters: smoothingConfig.value.gradeWindowMeters,
+        sampleStepMeters: smoothingConfig.value.sampleStepMeters,
     });
 });
 
@@ -267,6 +279,8 @@ function getSegmentPacingData(waypointId: string) {
         elevationProfile: elevationProfile.value,
         waypointSegments: waypointSegments.value,
         getDefaultStoppageTime: getDefaultStoppageTime.value,
+        gradeWindowMeters: smoothingConfig.value.gradeWindowMeters,
+        sampleStepMeters: smoothingConfig.value.sampleStepMeters,
     });
 }
 

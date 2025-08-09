@@ -433,6 +433,59 @@ export function calculateGradeAtDistance(
 ): number {
   if (elevationPoints.length < 2) return 0;
 
+  // If windowDistance is 0, calculate grade using adjacent points
+  if (windowDistance === 0) {
+    // Find the two points that bracket the target distance
+    for (let i = 0; i < elevationPoints.length - 1; i++) {
+      const currentPoint = elevationPoints[i];
+      const nextPoint = elevationPoints[i + 1];
+
+      if (!currentPoint || !nextPoint) continue;
+
+      if (
+        targetDistance >= currentPoint.distance &&
+        targetDistance <= nextPoint.distance
+      ) {
+        const rise = nextPoint.elevation - currentPoint.elevation;
+        const run = nextPoint.distance - currentPoint.distance;
+
+        if (run === 0) return 0;
+
+        const grade = (rise / run) * 100;
+        return Math.max(-100, Math.min(100, grade));
+      }
+    }
+
+    // If not found between points, use first or last segment
+    if (targetDistance <= elevationPoints[0]!.distance && elevationPoints[1]) {
+      const rise = elevationPoints[1].elevation - elevationPoints[0]!.elevation;
+      const run = elevationPoints[1].distance - elevationPoints[0]!.distance;
+      if (run > 0) {
+        const grade = (rise / run) * 100;
+        return Math.max(-100, Math.min(100, grade));
+      }
+    }
+
+    const lastIdx = elevationPoints.length - 1;
+    if (
+      targetDistance >= elevationPoints[lastIdx]!.distance &&
+      elevationPoints[lastIdx - 1]
+    ) {
+      const rise =
+        elevationPoints[lastIdx]!.elevation -
+        elevationPoints[lastIdx - 1]!.elevation;
+      const run =
+        elevationPoints[lastIdx]!.distance -
+        elevationPoints[lastIdx - 1]!.distance;
+      if (run > 0) {
+        const grade = (rise / run) * 100;
+        return Math.max(-100, Math.min(100, grade));
+      }
+    }
+
+    return 0;
+  }
+
   // Find points within the window around the target distance
   const halfWindow = windowDistance / 2;
   const startDistance = targetDistance - halfWindow;

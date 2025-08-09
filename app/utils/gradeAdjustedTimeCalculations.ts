@@ -11,6 +11,9 @@ export interface GradeAdjustedTimeCalculationOptions {
   elevationProfile: ElevationPoint[];
   waypointSegments: WaypointSegment[];
   getDefaultStoppageTime: () => number;
+  // Optional smoothing overrides
+  gradeWindowMeters?: number;
+  sampleStepMeters?: number;
 }
 
 /**
@@ -307,8 +310,13 @@ export function calculateAllGradeAdjustedElapsedTimes(
   );
 
   // Integral method for equivalent factors with smoothing
-  const sampleStep = 50; // meters
-  const gradeWindow = 100; // meters
+  // If sampleStepMeters is 0, treat as default (50)
+  const sampleStep =
+    options.sampleStepMeters === 0
+      ? 50
+      : Math.max(1, options.sampleStepMeters ?? 50); // meters
+  // If gradeWindowMeters is 0, use 0 for raw grade calculation
+  const gradeWindow = options.gradeWindowMeters ?? 100; // meters
   const segmentFactorMap = new Map<string, number>(); // key: "from->to" => meanFactor
   let equivalentDistanceSum = 0;
   for (const seg of waypointSegments) {
@@ -425,8 +433,13 @@ export function getSegmentGradeAdjustment(
   );
 
   // Use integral mean factor for this specific segment to respect nonlinearity
-  const sampleStep = 50; // meters
-  const gradeWindow = 100; // meters
+  // If sampleStepMeters is 0, treat as default (50)
+  const sampleStep =
+    options.sampleStepMeters === 0
+      ? 50
+      : Math.max(1, options.sampleStepMeters ?? 50); // meters
+  // If gradeWindowMeters is 0, use 0 for raw grade calculation
+  const gradeWindow = options.gradeWindowMeters ?? 100; // meters
   const segStart = Math.min(fromWaypoint.distance, toWaypoint.distance);
   const segEnd = Math.max(fromWaypoint.distance, toWaypoint.distance);
   let weightedFactorSumSeg = 0;
