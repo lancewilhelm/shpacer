@@ -535,13 +535,13 @@ function getSegmentGradeDisplay(waypointId: string): string {
                             v-if="index < waypoints.length - 1"
                             class="flex justify-center my-1 border-t border-b border-dotted text-(--sub-color)"
                         >
-                            <div class="w-full max-w-48">
+                            <div class="w-full">
                                 <div
                                     v-if="getSegmentForWaypoint(waypoint.id)"
                                     class="px-2 py-1 text-xs"
                                 >
                                     <div
-                                        class="flex items-center justify-center gap-4 text-(--sub-color)"
+                                        class="flex flex-wrap items-center justify-center gap-x-4 text-(--sub-color)"
                                     >
                                         <!-- Distance -->
                                         <div
@@ -616,13 +616,11 @@ function getSegmentGradeDisplay(waypointId: string): string {
                                         <!-- Segment Time and Pace -->
                                         <div
                                             v-if="currentPlan"
-                                            class="flex items-center gap-3 text-xs text-(--sub-color) mt-1"
+                                            class="contents"
                                         >
                                             <!-- Segment Time -->
                                             <div
-                                                v-tooltip="
-                                                    'Estimated time for this segment'
-                                                "
+                                                v-tooltip="'Estimated duration'"
                                                 class="flex items-center gap-1"
                                             >
                                                 <Icon
@@ -637,7 +635,7 @@ function getSegmentGradeDisplay(waypointId: string): string {
                                             <!-- Segment Pace -->
                                             <div
                                                 v-tooltip="
-                                                    'Pace for this segment'
+                                                    'Segment average pace'
                                                 "
                                                 class="flex items-center gap-1"
                                             >
@@ -661,7 +659,7 @@ function getSegmentGradeDisplay(waypointId: string): string {
                                                     )
                                                 "
                                                 v-tooltip="
-                                                    'Average grade for this segment'
+                                                    'Segment average grade'
                                                 "
                                                 class="flex items-center gap-1"
                                             >
