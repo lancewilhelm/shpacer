@@ -227,6 +227,8 @@ const elapsedTimes = computed(() => {
             userSettingsStore.settings.pacing?.useGradeAdjustment ?? false,
         gradeWindowMeters: smoothingConfig.value.gradeWindowMeters,
         sampleStepMeters: smoothingConfig.value.sampleStepMeters,
+        maintainTargetAverage:
+            (currentPlan.value?.paceMode || "pace") !== "normalized",
     });
 });
 
@@ -281,6 +283,8 @@ function getSegmentPacingData(waypointId: string) {
         getDefaultStoppageTime: getDefaultStoppageTime.value,
         gradeWindowMeters: smoothingConfig.value.gradeWindowMeters,
         sampleStepMeters: smoothingConfig.value.sampleStepMeters,
+        maintainTargetAverage:
+            (currentPlan.value?.paceMode || "pace") !== "normalized",
     });
 }
 
@@ -314,9 +318,12 @@ function getSegmentTime(waypointId: string): string {
         return "-";
     }
 
-    const minutes = Math.floor(segmentTime / 60);
+    const hours = Math.floor(segmentTime / 3600);
+    const minutes = Math.floor((segmentTime % 3600) / 60);
     const seconds = Math.round(segmentTime % 60);
-    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+    return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds
+        .toString()
+        .padStart(2, "0")}`;
 }
 
 function getSegmentPace(waypointId: string): string {

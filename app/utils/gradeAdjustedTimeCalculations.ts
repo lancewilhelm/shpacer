@@ -14,6 +14,8 @@ export interface GradeAdjustedTimeCalculationOptions {
   // Optional smoothing overrides
   gradeWindowMeters?: number;
   sampleStepMeters?: number;
+  // Optional behavior: when true (default), normalize to maintain target average
+  maintainTargetAverage?: boolean;
 }
 
 /**
@@ -351,7 +353,9 @@ export function calculateAllGradeAdjustedElapsedTimes(
   }
 
   const normalizationScale =
-    equivalentDistanceSum > 0 ? totalDistance / equivalentDistanceSum : 1.0;
+    (options.maintainTargetAverage ?? true) && equivalentDistanceSum > 0
+      ? totalDistance / equivalentDistanceSum
+      : 1.0;
 
   const defaultStoppageTime = getDefaultStoppageTime();
   let cumulativeElapsed = 0;
@@ -485,7 +489,9 @@ export function getSegmentGradeAdjustment(
     equivalentDistanceSum += weightedFactorSum;
   }
   const normalizationScale =
-    equivalentDistanceSum > 0 ? totalDistance / equivalentDistanceSum : 1.0;
+    (options.maintainTargetAverage ?? true) && equivalentDistanceSum > 0
+      ? totalDistance / equivalentDistanceSum
+      : 1.0;
 
   // Normalized adjusted pace for this segment
   const adjustedPace = plan.pace * adjustmentFactor * normalizationScale;

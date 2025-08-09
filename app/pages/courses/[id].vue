@@ -88,6 +88,19 @@ const waypointNotes = ref<SelectWaypointNote[]>([]);
 const waypointStoppageTimes = ref<SelectWaypointStoppageTime[]>([]);
 const planSetupModalOpen = ref(false);
 const editingPlan = ref<SelectPlan | null>(null);
+const editingPlanPayload = computed(() => {
+    const ep = editingPlan.value;
+    if (!ep) return null;
+    return {
+        id: ep.id,
+        name: ep.name,
+        pace: ep.pace ?? undefined,
+        paceUnit: ep.paceUnit,
+        defaultStoppageTime: ep.defaultStoppageTime ?? undefined,
+        paceMode: (ep.paceMode as "pace" | "time" | "normalized") ?? undefined,
+        targetTimeSeconds: ep.targetTimeSeconds ?? undefined,
+    };
+});
 
 // Store the course and waypoints data in computed properties
 const course = computed(() => courseData.value?.course);
@@ -949,18 +962,8 @@ onUnmounted(() => {
         <PlanSetupModal
             :is-open="planSetupModalOpen"
             :course-id="courseId"
-            :existing-plan="
-                editingPlan
-                    ? {
-                          id: editingPlan.id,
-                          name: editingPlan.name,
-                          pace: editingPlan.pace || undefined,
-                          paceUnit: editingPlan.paceUnit,
-                          defaultStoppageTime:
-                              editingPlan.defaultStoppageTime || undefined,
-                      }
-                    : null
-            "
+            :course-total-distance="course?.totalDistance || null"
+            :existing-plan="editingPlanPayload"
             @close="closePlanSetupModal"
             @plan-created="handlePlanCreated"
             @plan-updated="handlePlanUpdated"

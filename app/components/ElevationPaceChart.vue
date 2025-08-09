@@ -264,11 +264,15 @@ const actualPaceData = computed(() => {
         return [];
     }
 
+    const mode = props.plan.paceMode || "pace";
+    const maintainTargetAverage = mode !== "normalized";
+
     return calculateActualPacesForTarget(
         smoothedElevationPoints.value,
         props.plan.pace,
         smoothingConfig.value.gradeWindowMeters,
         smoothingConfig.value.paceSmoothingMeters,
+        maintainTargetAverage,
     );
 });
 
@@ -285,8 +289,9 @@ const paceRange = computed(() => {
 
 // Format pace for display (converts seconds per mile/km to MM:SS format)
 function formatPace(paceInSeconds: number): string {
-    const minutes = Math.floor(paceInSeconds / 60);
-    const seconds = Math.round(paceInSeconds % 60);
+    const totalSeconds = Math.round(paceInSeconds);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 

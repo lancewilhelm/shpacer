@@ -57,12 +57,12 @@ When grade adjustment is enabled, the waypoint list displays additional informat
 
 ### Segment Information Display
 - **Segment Time**: Estimated time to complete the segment (e.g., "8:45")
-- **Segment Pace**: Adjusted pace for the segment (e.g., "6:15/km") 
+- **Segment Pace**: Adjusted pace for the segment (e.g., "6:15/km")
 - **Grade** (when enabled): Simple grade display with +/- sign (e.g., "+3.2%", "-1.8%", "0%")
-- **Visual Indicators**: 
-  - 🕐 Clock icon for segment time
-  - 📈 Activity icon for segment pace  
-  - 📊 Trending icon for grade
+- **Visual Indicators**:
+  - Clock icon for segment time
+  - Activity icon for segment pace
+  - Trending icon for grade
 
 ## Technical Implementation
 

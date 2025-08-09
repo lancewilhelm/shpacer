@@ -62,9 +62,15 @@ export function adjustPaceForGrade(basePace: number, gradient: number): number {
  * This function takes a target average pace (what you want your overall time to average to) and
  * calculates what pace you need to run at each point considering the grade adjustments.
  *
+ * If maintainTargetAverage is true, paces are normalized so that the overall average equals
+ * targetAveragePace after accounting for grade factors. If false, no normalization is applied
+ * and paces reflect raw grade effects from the base targetAveragePace.
+ *
  * @param elevationPoints Array of elevation points with distance, elevation, and coordinate data
  * @param targetAveragePace The desired average pace in seconds per km/mile (grade-adjusted)
  * @param windowDistance Window size in meters for grade smoothing (default: 100m)
+ * @param paceSmoothingDistance Window size in meters for smoothing paces (default: 200m)
+ * @param maintainTargetAverage Whether to normalize paces to maintain the target average (default: true)
  * @returns Array of actual paces needed at each point to achieve the target average
  */
 export function calculateActualPacesForTarget(
@@ -72,6 +78,7 @@ export function calculateActualPacesForTarget(
   targetAveragePace: number,
   windowDistance: number = 100,
   paceSmoothingDistance: number = 200,
+  maintainTargetAverage: boolean = true,
 ): Array<{ distance: number; actualPace: number; grade: number }> {
   const n = elevationPoints.length;
   if (n < 2) return [];
@@ -148,7 +155,9 @@ export function calculateActualPacesForTarget(
     equivalentDistanceSum += 0.5 * (f0 + f1) * dL;
   }
   const normalizationScale =
-    equivalentDistanceSum > 0 ? totalDistance / equivalentDistanceSum : 1.0;
+    maintainTargetAverage && equivalentDistanceSum > 0
+      ? totalDistance / equivalentDistanceSum
+      : 1.0;
 
   // Raw grade-adjusted paces
   const rawActualPaces: number[] = factors.map(

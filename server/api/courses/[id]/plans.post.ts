@@ -57,6 +57,8 @@ export default defineEventHandler(async (event) => {
         name: body.name.trim(),
         pace: body.pace || null,
         paceUnit: body.paceUnit || "min_per_km",
+        paceMode: body.paceMode || "pace",
+        targetTimeSeconds: body.targetTimeSeconds ?? null,
         defaultStoppageTime: body.defaultStoppageTime || 0,
       })
       .returning();

@@ -18,6 +18,7 @@ export interface TimeCalculationOptions {
   useGradeAdjustment?: boolean;
   gradeWindowMeters?: number;
   sampleStepMeters?: number;
+  maintainTargetAverage?: boolean;
 }
 
 /**
@@ -107,6 +108,7 @@ export function calculateElapsedTimeToWaypoint(
       getDefaultStoppageTime,
       gradeWindowMeters: options.gradeWindowMeters,
       sampleStepMeters: options.sampleStepMeters,
+      maintainTargetAverage: options.maintainTargetAverage,
     };
     return calculateGradeAdjustedElapsedTime(
       targetWaypointId,
@@ -170,6 +172,7 @@ export function calculateAllElapsedTimes(
       getDefaultStoppageTime: options.getDefaultStoppageTime,
       gradeWindowMeters: options.gradeWindowMeters,
       sampleStepMeters: options.sampleStepMeters,
+      maintainTargetAverage: options.maintainTargetAverage,
     };
     return calculateAllGradeAdjustedElapsedTimes(gradeAdjustedOptions);
   }

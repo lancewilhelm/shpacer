@@ -60,9 +60,10 @@ function deletePlan(planId: string, event: Event) {
 }
 
 function formatPace(pace?: number, paceUnit?: string): string {
-    if (!pace) return "";
-    const minutes = Math.floor(pace / 60);
-    const seconds = pace % 60;
+    if (pace == null) return "";
+    const totalSeconds = Math.round(pace);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
     const unit = paceUnit === "min_per_mi" ? "/mi" : "/km";
     return `${minutes}:${seconds.toString().padStart(2, "0")} ${unit}`;
 }

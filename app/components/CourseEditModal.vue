@@ -1405,10 +1405,10 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                                 <label
                                     class="block text-xs text-(--main-color) mb-1"
                                 >
-                                    Integration sample step (meters)
+                                    Pace chart smoothing (meters)
                                 </label>
                                 <input
-                                    v-model.number="smoothingSampleStep"
+                                    v-model.number="smoothingPaceWindow"
                                     type="number"
                                     min="0"
                                     step="10"
@@ -1419,10 +1419,10 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                                 <label
                                     class="block text-xs text-(--main-color) mb-1"
                                 >
-                                    Pace chart smoothing (meters)
+                                    Integration sample step (meters)
                                 </label>
                                 <input
-                                    v-model.number="smoothingPaceWindow"
+                                    v-model.number="smoothingSampleStep"
                                     type="number"
                                     min="0"
                                     step="10"
@@ -1436,6 +1436,12 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                             smoothing (use raw data). Grade smoothing affects
                             both the elevation and pace charts. Pace smoothing
                             only affects the pace chart's visual smoothness.
+                            Integration sample step affects the accuracy of the
+                            adjusted pace calculation between waypoints. A
+                            smaller sample step will result in a more accurate
+                            pace calculation, but will also increase the
+                            processing time. For large courses, a larger sample
+                            step may be more efficient.
                         </div>
                         <div class="flex items-center gap-2">
                             <button

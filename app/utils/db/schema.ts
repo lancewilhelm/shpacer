@@ -176,6 +176,10 @@ export const plans = sqliteTable("plans", {
   name: text("name").notNull(),
   pace: integer("pace"), // target average pace in seconds per kilometer or mile (grade-adjusted)
   paceUnit: text("pace_unit").notNull().default("min_per_km"), // 'min_per_km' or 'min_per_mi'
+  // Mode in which pacing is defined: 'pace' | 'time' | 'normalized'
+  paceMode: text("pace_mode").notNull().default("pace"),
+  // If paceMode is 'time', the target finish time for the course, in seconds
+  targetTimeSeconds: integer("target_time_seconds"),
   defaultStoppageTime: integer("default_stoppage_time").default(0), // default stoppage time in seconds
 
   // Timestamps

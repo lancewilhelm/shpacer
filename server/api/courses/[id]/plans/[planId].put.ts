@@ -84,6 +84,29 @@ export default defineEventHandler(async (event) => {
       updateData.paceUnit = body.paceUnit;
     }
 
+    if (body.paceMode !== undefined) {
+      if (!["pace", "time", "normalized"].includes(body.paceMode)) {
+        throw createError({
+          statusCode: 400,
+          statusMessage: "Invalid pace mode",
+        });
+      }
+      updateData.paceMode = body.paceMode;
+    }
+
+    if (body.targetTimeSeconds !== undefined) {
+      if (
+        typeof body.targetTimeSeconds !== "number" ||
+        body.targetTimeSeconds < 0
+      ) {
+        throw createError({
+          statusCode: 400,
+          statusMessage: "Target time must be a non-negative number of seconds",
+        });
+      }
+      updateData.targetTimeSeconds = body.targetTimeSeconds;
+    }
+
     if (body.defaultStoppageTime !== undefined) {
       if (
         typeof body.defaultStoppageTime !== "number" ||
