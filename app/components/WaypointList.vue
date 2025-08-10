@@ -646,7 +646,7 @@ function getSegmentGradeDisplay(waypointId: string): string {
                                             >
                                                 <Icon
                                                     name="lucide:clock"
-                                                    class="w-3 h-3"
+                                                    class="w-3 h-3 -translate-y-0.25"
                                                 />
                                                 <span>{{
                                                     getSegmentTime(waypoint.id)
@@ -662,7 +662,7 @@ function getSegmentGradeDisplay(waypointId: string): string {
                                             >
                                                 <Icon
                                                     name="lucide:activity"
-                                                    class="w-3 h-3"
+                                                    class="w-3 h-3 -translate-y-0.25"
                                                 />
                                                 <span>{{
                                                     getSegmentPace(waypoint.id)
@@ -685,8 +685,15 @@ function getSegmentGradeDisplay(waypointId: string): string {
                                                 class="flex items-center gap-1"
                                             >
                                                 <Icon
-                                                    name="lucide:trending-up"
-                                                    class="w-3 h-3"
+                                                    name="lucide:triangle-right"
+                                                    class="w-3 h-3 -translate-y-0.25"
+                                                    :class="
+                                                        getSegmentGradeDisplay(
+                                                            waypoint.id,
+                                                        ).slice(0, 1) === '-'
+                                                            ? '-scale-x-100'
+                                                            : ''
+                                                    "
                                                 />
                                                 <span>{{
                                                     getSegmentGradeDisplay(
