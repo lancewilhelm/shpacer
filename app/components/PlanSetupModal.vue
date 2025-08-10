@@ -444,7 +444,9 @@ onBeforeUnmount(() => {
                         <input
                             id="plan-pace"
                             v-model="formData.pace"
+                            v-time-mask="'mmss'"
                             type="text"
+                            inputmode="numeric"
                             placeholder="7:30"
                             pattern="\d{1,2}:\d{2}"
                             class="flex-1 px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) placeholder--(--sub-color) focus:outline-none focus:ring-2 focus:ring-(--main-color) focus:border-transparent"
@@ -481,20 +483,14 @@ onBeforeUnmount(() => {
                         <input
                             id="target-time"
                             v-model="formData.targetTime"
+                            v-time-mask="'hhmmss'"
                             type="text"
+                            inputmode="numeric"
                             placeholder="3:45:00"
                             pattern="\d{1,2}:\d{2}:\d{2}"
                             class="flex-1 px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) placeholder--(--sub-color) focus:outline-none focus:ring-2 focus:ring-(--main-color) focus:border-transparent"
                             :disabled="isSubmitting"
                         />
-                        <select
-                            v-model="formData.paceUnit"
-                            class="px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:outline-none focus:ring-2 focus:ring-(--main-color) focus:border-transparent"
-                            :disabled="isSubmitting"
-                        >
-                            <option value="min_per_km">min/km</option>
-                            <option value="min_per_mi">min/mi</option>
-                        </select>
                     </div>
                     <p class="text-xs text-(--sub-color) mt-1">
                         Format: HH:MM:SS (e.g., 3:45:00)
@@ -527,7 +523,9 @@ onBeforeUnmount(() => {
                     <input
                         id="default-stoppage-time"
                         v-model="formData.defaultStoppageTime"
+                        v-time-mask="'mmss'"
                         type="text"
+                        inputmode="numeric"
                         placeholder="2:00"
                         pattern="\d{1,2}:\d{2}"
                         class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) placeholder--(--sub-color) focus:outline-none focus:ring-2 focus:ring-(--main-color) focus:border-transparent"

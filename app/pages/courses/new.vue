@@ -54,9 +54,40 @@ async function createCourse() {
     try {
         let raceDateTime = null;
         if (raceDate.value) {
-            // Combine date and time into a single datetime value
-            const time = startTime.value || "00:00";
-            raceDateTime = `${raceDate.value}T${time}:00`;
+            const raw = (startTime.value || "").trim();
+            let time = "00:00:00";
+            if (raw) {
+                const parts = raw.split(":").map((p) => parseInt(p, 10));
+                if (parts.length === 2) {
+                    const [hh, mm] = parts;
+                    if (
+                        !Number.isNaN(hh) &&
+                        !Number.isNaN(mm) &&
+                        hh >= 0 &&
+                        hh <= 23 &&
+                        mm >= 0 &&
+                        mm <= 59
+                    ) {
+                        time = `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00`;
+                    }
+                } else if (parts.length === 3) {
+                    const [hh, mm, ss] = parts;
+                    if (
+                        !Number.isNaN(hh) &&
+                        !Number.isNaN(mm) &&
+                        !Number.isNaN(ss) &&
+                        hh >= 0 &&
+                        hh <= 23 &&
+                        mm >= 0 &&
+                        mm <= 59 &&
+                        ss >= 0 &&
+                        ss <= 59
+                    ) {
+                        time = `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
+                    }
+                }
+            }
+            raceDateTime = `${raceDate.value}T${time}`;
         }
 
         const response = await $fetch<{ course: SelectCourse }>(
@@ -180,7 +211,11 @@ const canCreate = computed(() => {
                         </label>
                         <input
                             v-model="startTime"
-                            type="time"
+                            v-time-mask="'hhmmss'"
+                            type="text"
+                            inputmode="numeric"
+                            placeholder="HH:MM:SS"
+                            pattern="\d{1,2}:\d{2}:\d{2}"
                             class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:outline-none focus:border-(--main-color)"
                         />
                         <p class="text-xs text-(--sub-color) mt-1">
