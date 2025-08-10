@@ -380,8 +380,8 @@ onBeforeUnmount(() => {
                             class="flex items-center gap-2 cursor-pointer text-(--main-color)"
                         >
                             <input
-                                type="radio"
                                 v-model="formData.paceMode"
+                                type="radio"
                                 value="pace"
                                 class="accent-(--main-color)"
                                 :disabled="isSubmitting"
@@ -392,8 +392,8 @@ onBeforeUnmount(() => {
                             class="flex items-center gap-2 cursor-pointer text-(--main-color)"
                         >
                             <input
-                                type="radio"
                                 v-model="formData.paceMode"
+                                type="radio"
                                 value="time"
                                 class="accent-(--main-color)"
                                 :disabled="isSubmitting"
@@ -404,8 +404,8 @@ onBeforeUnmount(() => {
                             class="flex items-center gap-2 cursor-pointer text-(--main-color)"
                         >
                             <input
-                                type="radio"
                                 v-model="formData.paceMode"
+                                type="radio"
                                 value="normalized"
                                 class="accent-(--main-color)"
                                 :disabled="isSubmitting"

@@ -59,31 +59,39 @@ async function createCourse() {
             if (raw) {
                 const parts = raw.split(":").map((p) => parseInt(p, 10));
                 if (parts.length === 2) {
-                    const [hh, mm] = parts;
+                    const h = parts[0];
+                    const m = parts[1];
                     if (
-                        !Number.isNaN(hh) &&
-                        !Number.isNaN(mm) &&
-                        hh >= 0 &&
-                        hh <= 23 &&
-                        mm >= 0 &&
-                        mm <= 59
+                        typeof h === "number" &&
+                        typeof m === "number" &&
+                        Number.isFinite(h) &&
+                        Number.isFinite(m) &&
+                        h >= 0 &&
+                        h <= 23 &&
+                        m >= 0 &&
+                        m <= 59
                     ) {
-                        time = `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00`;
+                        time = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
                     }
                 } else if (parts.length === 3) {
-                    const [hh, mm, ss] = parts;
+                    const h = parts[0];
+                    const m = parts[1];
+                    const s = parts[2];
                     if (
-                        !Number.isNaN(hh) &&
-                        !Number.isNaN(mm) &&
-                        !Number.isNaN(ss) &&
-                        hh >= 0 &&
-                        hh <= 23 &&
-                        mm >= 0 &&
-                        mm <= 59 &&
-                        ss >= 0 &&
-                        ss <= 59
+                        typeof h === "number" &&
+                        typeof m === "number" &&
+                        typeof s === "number" &&
+                        Number.isFinite(h) &&
+                        Number.isFinite(m) &&
+                        Number.isFinite(s) &&
+                        h >= 0 &&
+                        h <= 23 &&
+                        m >= 0 &&
+                        m <= 59 &&
+                        s >= 0 &&
+                        s <= 59
                     ) {
-                        time = `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
+                        time = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
                     }
                 }
             }
