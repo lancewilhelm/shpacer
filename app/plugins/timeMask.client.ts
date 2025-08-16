@@ -22,7 +22,10 @@ interface Handlers {
   onBlur: (e: FocusEvent) => void;
 }
 
-const stateMap = new WeakMap<HTMLInputElement, { config: TimeMaskConfig; handlers: Handlers }>();
+const stateMap = new WeakMap<
+  HTMLInputElement,
+  { config: TimeMaskConfig; handlers: Handlers }
+>();
 
 function getDigits(value: string) {
   return value.replace(/\D+/g, "");
@@ -91,7 +94,10 @@ function formatOnBlur(digits: string, mode: TimeMaskMode): string {
   }
 }
 
-function digitIndexFromMaskedIndex(masked: string, maskedIndex: number): number {
+function digitIndexFromMaskedIndex(
+  masked: string,
+  maskedIndex: number,
+): number {
   let count = 0;
   for (let i = 0; i < Math.min(maskedIndex, masked.length); i++) {
     if (/\d/.test(masked[i]!)) count++;
@@ -114,17 +120,29 @@ function maskedIndexFromDigitIndex(masked: string, digitIndex: number): number {
   return masked.length;
 }
 
-function resolveMode(el: HTMLInputElement, binding: TimeMaskBinding | undefined): TimeMaskMode {
+function resolveMode(
+  el: HTMLInputElement,
+  binding: TimeMaskBinding | undefined,
+): TimeMaskMode {
   // From explicit binding value
   if (typeof binding === "string") {
     return binding === "hhmmss" ? "hhmmss" : "mmss";
   }
-  if (binding && typeof binding === "object" && binding.mode && binding.mode !== "auto") {
+  if (
+    binding &&
+    typeof binding === "object" &&
+    binding.mode &&
+    binding.mode !== "auto"
+  ) {
     return binding.mode === "hhmmss" ? "hhmmss" : "mmss";
   }
 
   // From data attribute
-  const dataAttr = (el.dataset.timeFormat || el.getAttribute("data-time-format") || "").toLowerCase();
+  const dataAttr = (
+    el.dataset.timeFormat ||
+    el.getAttribute("data-time-format") ||
+    ""
+  ).toLowerCase();
   if (dataAttr === "hhmmss" || dataAttr === "mmss") {
     return dataAttr as TimeMaskMode;
   }
@@ -175,7 +193,10 @@ function isAllowedKey(e: KeyboardEvent): boolean {
   return /^[0-9]$/.test(e.key);
 }
 
-function attachHandlers(el: HTMLInputElement, config: TimeMaskConfig): Handlers {
+function attachHandlers(
+  el: HTMLInputElement,
+  config: TimeMaskConfig,
+): Handlers {
   // Improve mobile keypad
   if (!el.getAttribute("inputmode")) {
     el.setAttribute("inputmode", "numeric");
@@ -204,7 +225,10 @@ function attachHandlers(el: HTMLInputElement, config: TimeMaskConfig): Handlers 
       el.value = masked;
     }
 
-    const newCaret = maskedIndexFromDigitIndex(masked, Math.min(currentDigitIndex, limited.length));
+    const newCaret = maskedIndexFromDigitIndex(
+      masked,
+      Math.min(currentDigitIndex, limited.length),
+    );
     try {
       el.setSelectionRange(newCaret, newCaret);
     } catch {
@@ -234,7 +258,9 @@ function attachHandlers(el: HTMLInputElement, config: TimeMaskConfig): Handlers 
     const currentDigits = getDigits(raw);
     // Replace selected digit range with pasted digits
     const newDigits =
-      currentDigits.slice(0, startDigitIdx) + pasteDigits + currentDigits.slice(endDigitIdx);
+      currentDigits.slice(0, startDigitIdx) +
+      pasteDigits +
+      currentDigits.slice(endDigitIdx);
 
     const limited = limitDigits(newDigits, config.mode);
     const masked = formatOnInput(limited, config.mode);
@@ -242,7 +268,10 @@ function attachHandlers(el: HTMLInputElement, config: TimeMaskConfig): Handlers 
     el.value = masked;
 
     // Caret after the pasted digits
-    const caretDigitIdx = Math.min(startDigitIdx + pasteDigits.length, limited.length);
+    const caretDigitIdx = Math.min(
+      startDigitIdx + pasteDigits.length,
+      limited.length,
+    );
     const newCaret = maskedIndexFromDigitIndex(masked, caretDigitIdx);
     try {
       el.setSelectionRange(newCaret, newCaret);
@@ -302,7 +331,10 @@ const timeMaskDirective: Directive<HTMLInputElement, TimeMaskBinding> = {
     // Initial normalization (e.g., if v-model has a prefed value)
     const digits = getDigits(el.value || "");
     if (digits) {
-      const masked = formatOnInput(limitDigits(digits, config.mode), config.mode);
+      const masked = formatOnInput(
+        limitDigits(digits, config.mode),
+        config.mode,
+      );
       if (masked !== el.value) {
         el.value = masked;
         el.dispatchEvent(new Event("input", { bubbles: true }));

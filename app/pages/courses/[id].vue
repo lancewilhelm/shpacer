@@ -334,6 +334,7 @@ function handleMapLeave() {
 
 // Waypoint interaction state
 const selectedWaypoint = ref<Waypoint | null>(null);
+const waypointPanelTab = ref<"waypoints" | "splits">("waypoints");
 
 // Handle waypoint events
 function handleWaypointSelect(waypoint: Waypoint) {
@@ -905,40 +906,87 @@ onUnmounted(() => {
                             @mousedown="startResize"
                         />
 
-                        <div class="p-4 border-b border-(--sub-color)">
-                            <div
-                                class="text-lg font-semibold text-(--main-color)"
-                            >
-                                Waypoints
+                        <div class="border-b border-(--sub-color)">
+                            <div class="flex items-center">
+                                <button
+                                    class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
+                                    :class="{
+                                        'bg-(--main-color) text-(--bg-color)':
+                                            waypointPanelTab === 'waypoints',
+                                        'text-(--sub-color) hover:text-(--main-color)':
+                                            waypointPanelTab !== 'waypoints',
+                                    }"
+                                    @click="waypointPanelTab = 'waypoints'"
+                                >
+                                    Waypoints
+                                </button>
+                                <button
+                                    class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
+                                    :class="{
+                                        'bg-(--main-color) text-(--bg-color)':
+                                            waypointPanelTab === 'splits',
+                                        'text-(--sub-color) hover:text-(--main-color)':
+                                            waypointPanelTab !== 'splits',
+                                    }"
+                                    @click="waypointPanelTab = 'splits'"
+                                >
+                                    Splits
+                                </button>
                             </div>
                         </div>
                         <div class="flex-1 overflow-hidden">
-                            <WaypointList
-                                :waypoints="waypoints"
-                                :selected-waypoint="selectedWaypoint"
-                                :current-plan-id="currentPlanId"
-                                :current-plan="currentPlan"
-                                :waypoint-stoppage-times="waypointStoppageTimes"
-                                :get-waypoint-note="getWaypointNote"
-                                :get-waypoint-stoppage-time="
-                                    getWaypointStoppageTime
-                                "
-                                :get-default-stoppage-time="
-                                    getDefaultStoppageTime
-                                "
-                                :geo-json-data="geoJsonData"
-                                @waypoint-select="handleWaypointSelect"
-                                @waypoint-hover="handleWaypointHover"
-                                @waypoint-leave="handleWaypointLeave"
-                                @save-waypoint-note="saveWaypointNote"
-                                @delete-waypoint-note="deleteWaypointNote"
-                                @save-waypoint-stoppage-time="
-                                    saveWaypointStoppageTime
-                                "
-                                @delete-waypoint-stoppage-time="
-                                    deleteWaypointStoppageTime
-                                "
-                            />
+                            <div
+                                v-if="waypointPanelTab === 'waypoints'"
+                                class="h-full"
+                            >
+                                <WaypointList
+                                    :waypoints="waypoints"
+                                    :selected-waypoint="selectedWaypoint"
+                                    :current-plan-id="currentPlanId"
+                                    :current-plan="currentPlan"
+                                    :waypoint-stoppage-times="
+                                        waypointStoppageTimes
+                                    "
+                                    :get-waypoint-note="getWaypointNote"
+                                    :get-waypoint-stoppage-time="
+                                        getWaypointStoppageTime
+                                    "
+                                    :get-default-stoppage-time="
+                                        getDefaultStoppageTime
+                                    "
+                                    :geo-json-data="geoJsonData"
+                                    @waypoint-select="handleWaypointSelect"
+                                    @waypoint-hover="handleWaypointHover"
+                                    @waypoint-leave="handleWaypointLeave"
+                                    @save-waypoint-note="saveWaypointNote"
+                                    @delete-waypoint-note="deleteWaypointNote"
+                                    @save-waypoint-stoppage-time="
+                                        saveWaypointStoppageTime
+                                    "
+                                    @delete-waypoint-stoppage-time="
+                                        deleteWaypointStoppageTime
+                                    "
+                                />
+                            </div>
+                            <div v-else class="h-full">
+                                <SplitsTable
+                                    :geo-json-data="geoJsonData"
+                                    :current-plan="currentPlan"
+                                    :waypoints="
+                                        waypoints.map((w) => ({
+                                            id: w.id,
+                                            distance: w.distance,
+                                            order: w.order,
+                                        }))
+                                    "
+                                    :waypoint-stoppage-times="
+                                        waypointStoppageTimes
+                                    "
+                                    :get-default-stoppage-time="
+                                        getDefaultStoppageTime
+                                    "
+                                />
+                            </div>
                         </div>
                     </div>
                 </div>
