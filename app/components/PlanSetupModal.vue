@@ -546,7 +546,7 @@ async function handleSubmit() {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             const data = await response.json();
-            emit("plan-updated", data);
+            emit("plan-updated", data.plan);
         } else {
             const response = await fetch(
                 `/api/courses/${props.courseId}/plans`,
@@ -560,7 +560,7 @@ async function handleSubmit() {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             const data = await response.json();
-            emit("plan-created", data);
+            emit("plan-created", data.plan);
         }
 
         emit("close");
