@@ -477,8 +477,12 @@ const splits = computed<SplitRow[]>(() => {
                         <th class="text-right p-x-1! py-1!">Gain</th>
                         <th class="text-right p-x-1! py-1!">Loss</th>
                         <th class="text-right p-x-1! py-1!">Grade</th>
-                        <th class="text-right p-x-1! py-1!">Pace</th>
-                        <th class="text-right p-x-1! py-1!">Elapsed</th>
+                        <th v-if="currentPlan" class="text-right p-x-1! py-1!">
+                            Pace
+                        </th>
+                        <th v-if="currentPlan" class="text-right p-x-1! py-1!">
+                            Elapsed
+                        </th>
                     </tr>
                 </thead>
                 <tbody>
@@ -515,7 +519,10 @@ const splits = computed<SplitRow[]>(() => {
                             >
                             <span v-else>-</span>
                         </td>
-                        <td class="p-x-1! py-1! text-(--main-color) text-right">
+                        <td
+                            v-if="currentPlan"
+                            class="p-x-1! py-1! text-(--main-color) text-right"
+                        >
                             <span v-if="row.paceSecPerUnit !== null">
                                 {{
                                     formatPace(
@@ -529,7 +536,10 @@ const splits = computed<SplitRow[]>(() => {
                             </span>
                             <span v-else>-</span>
                         </td>
-                        <td class="p-x-1! py-1! text-(--main-color) text-right">
+                        <td
+                            v-if="currentPlan"
+                            class="p-x-1! py-1! text-(--main-color) text-right"
+                        >
                             <span v-if="row.elapsedSec !== null">{{
                                 formatElapsedTime(Math.round(row.elapsedSec!))
                             }}</span>
@@ -540,7 +550,7 @@ const splits = computed<SplitRow[]>(() => {
                     <tr v-if="splits.length === 0">
                         <td
                             class="p-x-1! py-6 text-center text-(--sub-color)"
-                            colspan="6"
+                            :colspan="currentPlan ? 6 : 4"
                         >
                             No splits available.
                         </td>
