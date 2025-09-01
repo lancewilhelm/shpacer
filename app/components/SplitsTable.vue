@@ -416,7 +416,7 @@ const splits = computed<SplitRow[]>(() => {
         <div class="flex-1 overflow-auto">
             <table class="min-w-full text-sm">
                 <thead
-                    class="sticky top-0 bg-(--bg-color) z-10 border-b border-(--sub-color)"
+                    class="sticky top-0 bg-(--bg-color) z-0 border-b border-(--sub-color)"
                 >
                     <tr class="text-(--sub-color) text-xs uppercase">
                         <th class="text-left p-x-1! py-2">Dist</th>

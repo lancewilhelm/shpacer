@@ -182,3 +182,47 @@ tr:last-child td {
     outline: 2px solid var(--main-color);
     outline-offset: 3px;
 }
+
+/* Custom radio styles: filled center when checked, empty center when unchecked */
+input[type="radio"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 1rem;
+    height: 1rem;
+    padding: 0;
+    border: 2px solid var(--main-color);
+    border-radius: 50%;
+    background-color: var(--bg-color);
+    display: inline-grid;
+    place-content: center;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+input[type="radio"]::before {
+    content: "";
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    transform: scale(0);
+    transition:
+        transform 120ms ease-in-out,
+        background-color 120ms ease-in-out;
+    background-color: var(--bg-color);
+}
+
+input[type="radio"]:checked::before {
+    transform: scale(1);
+    background-color: var(--main-color);
+}
+
+input[type="radio"]:focus {
+    outline: 2px solid var(--main-color);
+    outline-offset: 3px;
+}
+
+input[type="radio"]:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    border-color: var(--sub-color);
+}
