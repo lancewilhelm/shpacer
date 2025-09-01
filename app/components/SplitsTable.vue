@@ -397,6 +397,42 @@ const splits = computed<SplitRow[]>(() => {
         });
     }
 
+    // Back-calculate elapsed times to ensure the last split matches the target total exactly
+    if (plan?.pace && rows.length > 0) {
+        const lastIdx = rows.length - 1;
+        const lastBoundary = boundaries[boundaries.length - 1]!;
+        const stoppageLast = getCumulativeStoppageUntil(lastBoundary);
+        const rawLast = rows[lastIdx]!.elapsedSec ?? 0;
+
+        // Determine desired final elapsed time
+        let desiredLast = rawLast;
+        if ((plan.paceMode || "pace") === "time" && plan.targetTimeSeconds) {
+            // In target time mode, snap the last elapsed to the exact target time (seconds)
+            desiredLast = plan.targetTimeSeconds;
+        } else {
+            // In pace/normalized modes, use the computed total but snap to a whole second for display consistency
+            desiredLast = Math.round(rawLast);
+        }
+
+        // Compute a scale for the travel-only component so the last split matches exactly
+        const rawTravelLast = Math.max(0, rawLast - stoppageLast);
+        const desiredTravelLast = Math.max(0, desiredLast - stoppageLast);
+        const extraScale =
+            rawTravelLast > 0 ? desiredTravelLast / rawTravelLast : 1.0;
+
+        // Apply scaling to each split's cumulative travel, then add cumulative stoppage
+        if (isFinite(extraScale) && extraScale > 0) {
+            for (let i = 0; i < rows.length; i++) {
+                const r = rows[i]!;
+                const stopI = getCumulativeStoppageUntil(r.end);
+                const rawTravelI = Math.max(0, (r.elapsedSec ?? 0) - stopI);
+                r.elapsedSec = rawTravelI * extraScale + stopI;
+            }
+            // Enforce exact last value to avoid tiny floating point drift
+            rows[lastIdx]!.elapsedSec = desiredLast;
+        }
+    }
+
     return rows;
 });
 </script>
