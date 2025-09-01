@@ -359,8 +359,26 @@ const splits = computed<SplitRow[]>(() => {
                     const n = Math.min(p + sampleStep, end);
                     const m = (p + n) / 2;
                     const g = calculateGradeAtDistance(points, m, gradeWindow);
-                    const f = calculateGradeAdjustmentFactor(g);
-                    weightedFactorSum += f * (n - p);
+                    const gradeFactor = calculateGradeAdjustmentFactor(g);
+                    let pacingFactor = 1.0;
+                    if (
+                        (currentPlan.value?.pacingStrategy || "flat") ===
+                            "linear" &&
+                        courseEnd > 0
+                    ) {
+                        const t = Math.max(0, Math.min(1, m / courseEnd));
+                        const P =
+                            Math.max(
+                                -50,
+                                Math.min(
+                                    50,
+                                    currentPlan.value?.pacingLinearPercent ?? 0,
+                                ),
+                            ) / 100;
+                        pacingFactor = 1 + (t - 0.5) * P;
+                    }
+                    const combinedFactor = gradeFactor * pacingFactor;
+                    weightedFactorSum += combinedFactor * (n - p);
                     p = n;
                 }
                 const meanFactor = dist > 0 ? weightedFactorSum / dist : 1.0;

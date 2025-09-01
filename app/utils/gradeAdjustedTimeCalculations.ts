@@ -310,6 +310,8 @@ export function calculateAllGradeAdjustedElapsedTimes(
     (acc, seg) => acc + seg.distance,
     0,
   );
+  const courseStart = Math.min(...waypoints.map((w) => w.distance));
+  const courseEnd = Math.max(...waypoints.map((w) => w.distance));
 
   // Integral method for equivalent factors with smoothing
   // If sampleStepMeters is 0, treat as default (50)
@@ -339,9 +341,20 @@ export function calculateAllGradeAdjustedElapsedTimes(
         mid,
         gradeWindow,
       );
-      const factor = calculateGradeAdjustmentFactor(grade);
+      const gradeFactor = calculateGradeAdjustmentFactor(grade);
+      let pacingFactor = 1.0;
+      if (plan.pacingStrategy === "linear" && courseEnd > courseStart) {
+        const t = Math.max(
+          0,
+          Math.min(1, (mid - courseStart) / (courseEnd - courseStart)),
+        );
+        const P =
+          Math.max(-50, Math.min(50, plan.pacingLinearPercent ?? 0)) / 100;
+        pacingFactor = 1 + (t - 0.5) * P;
+      }
+      const combinedFactor = gradeFactor * pacingFactor;
       const dL = next - pos;
-      weightedFactorSum += factor * dL;
+      weightedFactorSum += combinedFactor * dL;
       pos = next;
     }
 
@@ -446,14 +459,27 @@ export function getSegmentGradeAdjustment(
   const gradeWindow = options.gradeWindowMeters ?? 100; // meters
   const segStart = Math.min(fromWaypoint.distance, toWaypoint.distance);
   const segEnd = Math.max(fromWaypoint.distance, toWaypoint.distance);
+  const courseStart = Math.min(...waypoints.map((w) => w.distance));
+  const courseEnd = Math.max(...waypoints.map((w) => w.distance));
   let weightedFactorSumSeg = 0;
   let posSeg = segStart;
   while (posSeg < segEnd) {
     const next = Math.min(posSeg + sampleStep, segEnd);
     const mid = (posSeg + next) / 2;
     const g = calculateGradeAtDistance(elevationProfile, mid, gradeWindow);
-    const f = calculateGradeAdjustmentFactor(g);
-    weightedFactorSumSeg += f * (next - posSeg);
+    const gradeFactor = calculateGradeAdjustmentFactor(g);
+    let pacingFactor = 1.0;
+    if (plan.pacingStrategy === "linear" && courseEnd > courseStart) {
+      const t = Math.max(
+        0,
+        Math.min(1, (mid - courseStart) / (courseEnd - courseStart)),
+      );
+      const P =
+        Math.max(-50, Math.min(50, plan.pacingLinearPercent ?? 0)) / 100;
+      pacingFactor = 1 + (t - 0.5) * P;
+    }
+    const combinedFactor = gradeFactor * pacingFactor;
+    weightedFactorSumSeg += combinedFactor * (next - posSeg);
     posSeg = next;
   }
   const adjustmentFactor =
@@ -480,8 +506,19 @@ export function getSegmentGradeAdjustment(
       const n = Math.min(p + sampleStep, segEndAll);
       const m = (p + n) / 2;
       const g = calculateGradeAtDistance(elevationProfile, m, gradeWindow);
-      const f = calculateGradeAdjustmentFactor(g);
-      weightedFactorSum += f * (n - p);
+      const gradeFactor = calculateGradeAdjustmentFactor(g);
+      let pacingFactor = 1.0;
+      if (plan.pacingStrategy === "linear" && courseEnd > courseStart) {
+        const t = Math.max(
+          0,
+          Math.min(1, (m - courseStart) / (courseEnd - courseStart)),
+        );
+        const P =
+          Math.max(-50, Math.min(50, plan.pacingLinearPercent ?? 0)) / 100;
+        pacingFactor = 1 + (t - 0.5) * P;
+      }
+      const combinedFactor = gradeFactor * pacingFactor;
+      weightedFactorSum += combinedFactor * (n - p);
       p = n;
     }
 

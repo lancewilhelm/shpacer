@@ -58,19 +58,36 @@ export function adjustPaceForGrade(basePace: number, gradient: number): number {
 }
 
 /**
+ * Compute a linear pacing strategy factor along the course.
+ * totalPercent is the total change from start to finish (e.g., 10 => 0.95 to 1.05).
+ * The mean factor across the course integrates to 1.0.
+ *
+ * @param t normalized position along course in [0, 1]
+ * @param totalPercent total percent change from start to finish (positive => start faster, end slower)
+ */
+function linearPacingFactor(t: number, totalPercent: number): number {
+  // Clamp to reasonable bounds [-50%, 50%]
+  const P = Math.max(-50, Math.min(50, totalPercent)) / 100;
+  // Factor varies linearly from (1 - P/2) at start to (1 + P/2) at end
+  return 1 + (t - 0.5) * (2 * (P / 2)); // simplifies to 1 + (t - 0.5) * P
+}
+
+/**
  * Calculates the actual paces needed at each point along a course to achieve a target average pace.
  * This function takes a target average pace (what you want your overall time to average to) and
- * calculates what pace you need to run at each point considering the grade adjustments.
+ * calculates what pace you need to run at each point considering the grade adjustments and optional pacing strategy.
  *
  * If maintainTargetAverage is true, paces are normalized so that the overall average equals
- * targetAveragePace after accounting for grade factors. If false, no normalization is applied
- * and paces reflect raw grade effects from the base targetAveragePace.
+ * targetAveragePace after accounting for grade and pacing strategy factors. If false, no normalization is applied
+ * and paces reflect raw effects from the base targetAveragePace.
  *
  * @param elevationPoints Array of elevation points with distance, elevation, and coordinate data
  * @param targetAveragePace The desired average pace in seconds per km/mile (grade-adjusted)
  * @param windowDistance Window size in meters for grade smoothing (default: 100m)
  * @param paceSmoothingDistance Window size in meters for smoothing paces (default: 200m)
  * @param maintainTargetAverage Whether to normalize paces to maintain the target average (default: true)
+ * @param pacingStrategy Pacing strategy to apply: 'flat' (default) or 'linear'
+ * @param pacingLinearPercent Total percent change start->end for linear strategy (e.g., 10 => 0.95..1.05)
  * @returns Array of actual paces needed at each point to achieve the target average
  */
 export function calculateActualPacesForTarget(
@@ -79,6 +96,8 @@ export function calculateActualPacesForTarget(
   windowDistance: number = 100,
   paceSmoothingDistance: number = 200,
   maintainTargetAverage: boolean = true,
+  pacingStrategy: "flat" | "linear" = "flat",
+  pacingLinearPercent: number = 0,
 ): Array<{ distance: number; actualPace: number; grade: number }> {
   const n = elevationPoints.length;
   if (n < 2) return [];
@@ -140,7 +159,27 @@ export function calculateActualPacesForTarget(
   }
 
   // Convert grade -> adjustment factor
-  const factors = grades.map((g) => paceAdjustment(g));
+  const gradeFactors = grades.map((g) => paceAdjustment(g));
+
+  // Pacing strategy factor (per point)
+  const startDist = dist[0] ?? 0;
+  const endDist = dist[n - 1] ?? startDist;
+  const totalDist = Math.max(0, endDist - startDist);
+  const pacingFactors: number[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    if (pacingStrategy === "linear" && totalDist > 0) {
+      const t = Math.max(0, Math.min(1, (dist[i]! - startDist) / totalDist));
+      pacingFactors[i] = linearPacingFactor(t, pacingLinearPercent);
+    } else {
+      pacingFactors[i] = 1.0; // flat (no change)
+    }
+  }
+
+  // Combine factors
+  const combinedFactors: number[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    combinedFactors[i] = gradeFactors[i]! * pacingFactors[i]!;
+  }
 
   // Normalize to maintain target average pace using trapezoidal integration
   let totalDistance = 0;
@@ -150,8 +189,8 @@ export function calculateActualPacesForTarget(
     if (dL <= 0) continue;
     totalDistance += dL;
 
-    const f0 = factors[i - 1]!;
-    const f1 = factors[i]!;
+    const f0 = combinedFactors[i - 1]!;
+    const f1 = combinedFactors[i]!;
     equivalentDistanceSum += 0.5 * (f0 + f1) * dL;
   }
   const normalizationScale =
@@ -159,8 +198,8 @@ export function calculateActualPacesForTarget(
       ? totalDistance / equivalentDistanceSum
       : 1.0;
 
-  // Raw grade-adjusted paces
-  const rawActualPaces: number[] = factors.map(
+  // Raw grade + strategy adjusted paces
+  const rawActualPaces: number[] = combinedFactors.map(
     (f) => targetAveragePace * f * normalizationScale,
   );
 

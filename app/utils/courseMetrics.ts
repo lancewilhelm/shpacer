@@ -74,7 +74,17 @@ export function calculateCourseMetrics(
       const [lon1, lat1, elev1] = coord1;
       const [lon2, lat2, elev2] = coord2;
 
-      if (!lon1 || !lat1 || !lon2 || !lat2) continue; // Skip if coordinates are invalid
+      if (
+        typeof lon1 !== "number" ||
+        typeof lat1 !== "number" ||
+        typeof lon2 !== "number" ||
+        typeof lat2 !== "number" ||
+        isNaN(lon1) ||
+        isNaN(lat1) ||
+        isNaN(lon2) ||
+        isNaN(lat2)
+      )
+        continue; // Skip if coordinates are invalid
 
       // Calculate distance between consecutive points
       const distance = calculateDistance(lat1, lon1, lat2, lon2);

@@ -22,6 +22,8 @@ interface Props {
         defaultStoppageTime?: number;
         paceMode?: "pace" | "time" | "normalized";
         targetTimeSeconds?: number;
+        pacingStrategy?: "flat" | "linear";
+        pacingLinearPercent?: number;
     } | null;
 }
 
@@ -46,6 +48,8 @@ interface PlanFormState {
     paceUnit: "min_per_km" | "min_per_mi";
     defaultStopMinutes: string;
     defaultStopSeconds: string;
+    pacingStrategy: "flat" | "linear";
+    pacingLinearPercent: string;
 }
 
 const formData = ref<PlanFormState>({
@@ -59,6 +63,8 @@ const formData = ref<PlanFormState>({
     paceUnit: "min_per_km",
     defaultStopMinutes: "",
     defaultStopSeconds: "",
+    pacingStrategy: "flat",
+    pacingLinearPercent: "0",
 });
 
 const isSubmitting = ref(false);
@@ -79,6 +85,8 @@ function resetForm() {
             : "min_per_mi";
     formData.value.defaultStopMinutes = "";
     formData.value.defaultStopSeconds = "";
+    formData.value.pacingStrategy = "flat";
+    formData.value.pacingLinearPercent = "0";
     error.value = "";
 }
 
@@ -142,6 +150,19 @@ watch(
             } else {
                 formData.value.defaultStopMinutes = "";
                 formData.value.defaultStopSeconds = "";
+            }
+
+            // Initialize pacing strategy from existing plan
+            formData.value.pacingStrategy =
+                (p.pacingStrategy as "flat" | "linear") || "flat";
+            if (formData.value.pacingStrategy === "linear") {
+                const lp =
+                    typeof p.pacingLinearPercent === "number"
+                        ? p.pacingLinearPercent
+                        : 0;
+                formData.value.pacingLinearPercent = lp.toString();
+            } else {
+                formData.value.pacingLinearPercent = "0";
             }
         } else {
             resetForm();
@@ -457,6 +478,16 @@ async function handleSubmit() {
         return;
     }
 
+    // Validate pacing strategy linear percent
+    if (formData.value.pacingStrategy === "linear") {
+        const p = parseInt(formData.value.pacingLinearPercent || "0", 10);
+        if (!Number.isFinite(p) || p < -50 || p > 50) {
+            error.value =
+                "Linear change percent must be a number between -50 and 50.";
+            return;
+        }
+    }
+
     isSubmitting.value = true;
     error.value = "";
 
@@ -479,12 +510,24 @@ async function handleSubmit() {
             paceInSeconds = paceVal.seconds;
         }
 
+        // Pacing strategy fields
+        const pacingStrategy = formData.value.pacingStrategy || "flat";
+        let pacingLinearPercentValue = 0;
+        if (pacingStrategy === "linear") {
+            const p = parseInt(formData.value.pacingLinearPercent || "0", 10);
+            pacingLinearPercentValue = Number.isFinite(p)
+                ? Math.max(-50, Math.min(50, p))
+                : 0;
+        }
+
         const payload: Record<string, unknown> = {
             name: formData.value.name.trim(),
             pace: paceInSeconds,
             paceUnit: formData.value.paceUnit,
             defaultStoppageTime: stopVal.seconds,
             paceMode: formData.value.paceMode,
+            pacingStrategy,
+            pacingLinearPercent: pacingLinearPercentValue,
         };
         if (formData.value.paceMode === "time") {
             payload.targetTimeSeconds = targetTimeSeconds;
@@ -582,7 +625,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                     </label>
                     <div class="flex flex-col gap-2">
                         <label
-                            class="flex items-center gap-2 cursor-pointer text-(--main-color)"
+                            class="flex items-center gap-2 cursor-pointer text-(--main-color) shrink-0"
                         >
                             <input
                                 v-model="formData.paceMode"
@@ -594,7 +637,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                             <span>Target average pace</span>
                         </label>
                         <label
-                            class="flex items-center gap-2 cursor-pointer text-(--main-color)"
+                            class="flex items-center gap-2 cursor-pointer text-(--main-color) shrink-0"
                         >
                             <input
                                 v-model="formData.paceMode"
@@ -606,7 +649,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                             <span>Target finish time</span>
                         </label>
                         <label
-                            class="flex items-center gap-2 cursor-pointer text-(--main-color)"
+                            class="flex items-center gap-2 cursor-pointer text-(--main-color) shrink-0"
                         >
                             <input
                                 v-model="formData.paceMode"
@@ -617,6 +660,76 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                             />
                             <span>Normalized pace (effort-based)</span>
                         </label>
+                    </div>
+                </div>
+
+                <!-- Pacing Strategy -->
+                <div>
+                    <label
+                        class="block text-sm font-medium text-(--main-color) mb-1"
+                    >
+                        Pacing Strategy
+                    </label>
+                    <div class="flex flex-col gap-2">
+                        <label
+                            class="flex items-center gap-2 cursor-pointer text-(--main-color) shrink-0"
+                        >
+                            <input
+                                v-model="formData.pacingStrategy"
+                                type="radio"
+                                value="flat"
+                                class="accent-(--main-color)"
+                                :disabled="isSubmitting"
+                            />
+                            <span
+                                >Flat pacing (uniform from start to
+                                finish)</span
+                            >
+                        </label>
+                        <label
+                            class="flex items-center gap-2 cursor-pointer text-(--main-color) shrink-0"
+                        >
+                            <input
+                                v-model="formData.pacingStrategy"
+                                type="radio"
+                                value="linear"
+                                class="accent-(--main-color)"
+                                :disabled="isSubmitting"
+                            />
+                            <span
+                                >Linear pacing (gradual change across the
+                                course)</span
+                            >
+                        </label>
+                    </div>
+
+                    <div
+                        v-if="formData.pacingStrategy === 'linear'"
+                        class="mt-2"
+                    >
+                        <label
+                            class="block text-sm font-medium text-(--main-color) mb-1"
+                        >
+                            Linear change percent (−50 to 50)
+                        </label>
+                        <div class="flex items-center gap-2">
+                            <input
+                                v-model="formData.pacingLinearPercent"
+                                type="number"
+                                min="-50"
+                                max="50"
+                                step="1"
+                                class="w-24 px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
+                                :disabled="isSubmitting"
+                            />
+                            <span class="text-(--main-color)">%</span>
+                        </div>
+                        <p class="text-xs text-(--sub-color) mt-1">
+                            Positive values start slightly faster and finish
+                            slightly slower. For example, 10% varies the effort
+                            factor from 0.95 at the start to 1.05 at the finish.
+                            Negative values produce negative splits.
+                        </p>
                     </div>
                 </div>
 

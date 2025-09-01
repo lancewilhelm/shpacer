@@ -252,12 +252,12 @@ export function extractElevationProfile(
           !isNaN(prevLat)
         ) {
           const distance = calculateDistance(prevLat, prevLon, lat, lon);
-          // Skip if distance calculation seems unreasonable (> 5km between consecutive points for more strict filtering)
-          if (!isNaN(distance) && distance < 5000) {
+          // Accept large segment distances (e.g., sparse GPX with far-apart points)
+          if (!isNaN(distance) && isFinite(distance) && distance >= 0) {
             cumulativeDistance += distance;
           } else {
             console.warn(
-              "Skipping unreasonable distance calculation:",
+              "Skipping invalid distance calculation:",
               distance,
               "between points",
               i - 1,
@@ -266,8 +266,6 @@ export function extractElevationProfile(
             );
             console.warn("Previous coord:", prevCoord);
             console.warn("Current coord:", coord);
-            // For very large jumps, don't add the distance but still include the point
-            // This prevents teleportation but keeps the actual track data
           }
         }
       }

@@ -181,6 +181,12 @@ export const plans = sqliteTable("plans", {
   // If paceMode is 'time', the target finish time for the course, in seconds
   targetTimeSeconds: integer("target_time_seconds"),
   defaultStoppageTime: integer("default_stoppage_time").default(0), // default stoppage time in seconds
+  // Pacing strategy: 'flat' (uniform) or 'linear' (linearly varying factor along the course)
+  pacingStrategy: text("pacing_strategy").notNull().default("flat"),
+  // For linear pacing, total percent change from start to end.
+  // Example: 10 => factor varies from -5% at start (0.95x) to +5% at end (1.05x).
+  // Negative values produce negative splits (faster at end).
+  pacingLinearPercent: integer("pacing_linear_percent").default(0),
 
   // Timestamps
   createdAt: integer("created_at", { mode: "timestamp" })

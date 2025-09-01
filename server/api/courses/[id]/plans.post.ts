@@ -60,6 +60,8 @@ export default defineEventHandler(async (event) => {
         paceMode: body.paceMode || "pace",
         targetTimeSeconds: body.targetTimeSeconds ?? null,
         defaultStoppageTime: body.defaultStoppageTime || 0,
+        pacingStrategy: body.pacingStrategy || "flat",
+        pacingLinearPercent: body.pacingLinearPercent ?? 0,
       })
       .returning();
 

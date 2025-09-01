@@ -120,6 +120,32 @@ export default defineEventHandler(async (event) => {
       updateData.defaultStoppageTime = body.defaultStoppageTime;
     }
 
+    // Pacing strategy updates
+    if (body.pacingStrategy !== undefined) {
+      if (!["flat", "linear"].includes(body.pacingStrategy)) {
+        throw createError({
+          statusCode: 400,
+          statusMessage: "Invalid pacing strategy",
+        });
+      }
+      updateData.pacingStrategy = body.pacingStrategy as "flat" | "linear";
+    }
+
+    if (body.pacingLinearPercent !== undefined) {
+      if (
+        typeof body.pacingLinearPercent !== "number" ||
+        body.pacingLinearPercent < -50 ||
+        body.pacingLinearPercent > 50
+      ) {
+        throw createError({
+          statusCode: 400,
+          statusMessage:
+            "pacingLinearPercent must be a number between -50 and 50",
+        });
+      }
+      updateData.pacingLinearPercent = Math.round(body.pacingLinearPercent);
+    }
+
     // Update the plan
     const updatedPlan = await cloudDb
       .update(plans)

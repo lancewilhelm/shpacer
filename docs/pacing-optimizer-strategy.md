@@ -207,3 +207,38 @@ Heart Rate Target: 145-155 bpm (Zone 2-3)
 ---
 
 *This document serves as the foundational strategy for implementing intelligent pacing optimization in Shpacer. It should be updated as we learn from implementation experience and user feedback.*
+
+## Appendix: Pacing Strategy (Flat vs Linear)
+
+This appendix documents the pacing strategy options supported by the planner and their mathematical treatment.
+
+### Flat pacing
+- Definition: Applies a constant effort/pace scaling factor of 1.0 along the entire course.
+- Effect: Only terrain and environmental adjustments vary pace; there is no intentional start-to-finish trend.
+
+### Linear pacing
+- Goal: Introduce a gentle, linear trend from the start to the finish while preserving the overall average effort.
+- Parameter: A total percent change P_total in the range [-50, 50]. Example: P_total = 10 means a 10% total swing.
+- Normalized distance: Let t ∈ [0, 1] be the normalized position along the course (0 = start, 1 = finish).
+- Factor definition:
+  - Let P = P_total / 100.
+  - The linear pacing factor is f(t) = 1 + (t - 0.5) · P.
+  - Start factor: f(0) = 1 - P/2; End factor: f(1) = 1 + P/2.
+  - This integrates to 1.0 across the course, so it does not change the mean effort.
+- Interpretation:
+  - Positive P_total (e.g., +10) yields start slightly faster and finish slightly slower:
+    - Example: P_total = 10% ⇒ factors vary from 0.95 at the start to 1.05 at the finish.
+  - Negative P_total (e.g., -10) yields a negative split trend (start slightly slower, finish slightly faster):
+    - Example: P_total = -10% ⇒ factors vary from 1.05 at the start to 0.95 at the finish.
+- Bounds: For safety and realism, P_total is clamped to [-50, 50].
+
+### Composition with grade adjustments
+- The linear pacing factor f(t) is multiplied by the grade-based adjustment factor g(grade):
+  - Combined factor c(t) = g(grade_at_t) × f(t).
+- When maintain-target-average mode is enabled (the default for “pace” and “time” modes), a normalization scale is applied so the overall average pace matches the target after both grade and pacing strategy effects.
+- In “normalized” mode, this normalization may be disabled to show raw effects.
+
+### UI implications
+- In Create/Edit Plan:
+  - Choose “Pacing Strategy”: Flat or Linear.
+  - If Linear is selected, set “Linear change percent” (P_total). Positive values produce faster starts and slower finishes; negative values produce negative splits.

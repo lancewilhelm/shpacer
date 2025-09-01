@@ -99,6 +99,8 @@ const editingPlanPayload = computed(() => {
         defaultStoppageTime: ep.defaultStoppageTime ?? undefined,
         paceMode: (ep.paceMode as "pace" | "time" | "normalized") ?? undefined,
         targetTimeSeconds: ep.targetTimeSeconds ?? undefined,
+        pacingStrategy: (ep.pacingStrategy as "flat" | "linear") ?? "flat",
+        pacingLinearPercent: ep.pacingLinearPercent ?? undefined,
     };
 });
 
@@ -277,6 +279,77 @@ function formatRaceDate(date: Date | string | number | null) {
 const geoJsonData = computed(() => {
     if (!course.value?.geoJsonData) return [];
     return [course.value.geoJsonData as GeoJSON.FeatureCollection];
+});
+
+// -------- Plan Stats (header) helpers --------
+function formatHMS(totalSeconds: number): string {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = Math.round(totalSeconds % 60);
+    return `${h.toString()}:${m.toString().padStart(2, "0")}:${s
+        .toString()
+        .padStart(2, "0")}`;
+}
+
+const planPaceDisplay = computed(() => {
+    const p = currentPlan.value;
+    if (!p?.pace) return "-";
+    const total = Math.round(p.pace);
+    const mm = Math.floor(total / 60);
+    const ss = total % 60;
+    const unit = p.paceUnit === "min_per_mi" ? "/mi" : "/km";
+    return `${mm}:${ss.toString().padStart(2, "0")}${unit}`;
+});
+
+const planStrategyDisplay = computed(() => {
+    const p = currentPlan.value;
+    if (!p) return "-";
+    if (p.pacingStrategy === "linear") {
+        const pct = p.pacingLinearPercent ?? 0;
+        const sign = pct > 0 ? "+" : "";
+        return `Linear (${sign}${pct}%)`;
+    }
+    return "Flat";
+});
+
+const planEstimatedElapsedDisplay = computed(() => {
+    const p = currentPlan.value;
+    if (!p) return "-";
+
+    // In target time mode, display the exact target finish time
+    if (
+        p.paceMode === "time" &&
+        typeof p.targetTimeSeconds === "number" &&
+        p.targetTimeSeconds > 0
+    ) {
+        return formatHMS(p.targetTimeSeconds);
+    }
+
+    // For pace/normalized modes, estimate from distance and stoppages
+    if (!p.pace || !course.value?.totalDistance) return "-";
+
+    const unitMeters = p.paceUnit === "min_per_mi" ? 1609.344 : 1000;
+    const distanceUnits = course.value.totalDistance / unitMeters;
+    const travel = p.pace * distanceUnits;
+
+    // Sum stoppages for intermediate waypoints (exclude start and finish)
+    let stoppage = 0;
+    const wps = waypoints.value || [];
+    if (wps.length > 0) {
+        const maxOrder = Math.max(...wps.map((w) => w.order));
+        for (const w of wps) {
+            if (w.order === 0) continue;
+            if (w.order === maxOrder && maxOrder > 0) continue;
+            const custom = waypointStoppageTimes.value.find(
+                (st) => st.waypointId === w.id,
+            );
+            stoppage += custom
+                ? custom.stoppageTime
+                : getDefaultStoppageTime?.() || 0;
+        }
+    }
+
+    return formatHMS(Math.round(travel + stoppage));
 });
 
 // Elevation chart interaction state
@@ -724,7 +797,7 @@ onUnmounted(() => {
                         <!-- Course Metrics -->
                         <div class="flex items-center gap-6 text-sm">
                             <div
-                                v-if="course.totalDistance"
+                                v-if="course.totalDistance != null"
                                 class="flex items-center gap-2 text-(--main-color)"
                             >
                                 <Icon
@@ -745,7 +818,7 @@ onUnmounted(() => {
                                 </div>
                             </div>
                             <div
-                                v-if="course.elevationGain"
+                                v-if="course.elevationGain != null"
                                 class="flex items-center gap-2 text-(--main-color)"
                             >
                                 <Icon
@@ -766,7 +839,7 @@ onUnmounted(() => {
                                 </div>
                             </div>
                             <div
-                                v-if="course.elevationLoss"
+                                v-if="course.elevationLoss != null"
                                 class="flex items-center gap-2 text-(--main-color)"
                             >
                                 <Icon
@@ -801,6 +874,67 @@ onUnmounted(() => {
                                     <span class="text-xs text-(--sub-color)"
                                         >Race Date</span
                                     >
+                                </div>
+                            </div>
+
+                            <div
+                                v-if="currentPlan"
+                                class="w-px h-8 bg-(--sub-color) opacity-60"
+                            ></div>
+
+                            <div
+                                v-if="currentPlan"
+                                class="flex items-center gap-6 text-sm"
+                            >
+                                <div
+                                    class="flex items-center gap-2 text-(--main-color)"
+                                >
+                                    <Icon
+                                        name="lucide:timer"
+                                        class="h-5 w-5 scale-150 -translate-y-0.5"
+                                    />
+                                    <div class="flex flex-col">
+                                        <span class="font-medium">{{
+                                            planPaceDisplay
+                                        }}</span>
+                                        <span class="text-xs text-(--sub-color)"
+                                            >Target Pace</span
+                                        >
+                                    </div>
+                                </div>
+
+                                <div
+                                    class="flex items-center gap-2 text-(--main-color)"
+                                >
+                                    <Icon
+                                        name="lucide:clock-3"
+                                        class="h-5 w-5 scale-150 -translate-y-0.5"
+                                    />
+                                    <div class="flex flex-col">
+                                        <span class="font-medium">{{
+                                            planEstimatedElapsedDisplay
+                                        }}</span>
+                                        <span class="text-xs text-(--sub-color)"
+                                            >Est. Elapsed</span
+                                        >
+                                    </div>
+                                </div>
+
+                                <div
+                                    class="flex items-center gap-2 text-(--main-color)"
+                                >
+                                    <Icon
+                                        name="lucide:sliders"
+                                        class="h-5 w-5 scale-150 -translate-y-0.5"
+                                    />
+                                    <div class="flex flex-col">
+                                        <span class="font-medium">{{
+                                            planStrategyDisplay
+                                        }}</span>
+                                        <span class="text-xs text-(--sub-color)"
+                                            >Strategy</span
+                                        >
+                                    </div>
                                 </div>
                             </div>
                         </div>

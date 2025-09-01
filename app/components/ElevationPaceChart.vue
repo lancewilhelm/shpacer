@@ -273,6 +273,8 @@ const actualPaceData = computed(() => {
         smoothingConfig.value.gradeWindowMeters,
         smoothingConfig.value.paceSmoothingMeters,
         maintainTargetAverage,
+        props.plan.pacingStrategy === "linear" ? "linear" : "flat",
+        props.plan.pacingLinearPercent ?? 0,
     );
 });
 
