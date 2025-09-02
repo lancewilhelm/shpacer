@@ -6,6 +6,10 @@ import type {
     SelectWaypointStoppageTime,
 } from "~/utils/db/schema";
 import { formatDistance, formatElevation } from "~/utils/courseMetrics";
+import {
+    extractElevationProfile,
+    interpolateAtDistance,
+} from "~/utils/elevationProfile";
 
 // Define the waypoint type that matches what we get from the API
 type Waypoint = {
@@ -280,6 +284,154 @@ const geoJsonData = computed(() => {
     if (!course.value?.geoJsonData) return [];
     return [course.value.geoJsonData as GeoJSON.FeatureCollection];
 });
+
+// Build elevation points and per-unit split waypoints for display switching
+const elevationPointsForDisplay = computed(() => {
+    if (!geoJsonData.value?.length) return [];
+    const combined: GeoJSON.FeatureCollection = {
+        type: "FeatureCollection",
+        features: geoJsonData.value.flatMap((fc) => fc.features),
+    };
+    return extractElevationProfile(combined);
+});
+
+const totalCourseDistanceMeters = computed(() => {
+    const pts = elevationPointsForDisplay.value;
+    if (!pts.length) return 0;
+    return Math.max(...pts.map((p) => p.distance));
+});
+
+// Generate synthetic per-mile/km "waypoints" for the splits tab
+const splitWaypoints = computed<Waypoint[]>(() => {
+    const pts = elevationPointsForDisplay.value;
+    const total = totalCourseDistanceMeters.value;
+    if (!pts.length || total <= 0) return [];
+
+    const isMiles = userSettingsStore.settings.units.distance === "miles";
+    const unitMeters = isMiles ? 1609.344 : 1000;
+
+    const result: Waypoint[] = [];
+
+    // Include a start marker so chart numbering for subsequent markers is numeric (avoids first being "S")
+    const start = pts[0];
+    if (start) {
+        result.push({
+            id: "split-start",
+            name: "S",
+            description: null,
+            lat: start.lat,
+            lng: start.lng,
+            elevation: start.elevation,
+            distance: 0,
+            tags: [],
+            order: 0,
+        });
+    }
+
+    let i = 1;
+    for (let d = unitMeters; d < total - 1e-6; d += unitMeters, i++) {
+        const ip = interpolateAtDistance(pts, d);
+        if (!ip) continue;
+        result.push({
+            id: `split-${i}`,
+            name: isMiles ? `Mile ${i}` : `Km ${i}`,
+            description: null,
+            lat: ip.lat,
+            lng: ip.lng,
+            elevation: ip.elevation,
+            distance: d,
+            tags: [],
+            order: i,
+        });
+    }
+
+    // Include finish so users can still see the end of course
+    const finish = pts[pts.length - 1];
+    if (finish) {
+        result.push({
+            id: "split-finish",
+            name: "F",
+            description: null,
+            lat: finish.lat,
+            lng: finish.lng,
+            elevation: finish.elevation,
+            distance: finish.distance,
+            tags: [],
+            order: Number.MAX_SAFE_INTEGER,
+        });
+    }
+
+    return result;
+});
+
+// Waypoints to display on map and chart based on selected tab
+const displayWaypoints = computed<Waypoint[]>(() => {
+    return waypointPanelTab.value === "splits"
+        ? splitWaypoints.value
+        : waypoints.value;
+});
+
+// Split highlight state and helpers
+const splitHighlight = ref<{ start: number; end: number; mid: number } | null>(
+    null,
+);
+const selectedSplitIndex = ref<number | null>(null);
+const selectedSplitRange = ref<{ startIndex: number; endIndex: number } | null>(
+    null,
+);
+const mapResetKey = ref(0);
+
+const stableHighlightSegment = computed(() => {
+    if (waypointPanelTab.value !== "splits" || !splitHighlight.value)
+        return null;
+    return { start: splitHighlight.value.start, end: splitHighlight.value.end };
+});
+/* Removed highlight-controlled center/zoom to avoid snapping map view during other interactions */
+
+function handleSplitClick(payload: {
+    start: number;
+    end: number;
+    index: number;
+}) {
+    // Toggle selection: deselect if clicking the same row
+    if (selectedSplitIndex.value === payload.index) {
+        selectedSplitIndex.value = null;
+        selectedSplitRange.value = null;
+        splitHighlight.value = null;
+        elevationHoverPoint.value = null; // do not pin cursor on deselect
+        mapResetKey.value++; // remount map to refit to full track
+        return;
+    }
+
+    // Select this single split and highlight segment; clear any range selection
+    selectedSplitRange.value = null;
+    selectedSplitIndex.value = payload.index;
+    const mid = (payload.start + payload.end) / 2;
+    splitHighlight.value = { start: payload.start, end: payload.end, mid };
+}
+
+function handleSplitRangeClick(payload: {
+    startIndex: number;
+    endIndex: number;
+    start: number;
+    end: number;
+}) {
+    selectedSplitIndex.value = null;
+    selectedSplitRange.value = {
+        startIndex: Math.min(payload.startIndex, payload.endIndex),
+        endIndex: Math.max(payload.startIndex, payload.endIndex),
+    };
+    const mid = (payload.start + payload.end) / 2;
+    splitHighlight.value = { start: payload.start, end: payload.end, mid };
+}
+
+function handleSplitCancel() {
+    selectedSplitIndex.value = null;
+    selectedSplitRange.value = null;
+    splitHighlight.value = null;
+    elevationHoverPoint.value = null;
+    mapResetKey.value++;
+}
 
 // -------- Plan Stats (header) helpers --------
 function formatHMS(totalSeconds: number): string {
@@ -976,9 +1128,11 @@ onUnmounted(() => {
                                 :height="200"
                                 :map-hover-distance="mapHoverDistance"
                                 :selected-waypoint-distance="
-                                    selectedWaypoint?.distance || null
+                                    waypointPanelTab === 'waypoints'
+                                        ? selectedWaypoint?.distance || null
+                                        : null
                                 "
-                                :waypoints="waypoints"
+                                :waypoints="displayWaypoints"
                                 :plan="currentPlan"
                                 :show-pace-chart="!!currentPlan"
                                 @elevation-hover="handleElevationHover"
@@ -995,10 +1149,22 @@ onUnmounted(() => {
                                 <ClientOnly>
                                     <LeafletMap
                                         :geo-json-data="geoJsonData"
-                                        :waypoints="waypoints"
+                                        :waypoints="displayWaypoints"
+                                        :display-markers-as-splits="
+                                            waypointPanelTab === 'splits'
+                                        "
                                         :selected-waypoint="selectedWaypoint"
                                         :elevation-hover-point="
                                             elevationHoverPoint
+                                        "
+                                        :key="mapResetKey"
+                                        :highlight-segment="
+                                            stableHighlightSegment
+                                        "
+                                        highlight-color="#ff0000"
+                                        :fit-highlight="
+                                            waypointPanelTab === 'splits' &&
+                                            !!splitHighlight
                                         "
                                         @map-hover="handleMapHover"
                                         @map-leave="handleMapLeave"
@@ -1119,6 +1285,11 @@ onUnmounted(() => {
                                     :get-default-stoppage-time="
                                         getDefaultStoppageTime
                                     "
+                                    :selected-split-index="selectedSplitIndex"
+                                    :selected-split-range="selectedSplitRange"
+                                    @split-click="handleSplitClick"
+                                    @split-range-click="handleSplitRangeClick"
+                                    @split-cancel="handleSplitCancel"
                                 />
                             </div>
                         </div>

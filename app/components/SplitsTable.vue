@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, toRefs } from "vue";
+import { computed, toRefs, ref } from "vue";
 import { useUserSettingsStore } from "~/stores/userSettings";
 import type { SelectPlan } from "~/utils/db/schema";
 import {
@@ -19,6 +19,8 @@ interface Props {
     waypoints?: Array<{ id: string; distance: number; order: number }>;
     waypointStoppageTimes?: Array<{ waypointId: string; stoppageTime: number }>;
     getDefaultStoppageTime?: () => number;
+    selectedSplitIndex?: number | null;
+    selectedSplitRange?: { startIndex: number; endIndex: number } | null;
 }
 
 const _props = withDefaults(defineProps<Props>(), {
@@ -27,6 +29,8 @@ const _props = withDefaults(defineProps<Props>(), {
     waypoints: () => [],
     waypointStoppageTimes: () => [],
     getDefaultStoppageTime: () => 0,
+    selectedSplitIndex: null,
+    selectedSplitRange: null,
 });
 const {
     geoJsonData,
@@ -34,8 +38,22 @@ const {
     waypoints,
     waypointStoppageTimes,
     getDefaultStoppageTime,
+    selectedSplitIndex,
+    selectedSplitRange,
 } = toRefs(_props);
 
+const emit = defineEmits<{
+    "split-click": [payload: { start: number; end: number; index: number }];
+    "split-range-click": [
+        payload: {
+            startIndex: number;
+            endIndex: number;
+            start: number;
+            end: number;
+        },
+    ];
+    "split-cancel": [];
+}>();
 const userSettingsStore = useUserSettingsStore();
 const distanceUnit = computed<DistanceUnit>(
     () => userSettingsStore.settings.units.distance,
@@ -453,6 +471,65 @@ const splits = computed<SplitRow[]>(() => {
 
     return rows;
 });
+
+const lastClickedIndex = ref<number | null>(null);
+
+function onRowClick(row: SplitRow, e: MouseEvent) {
+    const shift = e.shiftKey;
+    const index = row.index;
+
+    if (shift) {
+        if (lastClickedIndex.value != null) {
+            const startIndex = Math.min(lastClickedIndex.value, index);
+            const endIndex = Math.max(lastClickedIndex.value, index);
+
+            if (
+                selectedSplitRange?.value &&
+                selectedSplitRange.value.startIndex === startIndex &&
+                selectedSplitRange.value.endIndex === endIndex
+            ) {
+                emit("split-cancel");
+            } else {
+                const first = splits.value[startIndex - 1];
+                const last = splits.value[endIndex - 1];
+                if (first && last) {
+                    emit("split-range-click", {
+                        startIndex,
+                        endIndex,
+                        start: first.start,
+                        end: last.end,
+                    });
+                }
+            }
+        } else {
+            // Anchor the first index for range selection; no emit yet
+            lastClickedIndex.value = index;
+        }
+        return;
+    }
+
+    // Normal click path
+    lastClickedIndex.value = index;
+
+    // If currently a range is selected and clicked inside it, cancel selection
+    if (
+        selectedSplitRange?.value &&
+        index >= selectedSplitRange.value.startIndex &&
+        index <= selectedSplitRange.value.endIndex
+    ) {
+        emit("split-cancel");
+        return;
+    }
+
+    // If single selection is active and clicked again, cancel selection
+    if (selectedSplitIndex?.value === index && !selectedSplitRange?.value) {
+        emit("split-cancel");
+        return;
+    }
+
+    // Otherwise select this single split
+    emit("split-click", { start: row.start, end: row.end, index });
+}
 </script>
 
 <template>
@@ -468,19 +545,33 @@ const splits = computed<SplitRow[]>(() => {
         </div>
 
         <div class="flex-1 overflow-auto">
-            <table class="min-w-full text-sm">
+            <table class="min-w-full text-sm whitespace-nowrap">
                 <thead
                     class="sticky top-0 bg-(--bg-color) z-0 border-b border-(--sub-color)"
                 >
                     <tr class="text-(--sub-color) text-xs uppercase">
-                        <th class="text-left p-x-1! py-2">Dist</th>
-                        <th class="text-right p-x-1! py-1!">Gain</th>
-                        <th class="text-right p-x-1! py-1!">Loss</th>
-                        <th class="text-right p-x-1! py-1!">Grade</th>
-                        <th v-if="currentPlan" class="text-right p-x-1! py-1!">
+                        <th class="text-left p-x-1! py-2 whitespace-nowrap">
+                            Dist
+                        </th>
+                        <th class="text-right p-x-1! py-1! whitespace-nowrap">
+                            Gain
+                        </th>
+                        <th class="text-right p-x-1! py-1! whitespace-nowrap">
+                            Loss
+                        </th>
+                        <th class="text-right p-x-1! py-1! whitespace-nowrap">
+                            Grade
+                        </th>
+                        <th
+                            v-if="currentPlan"
+                            class="text-right p-x-1! py-1! whitespace-nowrap"
+                        >
                             Pace
                         </th>
-                        <th v-if="currentPlan" class="text-right p-x-1! py-1!">
+                        <th
+                            v-if="currentPlan"
+                            class="text-right p-x-1! py-1! whitespace-nowrap"
+                        >
                             Elapsed
                         </th>
                     </tr>
@@ -489,12 +580,26 @@ const splits = computed<SplitRow[]>(() => {
                     <tr
                         v-for="row in splits"
                         :key="row.index"
-                        class="border-b border-(--sub-color)/50 hover:bg-(--sub-alt-color) transition-colors"
+                        class="border-b border-(--sub-color)/50 hover:bg-(--sub-alt-color) transition-colors cursor-pointer"
+                        :class="{
+                            'bg-(--main-color)/15':
+                                selectedSplitIndex === row.index ||
+                                (selectedSplitRange &&
+                                    row.index >=
+                                        selectedSplitRange.startIndex &&
+                                    row.index <= selectedSplitRange.endIndex),
+                        }"
+                        @mousedown.prevent
+                        @click="onRowClick(row, $event)"
                     >
-                        <td class="p-x-1! py-1! text-(--main-color)">
+                        <td
+                            class="p-x-1! py-1! text-(--main-color) whitespace-nowrap"
+                        >
                             {{ formatSplitDistance(row.end) }}
                         </td>
-                        <td class="p-x-1! py-1! text-(--main-color) text-right">
+                        <td
+                            class="p-x-1! py-1! text-(--main-color) text-right whitespace-nowrap"
+                        >
                             {{
                                 formatElevation(
                                     row.gain,
@@ -502,7 +607,9 @@ const splits = computed<SplitRow[]>(() => {
                                 )
                             }}
                         </td>
-                        <td class="p-x-1! py-1! text-(--main-color) text-right">
+                        <td
+                            class="p-x-1! py-1! text-(--main-color) text-right whitespace-nowrap"
+                        >
                             {{
                                 formatElevation(
                                     row.loss,
@@ -510,7 +617,9 @@ const splits = computed<SplitRow[]>(() => {
                                 )
                             }}
                         </td>
-                        <td class="p-x-1! py-1! text-(--main-color) text-right">
+                        <td
+                            class="p-x-1! py-1! text-(--main-color) text-right whitespace-nowrap"
+                        >
                             <span v-if="isFinite(row.avgGrade)"
                                 >{{
                                     (row.avgGrade >= 0 ? "+" : "") +
@@ -521,9 +630,12 @@ const splits = computed<SplitRow[]>(() => {
                         </td>
                         <td
                             v-if="currentPlan"
-                            class="p-x-1! py-1! text-(--main-color) text-right"
+                            class="p-x-1! py-1! text-(--main-color) text-right whitespace-nowrap"
                         >
-                            <span v-if="row.paceSecPerUnit !== null">
+                            <span
+                                v-if="row.paceSecPerUnit !== null"
+                                class="whitespace-nowrap"
+                            >
                                 {{
                                     formatPace(
                                         row.paceSecPerUnit!,
@@ -538,7 +650,7 @@ const splits = computed<SplitRow[]>(() => {
                         </td>
                         <td
                             v-if="currentPlan"
-                            class="p-x-1! py-1! text-(--main-color) text-right"
+                            class="p-x-1! py-1! text-(--main-color) text-right whitespace-nowrap"
                         >
                             <span v-if="row.elapsedSec !== null">{{
                                 formatElapsedTime(Math.round(row.elapsedSec!))
@@ -549,7 +661,7 @@ const splits = computed<SplitRow[]>(() => {
 
                     <tr v-if="splits.length === 0">
                         <td
-                            class="p-x-1! py-6 text-center text-(--sub-color)"
+                            class="p-x-1! py-6 text-center text-(--sub-color) whitespace-nowrap"
                             :colspan="currentPlan ? 6 : 4"
                         >
                             No splits available.
