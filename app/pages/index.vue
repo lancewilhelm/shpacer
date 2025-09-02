@@ -203,7 +203,7 @@ function formatPace(pace: number, paceUnit: string) {
                             "
                         >
                             <div
-                                class="text-(--main-color) font-semibold truncate mb-1"
+                                class="text-(--sub-color) font-semibold truncate"
                             >
                                 {{ plan.courseName }}
                             </div>
