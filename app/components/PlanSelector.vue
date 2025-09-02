@@ -103,10 +103,7 @@ onBeforeUnmount(() => {
             class="flex items-center gap-2 px-3 py-2 border border-(--main-color) text-(--main-color) rounded-sm hover:bg-(--main-color) hover:text-(--bg-color) transition-colors text-sm font-medium"
             @click="addPlan"
         >
-            <Icon
-                name="lucide:plus"
-                class="h-4 w-4 scale-125 -translate-y-0.25"
-            />
+            <Icon name="lucide:plus" class="h-4 w-4 scale-125" />
             Add Plan
         </button>
 
@@ -116,17 +113,14 @@ onBeforeUnmount(() => {
                 class="flex items-center gap-2 px-3 py-2 border border-(--main-color) text-(--main-color) rounded-sm hover:bg-(--main-color) hover:text-(--bg-color) transition-colors text-sm font-medium"
                 @click="dropdownOpen = !dropdownOpen"
             >
-                <Icon
-                    name="lucide:clipboard-list"
-                    class="h-4 w-4 scale-125 -translate-y-0.25"
-                />
+                <Icon name="lucide:clipboard-list" class="h-4 w-4 scale-125" />
                 <span class="font-medium">
                     {{ currentPlan ? currentPlan.name : "Select Plan" }}
                 </span>
                 <Icon
                     name="lucide:chevron-down"
                     :class="[
-                        'h-4 w-4 transition-transform',
+                        'h-4 w-4 transition-transform scale-150',
                         dropdownOpen ? 'rotate-180' : 'rotate-0',
                     ]"
                 />

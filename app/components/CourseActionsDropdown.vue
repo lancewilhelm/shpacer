@@ -103,7 +103,7 @@ onBeforeUnmount(() => {
             <Icon
                 name="lucide:chevron-up"
                 :class="[
-                    'h-4 w-4 scale-125 -translate-y-0.25 transition-transform',
+                    'h-4 w-4 scale-150 transition-transform',
                     popupVisible ? 'rotate-0' : 'rotate-180',
                 ]"
             />
