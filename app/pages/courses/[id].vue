@@ -6,6 +6,7 @@ import type {
     SelectWaypointStoppageTime,
 } from "~/utils/db/schema";
 import { formatDistance, formatElevation } from "~/utils/courseMetrics";
+import { clampChartPanelHeight } from "~/utils/uiConstants";
 import {
     extractElevationProfile,
     interpolateAtDistance,
@@ -198,6 +199,63 @@ function stopResize() {
     isResizing.value = false;
     document.removeEventListener("mousemove", handleResize);
     document.removeEventListener("mouseup", stopResize);
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+}
+
+// Chart panel resizing state (simple 1:1 like waypoint panel)
+const chartIsResizing = ref(false);
+const chartResizeStartY = ref(0);
+const chartResizeStartHeight = ref(320);
+
+// Computed chart height for current mode (course vs plan) stored in UI store
+const chartPanelHeight = computed<number>({
+    get() {
+        return currentPlan.value
+            ? uiStore.chartPanelHeightPlan
+            : uiStore.chartPanelHeightCourse;
+    },
+    set(val: number) {
+        const clamped = clampChartHeight(val);
+        if (currentPlan.value) {
+            uiStore.setChartPanelHeightPlan(clamped);
+        } else {
+            uiStore.setChartPanelHeightCourse(clamped);
+        }
+    },
+});
+
+// Clamp helper for height
+function clampChartHeight(h: number) {
+    return clampChartPanelHeight(h);
+}
+
+// Start resizing the chart panel
+function startChartResize(event: MouseEvent) {
+    chartIsResizing.value = true;
+    chartResizeStartY.value = event.clientY;
+    chartResizeStartHeight.value = chartPanelHeight.value;
+
+    document.addEventListener("mousemove", handleChartResize);
+    document.addEventListener("mouseup", stopChartResize);
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+}
+
+// Handle chart panel resize
+function handleChartResize(event: MouseEvent) {
+    if (!chartIsResizing.value) return;
+
+    const deltaY = event.clientY - chartResizeStartY.value; // dragging down increases height
+    const next = clampChartHeight(chartResizeStartHeight.value + deltaY);
+    chartPanelHeight.value = next;
+}
+
+// Stop resizing the chart panel
+function stopChartResize() {
+    chartIsResizing.value = false;
+    document.removeEventListener("mousemove", handleChartResize);
+    document.removeEventListener("mouseup", stopChartResize);
     document.body.style.cursor = "";
     document.body.style.userSelect = "";
 }
@@ -862,6 +920,9 @@ onUnmounted(() => {
     if (isResizing.value) {
         stopResize();
     }
+    if (chartIsResizing.value) {
+        stopChartResize();
+    }
 });
 </script>
 
@@ -1122,25 +1183,42 @@ onUnmounted(() => {
                     <!-- Left Panel: Charts and Map -->
                     <div class="flex-1 flex flex-col overflow-hidden">
                         <!-- Combined Charts Section -->
-                        <div class="px-4 py-2 border-b border-(--sub-color)">
-                            <ElevationPaceChart
-                                :geo-json-data="geoJsonData"
-                                :height="200"
-                                :map-hover-distance="mapHoverDistance"
-                                :selected-waypoint-distance="
-                                    waypointPanelTab === 'waypoints'
-                                        ? selectedWaypoint?.distance || null
-                                        : null
-                                "
-                                :waypoints="displayWaypoints"
-                                :plan="currentPlan"
-                                :show-pace-chart="!!currentPlan"
-                                @elevation-hover="handleElevationHover"
-                                @elevation-leave="handleElevationLeave"
-                                @pace-hover="handlePaceHover"
-                                @pace-leave="handlePaceLeave"
-                                @waypoint-click="handleElevationWaypointClick"
-                            />
+                        <div
+                            class="border-b border-(--sub-color) relative overflow-hidden"
+                            :style="{ height: `${chartPanelHeight}px` }"
+                        >
+                            <div class="h-full px-4 py-2">
+                                <ElevationPaceChart
+                                    :geo-json-data="geoJsonData"
+                                    :height="chartPanelHeight"
+                                    :map-hover-distance="mapHoverDistance"
+                                    :selected-waypoint-distance="
+                                        waypointPanelTab === 'waypoints'
+                                            ? selectedWaypoint?.distance || null
+                                            : null
+                                    "
+                                    :waypoints="displayWaypoints"
+                                    :plan="currentPlan"
+                                    :show-pace-chart="!!currentPlan"
+                                    @elevation-hover="handleElevationHover"
+                                    @elevation-leave="handleElevationLeave"
+                                    @pace-hover="handlePaceHover"
+                                    @pace-leave="handlePaceLeave"
+                                    @waypoint-click="
+                                        handleElevationWaypointClick
+                                    "
+                                />
+                                <div
+                                    class="absolute left-0 bottom-0 w-full h-1 cursor-row-resize transition-all duration-200 z-10 hover:h-[3px] hover:bg-(--main-color)"
+                                    :class="{
+                                        'h-2 bg-(--main-color)':
+                                            chartIsResizing,
+                                        'bg-transparent hover:bg-(--main-color)':
+                                            !chartIsResizing,
+                                    }"
+                                    @mousedown="startChartResize"
+                                />
+                            </div>
                         </div>
 
                         <!-- Map Section -->

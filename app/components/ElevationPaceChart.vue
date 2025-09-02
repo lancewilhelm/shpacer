@@ -99,8 +99,8 @@ const tooltipData = ref({
 const chartHoverDistance = ref<number | null>(null);
 const chartHoverSource = ref<"elevation" | "pace" | null>(null);
 
-// Pace chart height factor (0.8 = 80% of elevation chart height)
-const paceChartHeightFactor = 0.8;
+// Pace chart height factor as fraction of total charts height when pace chart is shown (e.g., 0.45 = 45% of total)
+const paceChartHeightFactor = 0.45;
 
 // Chart state
 let svg: d3.Selection<SVGSVGElement, unknown, null, undefined> | null = null;
@@ -453,7 +453,10 @@ function initChart() {
     const container = chartContainer.value;
     const containerRect = container.getBoundingClientRect();
     const width = containerRect.width;
-    const height = props.height;
+    const height =
+        props.showPaceChart && hasPaceData.value
+            ? props.height * (1 - paceChartHeightFactor)
+            : props.height;
 
     // Reduce bottom margin when pace chart is actually shown
     const bottomMargin = props.showPaceChart && hasPaceData.value ? 20 : 40;
@@ -1560,6 +1563,22 @@ watch(
     },
 );
 
+// Re-render when height changes
+watch(
+    () => props.height,
+    () => {
+        if (hasElevationData.value) {
+            nextTick(() => {
+                initChart();
+            });
+        }
+        if (hasPaceData.value && props.showPaceChart) {
+            nextTick(() => {
+                initPaceChart();
+            });
+        }
+    },
+);
 // Setup resize observer
 // Handle component resize
 onMounted(() => {
@@ -1652,6 +1671,7 @@ onMounted(() => {
 <style scoped>
 .charts-container {
     width: 100%;
+    height: 100%;
     display: flex;
     flex-direction: column;
 }
@@ -1663,7 +1683,7 @@ onMounted(() => {
 
 .elevation-chart {
     width: 100%;
-    min-height: 200px;
+    height: 100%;
 }
 
 .pace-chart-container {
@@ -1675,7 +1695,7 @@ onMounted(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 200px;
+    height: 100%;
     border: 1px solid var(--sub-color);
     border-radius: 8px;
     opacity: 0.7;
@@ -1683,6 +1703,7 @@ onMounted(() => {
 
 .pace-chart {
     width: 100%;
+    height: 100%;
 }
 
 .elevation-tooltip {
