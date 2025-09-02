@@ -102,6 +102,41 @@ const chartHoverSource = ref<"elevation" | "pace" | null>(null);
 // Pace chart height factor as fraction of total charts height when pace chart is shown (e.g., 0.45 = 45% of total)
 const paceChartHeightFactor = 0.45;
 
+// Shared axis margins and chart padding
+const AXIS_MARGIN_LEFT = 60;
+const AXIS_MARGIN_RIGHT = 20;
+
+// Elevation chart margins
+const ELEVATION_MARGIN_TOP = 30;
+const ELEVATION_MARGIN_BOTTOM = 20;
+
+// Pace chart margins
+const PACE_MARGIN_TOP = 10;
+const PACE_MARGIN_BOTTOM = 20;
+
+// Tooltip padding relative to chart
+const TOOLTIP_MARGIN_TOP = 20;
+
+// Consolidated margin objects
+const ELEVATION_CHART_MARGIN = {
+    top: ELEVATION_MARGIN_TOP,
+    right: AXIS_MARGIN_RIGHT,
+    bottom: ELEVATION_MARGIN_BOTTOM,
+    left: AXIS_MARGIN_LEFT,
+};
+const PACE_CHART_MARGIN = {
+    top: PACE_MARGIN_TOP,
+    right: AXIS_MARGIN_RIGHT,
+    bottom: PACE_MARGIN_BOTTOM,
+    left: AXIS_MARGIN_LEFT,
+};
+const TOOLTIP_MARGIN = {
+    top: TOOLTIP_MARGIN_TOP,
+    right: AXIS_MARGIN_RIGHT,
+    bottom: 40,
+    left: AXIS_MARGIN_LEFT,
+};
+
 // Chart state
 let svg: d3.Selection<SVGSVGElement, unknown, null, undefined> | null = null;
 let xScale: d3.ScaleLinear<number, number> | null = null;
@@ -459,8 +494,7 @@ function initChart() {
             : props.height;
 
     // Reduce bottom margin when pace chart is actually shown
-    const bottomMargin = props.showPaceChart && hasPaceData.value ? 20 : 40;
-    const margin = { top: 40, right: 30, bottom: bottomMargin, left: 60 }; // Increased top margin for waypoint circles
+    const margin = ELEVATION_CHART_MARGIN; // Increased top margin for waypoint circles
     const innerWidth = width - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
 
@@ -696,7 +730,7 @@ function initChart() {
             .style("text-anchor", "middle")
             .style("fill", "var(--sub-color)")
             .style("font-size", "12px")
-            .text("Distance");
+            .text("");
     }
 }
 
@@ -712,10 +746,7 @@ function showElevationChartHover(distance: number) {
 
     const x = xScale(distance);
     // Ensure crosshair is within bounds
-    if (
-        x >= 0 &&
-        x <= (chartContainer.value?.getBoundingClientRect().width || 0) - 90
-    ) {
+    if (x >= 0 && x <= (xScale?.range?.()[1] || 0)) {
         elevationSyncCrosshair
             .attr("x1", x)
             .attr("x2", x)
@@ -771,7 +802,7 @@ function showElevationChartHover(distance: number) {
         // Position tooltip
         const containerRect = chartContainer.value!.getBoundingClientRect();
         const tooltipEl = tooltip.value;
-        const margin = { top: 20, right: 30, bottom: 40, left: 60 };
+        const margin = TOOLTIP_MARGIN;
 
         const chartX = x + margin.left;
         const chartY = margin.top + 10;
@@ -796,10 +827,7 @@ function showPaceChartHover(distance: number) {
 
     const x = paceXScale(distance);
     // Ensure crosshair is within bounds
-    if (
-        x >= 0 &&
-        x <= (paceChartContainer.value?.getBoundingClientRect().width || 0) - 90
-    ) {
+    if (x >= 0 && x <= (paceXScale?.range?.()[1] || 0)) {
         paceSyncCrosshair.attr("x1", x).attr("x2", x).style("opacity", 0.8);
     }
 }
@@ -838,7 +866,7 @@ function initPaceChart() {
     const width = containerRect.width;
     const height = props.height * paceChartHeightFactor;
 
-    const margin = { top: 0, right: 30, bottom: 40, left: 60 };
+    const margin = PACE_CHART_MARGIN;
     const innerWidth = width - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
 
@@ -973,16 +1001,6 @@ function initPaceChart() {
         .style("fill", "var(--sub-color)")
         .style("font-size", "12px")
         .text("Pace");
-
-    g.append("text")
-        .attr(
-            "transform",
-            `translate(${innerWidth / 2}, ${innerHeight + margin.bottom})`,
-        )
-        .style("text-anchor", "middle")
-        .style("fill", "var(--sub-color)")
-        .style("font-size", "12px")
-        .text("Distance");
 }
 
 // Handle mouse movement over the chart
@@ -1051,7 +1069,7 @@ function handleMouseMove(event: MouseEvent) {
         // Position tooltip
         const containerRect = chartContainer.value!.getBoundingClientRect();
         const tooltipEl = tooltip.value;
-        const margin = { top: 20, right: 30, bottom: 40, left: 60 };
+        const margin = TOOLTIP_MARGIN;
 
         // Calculate position relative to chart area
         const chartX = mouseX + margin.left;
@@ -1197,7 +1215,7 @@ function updateMapHoverCrosshair() {
             // Position tooltip
             const containerRect = chartContainer.value!.getBoundingClientRect();
             const tooltipEl = tooltip.value;
-            const margin = { top: 20, right: 30, bottom: 40, left: 60 };
+            const margin = TOOLTIP_MARGIN;
 
             // Calculate position relative to chart area
             const chartX = x + margin.left;
@@ -1363,7 +1381,7 @@ function updateWaypointCrosshair() {
             // Position tooltip at the waypoint crosshair
             const containerRect = chartContainer.value!.getBoundingClientRect();
             const tooltipEl = tooltip.value;
-            const margin = { top: 20, right: 30, bottom: 40, left: 60 };
+            const margin = TOOLTIP_MARGIN;
 
             // Calculate position relative to chart area
             const chartX = x + margin.left;
@@ -1674,21 +1692,29 @@ onMounted(() => {
     height: 100%;
     display: flex;
     flex-direction: column;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .elevation-chart-container {
     width: 100%;
     position: relative;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .elevation-chart {
     width: 100%;
     height: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .pace-chart-container {
     width: 100%;
     position: relative;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .no-pace-data {
@@ -1699,11 +1725,24 @@ onMounted(() => {
     border: 1px solid var(--sub-color);
     border-radius: 8px;
     opacity: 0.7;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .pace-chart {
     width: 100%;
     height: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+/* Ensure embedded SVGs fill their containers without overflowing */
+.elevation-chart > svg,
+.pace-chart > svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
 }
 
 .elevation-tooltip {

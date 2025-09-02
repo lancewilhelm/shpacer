@@ -1187,10 +1187,10 @@ onUnmounted(() => {
                             class="border-b border-(--sub-color) relative overflow-hidden"
                             :style="{ height: `${chartPanelHeight}px` }"
                         >
-                            <div class="h-full px-4 py-2">
+                            <div class="h-full px-2 pt-2 pb-4">
                                 <ElevationPaceChart
                                     :geo-json-data="geoJsonData"
-                                    :height="chartPanelHeight"
+                                    :height="Math.max(0, chartPanelHeight - 24)"
                                     :map-hover-distance="mapHoverDistance"
                                     :selected-waypoint-distance="
                                         waypointPanelTab === 'waypoints'
@@ -1232,10 +1232,10 @@ onUnmounted(() => {
                                             waypointPanelTab === 'splits'
                                         "
                                         :selected-waypoint="selectedWaypoint"
+                                        :key="mapResetKey"
                                         :elevation-hover-point="
                                             elevationHoverPoint
                                         "
-                                        :key="mapResetKey"
                                         :highlight-segment="
                                             stableHighlightSegment
                                         "
