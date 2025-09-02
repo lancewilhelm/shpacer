@@ -92,37 +92,22 @@ onBeforeUnmount(() => {
 
 <template>
     <div class="relative">
-        <div
-            class="flex items-center gap-2 cursor-pointer focus-outline rounded px-3 py-2 border border-(--main-color) text-(--main-color) hover:bg-(--main-color) hover:text-(--bg-color) transition-colors"
-            tabindex="0"
-            @mousedown.stop.prevent="popupVisible = !popupVisible"
-            @keydown.enter="
-                () => {
-                    popupVisible = !popupVisible;
-                }
-            "
-            @keydown.esc.stop.prevent="
-                () => {
-                    popupVisible = false;
-                }
-            "
-            @keydown.space="
-                () => {
-                    popupVisible = !popupVisible;
-                }
-            "
+        <button
+            class="flex items-center gap-2 px-3 py-2 border border-(--main-color) text-(--main-color) rounded-sm hover:bg-(--main-color) hover:text-(--bg-color) transition-colors text-sm font-medium focus-outline"
+            @click.stop.prevent="popupVisible = !popupVisible"
+            @keydown.enter.prevent="popupVisible = !popupVisible"
+            @keydown.esc.stop.prevent="popupVisible = false"
+            @keydown.space.prevent="popupVisible = !popupVisible"
         >
-            <div class="flex items-center gap-1">
-                <div class="text-sm font-medium">Menu</div>
-                <Icon
-                    name="lucide:chevron-up"
-                    :class="[
-                        'cursor-pointer hover:opacity-80 transition-transform',
-                        popupVisible ? 'rotate-0' : 'rotate-180',
-                    ]"
-                />
-            </div>
-        </div>
+            <span>Menu</span>
+            <Icon
+                name="lucide:chevron-up"
+                :class="[
+                    'h-4 w-4 scale-125 -translate-y-0.25 transition-transform',
+                    popupVisible ? 'rotate-0' : 'rotate-180',
+                ]"
+            />
+        </button>
 
         <!-- Dropdown -->
         <div
