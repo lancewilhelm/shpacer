@@ -12,7 +12,7 @@ definePageMeta({
 });
 
 useHead({
-    title: "Home",
+    title: "shpacer",
 });
 
 interface PlanWithCourse extends SelectPlan {
@@ -37,11 +37,11 @@ const {
     data: plansData,
     pending: plansPending,
     error: plansError,
-} = await useFetch<PlanListResponse>("/api/plans?limit=5");
+} = await useFetch<PlanListResponse>("/api/plans?limit=4");
 
 const userSettingsStore = useUserSettingsStore();
 
-const courses = computed(() => (coursesData.value?.courses ?? []).slice(0, 5));
+const courses = computed(() => (coursesData.value?.courses ?? []).slice(0, 4));
 const plans = computed(() => plansData.value?.plans ?? []);
 
 function formatCourseDistance(meters: number) {
@@ -65,8 +65,12 @@ function formatPace(pace: number, paceUnit: string) {
     <div class="flex flex-col w-full h-full overflow-hidden">
         <AppHeader class="w-full" />
         <div class="w-full h-full p-4 flex flex-col gap-6 overflow-auto">
-            <h2 class="text-2xl font-bold text-(--main-color)">Dashboard</h2>
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div
+                class="text-6xl font-bold text-(--main-color) logo text-center"
+            >
+                shpacer
+            </div>
+            <div class="flex flex-col gap-6">
                 <!-- Recent Courses -->
                 <div>
                     <h3 class="text-xl font-semibold text-(--main-color) mb-2">
@@ -93,14 +97,12 @@ function formatPace(pace: number, paceUnit: string) {
                     >
                         No courses yet
                     </div>
-                    <div
-                        v-else
-                        class="grid grid-cols-1 md:grid-cols-2 gap-4"
-                    >
+                    <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div
                             v-for="course in courses"
                             :key="course.id"
-                            class="bg-(--sub-alt-color) border border-(--sub-color) rounded-lg p-4"
+                            class="bg-(--sub-alt-color) border border-(--sub-color) rounded-lg p-4 hover:border-(--main-color) transition-colors group cursor-pointer"
+                            @click="$router.push(`/courses/${course.id}`)"
                         >
                             <h4
                                 class="font-semibold text-(--main-color) truncate"
@@ -142,6 +144,22 @@ function formatPace(pace: number, paceUnit: string) {
                                         }}
                                     </span>
                                 </div>
+                                <div
+                                    v-if="course.elevationLoss"
+                                    class="flex items-center gap-1"
+                                >
+                                    <Icon
+                                        name="lucide:arrow-down"
+                                        class="h-3 w-3 -translate-y-0.25"
+                                    />
+                                    <span>
+                                        {{
+                                            formatCourseElevation(
+                                                course.elevationLoss,
+                                            )
+                                        }}
+                                    </span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -173,25 +191,27 @@ function formatPace(pace: number, paceUnit: string) {
                     >
                         No plans yet
                     </div>
-                    <div
-                        v-else
-                        class="grid grid-cols-1 md:grid-cols-2 gap-4"
-                    >
+                    <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div
                             v-for="plan in plans"
                             :key="plan.id"
-                            class="bg-(--sub-alt-color) border border-(--sub-color) rounded-lg p-4"
+                            class="bg-(--sub-alt-color) border border-(--sub-color) rounded-lg p-4 hover:border-(--main-color) transition-colors group cursor-pointer"
+                            @click="
+                                $router.push(
+                                    `/courses/${plan.courseId}?plan=${plan.id}`,
+                                )
+                            "
                         >
+                            <div
+                                class="text-(--main-color) font-semibold truncate mb-1"
+                            >
+                                {{ plan.courseName }}
+                            </div>
                             <h4
-                                class="font-semibold text-(--main-color) truncate"
+                                class="font-medium text-(--main-color) truncate"
                             >
                                 {{ plan.name }}
                             </h4>
-                            <p
-                                class="text-xs text-(--sub-color) mb-2 truncate"
-                            >
-                                {{ plan.courseName }}
-                            </p>
                             <div
                                 class="flex items-center gap-3 text-xs text-(--main-color)"
                             >
@@ -203,7 +223,9 @@ function formatPace(pace: number, paceUnit: string) {
                                         name="lucide:gauge"
                                         class="h-3 w-3 -translate-y-0.25"
                                     />
-                                    <span>{{ formatPace(plan.pace, plan.paceUnit) }}</span>
+                                    <span>{{
+                                        formatPace(plan.pace, plan.paceUnit)
+                                    }}</span>
                                 </div>
                                 <div
                                     v-if="plan.targetTimeSeconds"
@@ -213,7 +235,11 @@ function formatPace(pace: number, paceUnit: string) {
                                         name="lucide:timer"
                                         class="h-3 w-3 -translate-y-0.25"
                                     />
-                                    <span>{{ formatElapsedTime(plan.targetTimeSeconds) }}</span>
+                                    <span>{{
+                                        formatElapsedTime(
+                                            plan.targetTimeSeconds,
+                                        )
+                                    }}</span>
                                 </div>
                             </div>
                         </div>
@@ -223,3 +249,9 @@ function formatPace(pace: number, paceUnit: string) {
         </div>
     </div>
 </template>
+
+<style>
+.logo {
+    font-family: Poppins, sans-serif;
+}
+</style>
