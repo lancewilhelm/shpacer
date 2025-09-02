@@ -91,7 +91,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div class="relative">
+    <div ref="popupRef" class="relative">
         <button
             class="flex items-center gap-2 px-3 py-2 border border-(--main-color) text-(--main-color) rounded-sm hover:bg-(--main-color) hover:text-(--bg-color) transition-colors text-sm font-medium focus-outline"
             @click.stop.prevent="popupVisible = !popupVisible"
@@ -112,7 +112,6 @@ onBeforeUnmount(() => {
         <!-- Dropdown -->
         <div
             v-if="popupVisible"
-            ref="popupRef"
             class="absolute top-full mb-2 mt-2 right-0 bg-(--bg-color) border border-(--sub-color) rounded-lg shadow-lg min-w-max max-h-80 z-50 overflow-y-auto"
         >
             <div class="p-2">
