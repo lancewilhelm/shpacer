@@ -11,6 +11,7 @@ import {
     extractElevationProfile,
     interpolateAtDistance,
 } from "~/utils/elevationProfile";
+import type { DistanceUnit } from "~/stores/userSettings";
 
 // Define the waypoint type that matches what we get from the API
 type Waypoint = {
@@ -116,6 +117,10 @@ const currentPlan = computed(() =>
     currentPlanId.value
         ? plans.value.find((p) => p.id === currentPlanId.value)
         : null,
+);
+
+const distanceUnit = computed<DistanceUnit>(
+    () => userSettingsStore.settings.units.distance,
 );
 
 // Set the page title dynamically based on the course name
@@ -504,10 +509,22 @@ function formatHMS(totalSeconds: number): string {
 const planPaceDisplay = computed(() => {
     const p = currentPlan.value;
     if (!p?.pace) return "-";
-    const total = Math.round(p.pace);
+
+    let paceSeconds = p.pace;
+    const originalUnit = p.paceUnit;
+    const desiredUnit = distanceUnit.value === "miles" ? "min_per_mi" : "min_per_km";
+    if (originalUnit !== desiredUnit) {
+        const conversionFactor = 1609.344 / 1000; // miles per kilometer
+        paceSeconds =
+            originalUnit === "min_per_km"
+                ? paceSeconds * conversionFactor
+                : paceSeconds / conversionFactor;
+    }
+
+    const total = Math.round(paceSeconds);
     const mm = Math.floor(total / 60);
     const ss = total % 60;
-    const unit = p.paceUnit === "min_per_mi" ? "/mi" : "/km";
+    const unit = desiredUnit === "min_per_mi" ? "/mi" : "/km";
     return `${mm}:${ss.toString().padStart(2, "0")}${unit}`;
 });
 
