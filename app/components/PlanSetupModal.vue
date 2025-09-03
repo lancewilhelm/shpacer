@@ -71,6 +71,100 @@ const isSubmitting = ref(false);
 const error = ref("");
 const courseTotalDistance = computed(() => props.courseTotalDistance ?? null);
 
+// Full-form validation to enable Save from any step
+const canSave = computed((): boolean => {
+    // Name required
+    if (!formData.value.name.trim()) return false;
+
+    // Default stoppage validation
+    const stopVal = validateDefaultStoppage();
+    if (!stopVal.ok) return false;
+
+    // Pacing strategy validation
+    if (formData.value.pacingStrategy === "linear") {
+        const p = parseInt(formData.value.pacingLinearPercent || "0", 10);
+        if (!Number.isFinite(p) || p < -50 || p > 50) return false;
+    }
+
+    // Pacing method validation
+    if (formData.value.paceMode === "time") {
+        const targetVal = validateTargetTime();
+        if (!targetVal.ok) return false;
+        if (!courseTotalDistance.value || courseTotalDistance.value <= 0)
+            return false;
+        return true;
+    } else {
+        const paceVal = validatePaceFields();
+        if (!paceVal.ok) return false;
+        return true;
+    }
+});
+
+// Wizard step state: 1=Details, 2=Pacing Method, 3=Pacing Strategy
+const activeStep = ref<1 | 2 | 3>(1);
+
+function goToStep(step: 1 | 2 | 3) {
+    // Validate only when moving forward
+    if (step > activeStep.value) {
+        error.value = "";
+
+        // Leaving Details (Step 1) requires valid name and stoppage time
+        if (activeStep.value === 1) {
+            if (!formData.value.name.trim()) {
+                error.value = "Plan name is required.";
+                return;
+            }
+            const stopVal = validateDefaultStoppage();
+            if (!stopVal.ok) {
+                error.value =
+                    stopVal.message || "Invalid default stoppage time.";
+                return;
+            }
+        }
+
+        // Entering Strategy (Step 3) requires a valid pacing selection
+        if (step >= 3) {
+            if (formData.value.paceMode === "time") {
+                const targetVal = validateTargetTime();
+                if (!targetVal.ok) {
+                    error.value = targetVal.message || "Invalid target time.";
+                    return;
+                }
+                if (
+                    !courseTotalDistance.value ||
+                    courseTotalDistance.value <= 0
+                ) {
+                    error.value =
+                        "Course distance is unavailable. Please reload and try again.";
+                    return;
+                }
+            } else {
+                const paceVal = validatePaceFields();
+                if (!paceVal.ok) {
+                    error.value = paceVal.message || "Invalid pace.";
+                    return;
+                }
+            }
+        }
+    }
+    activeStep.value = step;
+}
+
+function nextStep() {
+    if (activeStep.value < 3) {
+        goToStep((activeStep.value + 1) as 1 | 2 | 3);
+    }
+}
+
+function prevStep() {
+    if (activeStep.value > 1) {
+        error.value = "";
+        activeStep.value = (activeStep.value - 1) as 1 | 2 | 3;
+    }
+}
+
+// removed unused prevStep
+
 function resetForm() {
     formData.value.name = "";
     formData.value.paceMode = "pace";
@@ -94,6 +188,7 @@ watch(
     [() => props.isOpen, () => props.existingPlan],
     () => {
         if (!props.isOpen) return;
+        activeStep.value = props.existingPlan ? 2 : 1;
         if (props.existingPlan) {
             const p = props.existingPlan;
             formData.value.name = p.name;
@@ -591,14 +686,71 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
 
 <template>
     <ModalWindow :open="isOpen" @close="handleClose">
-        <div class="p-6 max-w-md w-full">
+        <div class="p-6 max-w-md w-full h-[640px] flex flex-col">
             <h2 class="text-xl font-semibold text-(--main-color) mb-4">
                 {{ existingPlan ? "Edit Plan" : "Create New Plan" }}
             </h2>
 
-            <form class="space-y-4" @submit.prevent="handleSubmit">
+            <div class="mb-4">
+                <div class="flex items-center justify-between text-sm">
+                    <div
+                        :class="[
+                            'px-3 py-1 rounded-full cursor-pointer',
+                            activeStep === 1
+                                ? 'bg-(--main-color) text-(--bg-color)'
+                                : 'bg-(--sub-color)/20 text-(--main-color)',
+                        ]"
+                        role="button"
+                        tabindex="0"
+                        @click="goToStep(1)"
+                        title="Go to Details"
+                    >
+                        1. Details
+                    </div>
+                    <div class="flex-1 h-px bg-(--sub-color) mx-2"></div>
+                    <div
+                        :class="[
+                            'px-3 py-1 rounded-full cursor-pointer',
+                            activeStep === 2
+                                ? 'bg-(--main-color) text-(--bg-color)'
+                                : 'bg-(--sub-color)/20 text-(--main-color)',
+                        ]"
+                        role="button"
+                        tabindex="0"
+                        @click="goToStep(2)"
+                        title="Go to Pacing Method"
+                    >
+                        2. Pacing Method
+                    </div>
+                    <div class="flex-1 h-px bg-(--sub-color) mx-2"></div>
+                    <div
+                        :class="[
+                            'px-3 py-1 rounded-full cursor-pointer',
+                            activeStep === 3
+                                ? 'bg-(--main-color) text-(--bg-color)'
+                                : 'bg-(--sub-color)/20 text-(--main-color)',
+                        ]"
+                        role="button"
+                        tabindex="0"
+                        @click="goToStep(3)"
+                        title="Go to Strategy"
+                    >
+                        3. Strategy
+                    </div>
+                </div>
+                <p class="mt-2 text-xs text-(--sub-color)">
+                    Use Next and Back or click the steps above to navigate. You
+                    can Save from any step once required fields are complete.
+                </p>
+            </div>
+
+            <form
+                id="plan-setup-form"
+                class="space-y-4 flex-1 min-h-0 overflow-y-auto pr-1"
+                @submit.prevent="handleSubmit"
+            >
                 <!-- Plan Name -->
-                <div>
+                <div v-show="activeStep === 1">
                     <label
                         for="plan-name"
                         class="block text-sm font-medium text-(--main-color) mb-1"
@@ -617,7 +769,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                 </div>
 
                 <!-- Pacing Method -->
-                <div>
+                <div v-show="activeStep === 2">
                     <label
                         class="block text-sm font-medium text-(--main-color) mb-1"
                     >
@@ -664,7 +816,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                 </div>
 
                 <!-- Pacing Strategy -->
-                <div>
+                <div v-show="activeStep === 3">
                     <label
                         class="block text-sm font-medium text-(--main-color) mb-1"
                     >
@@ -734,7 +886,10 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                 </div>
 
                 <!-- Pace Inputs -->
-                <div v-if="formData.paceMode !== 'time'">
+                <div
+                    v-if="formData.paceMode !== 'time'"
+                    v-show="activeStep === 2"
+                >
                     <label
                         class="block text-sm font-medium text-(--main-color) mb-1"
                         :for="'pace-minutes'"
@@ -844,7 +999,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                 </div>
 
                 <!-- Target Finish Time -->
-                <div v-else>
+                <div v-else v-show="activeStep === 2">
                     <label
                         class="block text-sm font-medium text-(--main-color) mb-1"
                         for="target-hours"
@@ -979,7 +1134,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                 </div>
 
                 <!-- Default Stoppage Time -->
-                <div>
+                <div v-show="activeStep === 1">
                     <label
                         class="block text-sm font-medium text-(--main-color) mb-1"
                         for="stop-minutes"
@@ -1064,38 +1219,62 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                 <div v-if="error" class="text-(--error-color) text-sm">
                     {{ error }}
                 </div>
-
-                <!-- Action Buttons -->
-                <div class="flex gap-3 pt-4">
-                    <button
-                        type="button"
-                        class="flex-1 px-4 py-2 border border-(--sub-color) rounded-lg text-(--main-color) hover:bg-(--sub-color)/10 transition-colors"
-                        :disabled="isSubmitting"
-                        @click="handleClose"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="submit"
-                        :disabled="isSubmitting || !formData.name.trim()"
-                        class="flex-1 px-4 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50"
-                    >
-                        <span
-                            v-if="isSubmitting"
-                            class="flex items-center justify-center gap-2"
-                        >
-                            <Icon
-                                name="svg-spinners:6-dots-scale"
-                                class="scale-75"
-                            />
-                            Saving...
-                        </span>
-                        <span v-else>
-                            {{ existingPlan ? "Update Plan" : "Create Plan" }}
-                        </span>
-                    </button>
-                </div>
             </form>
+
+            <!-- Action Buttons -->
+            <div class="grid grid-cols-4 gap-3 pt-4 items-stretch">
+                <!-- Cancel -->
+                <button
+                    type="button"
+                    class="w-full whitespace-nowrap px-4 py-2 border border-(--sub-color) rounded-lg text-(--main-color) hover:bg-(--sub-color)/10 transition-colors"
+                    :disabled="isSubmitting"
+                    @click="handleClose"
+                >
+                    Cancel
+                </button>
+
+                <!-- Back (kept in layout; hidden when not applicable) -->
+                <button
+                    type="button"
+                    class="w-full whitespace-nowrap px-4 py-2 border border-(--sub-color) rounded-lg text-(--main-color) hover:bg-(--sub-color)/10 transition-colors"
+                    :class="{ invisible: activeStep <= 1 }"
+                    :disabled="isSubmitting || activeStep <= 1"
+                    @click="prevStep"
+                >
+                    Back
+                </button>
+
+                <!-- Next (kept in layout; hidden when not applicable) -->
+                <button
+                    type="button"
+                    class="w-full whitespace-nowrap px-4 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50"
+                    :class="{ invisible: activeStep >= 3 }"
+                    :disabled="isSubmitting || activeStep >= 3"
+                    @click="nextStep"
+                >
+                    Next
+                </button>
+
+                <!-- Save -->
+                <button
+                    type="submit"
+                    form="plan-setup-form"
+                    :disabled="isSubmitting || !canSave"
+                    class="w-full whitespace-nowrap px-4 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50"
+                >
+                    <span
+                        v-if="isSubmitting"
+                        class="flex items-center justify-center gap-2"
+                    >
+                        <Icon
+                            name="svg-spinners:6-dots-scale"
+                            class="scale-75"
+                        />
+                        Saving...
+                    </span>
+                    <span v-else> Save Plan </span>
+                </button>
+            </div>
         </div>
     </ModalWindow>
 </template>
