@@ -1226,13 +1226,13 @@ onUnmounted(() => {
                             <div class="h-full rounded-lg overflow-hidden">
                                 <ClientOnly>
                                     <LeafletMap
+                                        :key="mapResetKey"
                                         :geo-json-data="geoJsonData"
                                         :waypoints="displayWaypoints"
                                         :display-markers-as-splits="
                                             waypointPanelTab === 'splits'
                                         "
                                         :selected-waypoint="selectedWaypoint"
-                                        :key="mapResetKey"
                                         :elevation-hover-point="
                                             elevationHoverPoint
                                         "

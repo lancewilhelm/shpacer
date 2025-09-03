@@ -394,7 +394,7 @@ function getSegmentGradeDisplay(waypointId: string): string {
                                             getWaypointPrimaryColor(waypoint),
                                     }"
                                 >
-                                    <div class="translate-y-0.25">
+                                    <div>
                                         {{
                                             getWaypointDisplayContent(waypoint)
                                         }}
