@@ -181,6 +181,10 @@ export const plans = sqliteTable("plans", {
   // If paceMode is 'time', the target finish time for the course, in seconds
   targetTimeSeconds: integer("target_time_seconds"),
   defaultStoppageTime: integer("default_stoppage_time").default(0), // default stoppage time in seconds
+  // Enable grade-adjusted calculations for this plan
+  useGradeAdjustment: integer("use_grade_adjustment", { mode: "boolean" })
+    .notNull()
+    .default(true),
   // Pacing strategy: 'flat' (uniform) or 'linear' (linearly varying factor along the course)
   pacingStrategy: text("pacing_strategy").notNull().default("flat"),
   // For linear pacing, total percent change from start to end.

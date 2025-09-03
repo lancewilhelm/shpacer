@@ -62,16 +62,6 @@ function updateElevationUnit(unit: string) {
     });
 }
 
-function toggleGradeAdjustment() {
-    userSettingsStore.updateSettings({
-        pacing: {
-            ...userSettingsStore.settings.pacing,
-            useGradeAdjustment:
-                !userSettingsStore.settings.pacing?.useGradeAdjustment,
-        },
-    });
-}
-
 const config = useRuntimeConfig();
 </script>
 <template>
@@ -90,20 +80,6 @@ const config = useRuntimeConfig();
                 title="elevation unit"
                 description="unit for displaying elevation gain/loss"
                 @select="updateElevationUnit"
-            />
-        </SettingsGroup>
-
-        <SettingsGroup title="pacing" icon="lucide:trending-up">
-            <SettingsToggleItem
-                :value="
-                    userSettingsStore.settings.pacing?.useGradeAdjustment ??
-                    false
-                "
-                title="grade-adjusted arrival times"
-                description="calculate more realistic arrival times based on elevation changes"
-                true-label="enabled"
-                false-label="disabled"
-                @toggle="toggleGradeAdjustment"
             />
         </SettingsGroup>
 

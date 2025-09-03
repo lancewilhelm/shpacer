@@ -35,9 +35,7 @@ export interface UserSettings {
     distance: DistanceUnit;
     elevation: ElevationUnit;
   };
-  pacing: {
-    useGradeAdjustment: boolean;
-  };
+
   smoothing: {
     defaults: {
       gradeWindowMeters: number; // Wg (grade smoothing window)
@@ -68,9 +66,7 @@ function getDefaultSettings(): UserSettings {
       distance: "kilometers",
       elevation: "meters",
     },
-    pacing: {
-      useGradeAdjustment: false,
-    },
+
     smoothing: {
       defaults: {
         gradeWindowMeters: 100, // Wg default

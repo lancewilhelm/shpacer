@@ -512,7 +512,8 @@ const planPaceDisplay = computed(() => {
 
     let paceSeconds = p.pace;
     const originalUnit = p.paceUnit;
-    const desiredUnit = distanceUnit.value === "miles" ? "min_per_mi" : "min_per_km";
+    const desiredUnit =
+        distanceUnit.value === "miles" ? "min_per_mi" : "min_per_km";
     if (originalUnit !== desiredUnit) {
         const conversionFactor = 1609.344 / 1000; // miles per kilometer
         paceSeconds =

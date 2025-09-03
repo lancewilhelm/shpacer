@@ -24,6 +24,7 @@ interface Props {
         targetTimeSeconds?: number;
         pacingStrategy?: "flat" | "linear";
         pacingLinearPercent?: number;
+        useGradeAdjustment?: boolean;
     } | null;
 }
 
@@ -50,6 +51,7 @@ interface PlanFormState {
     defaultStopSeconds: string;
     pacingStrategy: "flat" | "linear";
     pacingLinearPercent: string;
+    useGradeAdjustment: boolean;
 }
 
 const formData = ref<PlanFormState>({
@@ -65,6 +67,7 @@ const formData = ref<PlanFormState>({
     defaultStopSeconds: "",
     pacingStrategy: "flat",
     pacingLinearPercent: "0",
+    useGradeAdjustment: true,
 });
 
 const isSubmitting = ref(false);
@@ -181,6 +184,7 @@ function resetForm() {
     formData.value.defaultStopSeconds = "";
     formData.value.pacingStrategy = "flat";
     formData.value.pacingLinearPercent = "0";
+    formData.value.useGradeAdjustment = true;
     error.value = "";
 }
 
@@ -259,6 +263,12 @@ watch(
             } else {
                 formData.value.pacingLinearPercent = "0";
             }
+
+            // Grade-adjusted per-plan toggle (default true)
+            formData.value.useGradeAdjustment =
+                typeof p.useGradeAdjustment === "boolean"
+                    ? p.useGradeAdjustment
+                    : true;
         } else {
             resetForm();
         }
@@ -430,24 +440,70 @@ function clampHours() {
 }
 
 /* Increment / Decrement helpers for stacked controls (strongly typed) */
-function inc<K extends keyof PlanFormState>(field: K, max: number) {
-    const raw = formData.value[field];
-    const n = parseInt(raw, 10);
-    const next = Math.min((Number.isFinite(n) ? n : 0) + 1, max);
-    (formData.value as Record<string, string>)[field] =
-        field.endsWith("Seconds") || field.endsWith("Minutes")
-            ? next.toString().padStart(2, "0")
-            : next.toString();
+// Restrict to time-related string fields only to satisfy TS
+type TimeStringField =
+    | "paceMinutes"
+    | "paceSeconds"
+    | "targetHours"
+    | "targetMinutes"
+    | "targetSeconds"
+    | "defaultStopMinutes"
+    | "defaultStopSeconds";
+
+function setStringField(field: TimeStringField, value: string) {
+    switch (field) {
+        case "paceMinutes":
+            formData.value.paceMinutes = value;
+            break;
+        case "paceSeconds":
+            formData.value.paceSeconds = value;
+            break;
+        case "targetHours":
+            formData.value.targetHours = value;
+            break;
+        case "targetMinutes":
+            formData.value.targetMinutes = value;
+            break;
+        case "targetSeconds":
+            formData.value.targetSeconds = value;
+            break;
+        case "defaultStopMinutes":
+            formData.value.defaultStopMinutes = value;
+            break;
+        case "defaultStopSeconds":
+            formData.value.defaultStopSeconds = value;
+            break;
+    }
 }
 
-function dec<K extends keyof PlanFormState>(field: K) {
-    const raw = formData.value[field];
+function inc<K extends TimeStringField>(field: K, max: number) {
+    const raw = formData.value[field] as string;
+    const n = parseInt(raw, 10);
+    const next = Math.min((Number.isFinite(n) ? n : 0) + 1, max);
+    const pad2 =
+        field === "paceSeconds" ||
+        field === "targetSeconds" ||
+        field === "defaultStopSeconds" ||
+        field === "paceMinutes" ||
+        field === "targetMinutes" ||
+        field === "defaultStopMinutes";
+    const value = pad2 ? next.toString().padStart(2, "0") : next.toString();
+    setStringField(field, value);
+}
+
+function dec<K extends TimeStringField>(field: K) {
+    const raw = formData.value[field] as string;
     const n = parseInt(raw, 10);
     const next = Math.max((Number.isFinite(n) ? n : 0) - 1, 0);
-    (formData.value as Record<string, string>)[field] =
-        field.endsWith("Seconds") || field.endsWith("Minutes")
-            ? next.toString().padStart(2, "0")
-            : next.toString();
+    const pad2 =
+        field === "paceSeconds" ||
+        field === "targetSeconds" ||
+        field === "defaultStopSeconds" ||
+        field === "paceMinutes" ||
+        field === "targetMinutes" ||
+        field === "defaultStopMinutes";
+    const value = pad2 ? next.toString().padStart(2, "0") : next.toString();
+    setStringField(field, value);
 }
 
 /* Specialized second incrementers with rollover behavior */
@@ -621,6 +677,7 @@ async function handleSubmit() {
             paceUnit: formData.value.paceUnit,
             defaultStoppageTime: stopVal.seconds,
             paceMode: formData.value.paceMode,
+            useGradeAdjustment: formData.value.useGradeAdjustment,
             pacingStrategy,
             pacingLinearPercent: pacingLinearPercentValue,
         };
@@ -686,7 +743,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
 
 <template>
     <ModalWindow :open="isOpen" @close="handleClose">
-        <div class="p-6 max-w-md w-full h-[640px] flex flex-col">
+        <div class="p-2 max-w-md w-full h-[720px] flex flex-col">
             <h2 class="text-xl font-semibold text-(--main-color) mb-4">
                 {{ existingPlan ? "Edit Plan" : "Create New Plan" }}
             </h2>
@@ -703,7 +760,6 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                         role="button"
                         tabindex="0"
                         @click="goToStep(1)"
-                        title="Go to Details"
                     >
                         1. Details
                     </div>
@@ -718,7 +774,6 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                         role="button"
                         tabindex="0"
                         @click="goToStep(2)"
-                        title="Go to Pacing Method"
                     >
                         2. Pacing Method
                     </div>
@@ -733,7 +788,6 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                         role="button"
                         tabindex="0"
                         @click="goToStep(3)"
-                        title="Go to Strategy"
                     >
                         3. Strategy
                     </div>
@@ -812,6 +866,25 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                             />
                             <span>Normalized pace (effort-based)</span>
                         </label>
+                    </div>
+
+                    <!-- Per-plan grade-adjusted toggle -->
+                    <div class="mt-3">
+                        <label
+                            class="flex items-center gap-2 cursor-pointer text-(--main-color) shrink-0"
+                        >
+                            <input
+                                v-model="formData.useGradeAdjustment"
+                                type="checkbox"
+                                class="accent-(--main-color)"
+                                :disabled="isSubmitting"
+                            />
+                            <span>Use grade-adjusted pacing</span>
+                        </label>
+                        <p class="text-xs text-(--sub-color) mt-1">
+                            Segment paces and arrival times will account for
+                            elevation changes.
+                        </p>
                     </div>
                 </div>
 

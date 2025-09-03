@@ -97,8 +97,8 @@ export function calculateElapsedTimeToWaypoint(
     return 0;
   }
 
-  // Use grade-adjusted calculation if enabled and data is available
-  if (useGradeAdjustment && elevationProfile && waypointSegments) {
+  // Use grade-adjusted pipeline when data is available (apply grade only if enabled)
+  if (elevationProfile && waypointSegments) {
     const gradeAdjustedOptions: GradeAdjustedTimeCalculationOptions = {
       plan,
       waypoints,
@@ -108,6 +108,7 @@ export function calculateElapsedTimeToWaypoint(
       getDefaultStoppageTime,
       gradeWindowMeters: options.gradeWindowMeters,
       sampleStepMeters: options.sampleStepMeters,
+      useGradeAdjustment: useGradeAdjustment !== false,
       maintainTargetAverage: options.maintainTargetAverage,
     };
     return calculateGradeAdjustedElapsedTime(
@@ -158,11 +159,10 @@ export function calculateElapsedTimeToWaypoint(
 export function calculateAllElapsedTimes(
   options: TimeCalculationOptions,
 ): Record<string, number> {
-  const { waypoints, elevationProfile, waypointSegments, useGradeAdjustment } =
-    options;
+  const { waypoints, elevationProfile, waypointSegments } = options;
 
-  // Use grade-adjusted calculation if enabled and data is available
-  if (useGradeAdjustment && elevationProfile && waypointSegments) {
+  // Use grade-adjusted pipeline when data is available (apply grade only if enabled)
+  if (elevationProfile && waypointSegments) {
     const gradeAdjustedOptions: GradeAdjustedTimeCalculationOptions = {
       plan: options.plan,
       waypoints: options.waypoints,
@@ -172,6 +172,7 @@ export function calculateAllElapsedTimes(
       getDefaultStoppageTime: options.getDefaultStoppageTime,
       gradeWindowMeters: options.gradeWindowMeters,
       sampleStepMeters: options.sampleStepMeters,
+      useGradeAdjustment: options.useGradeAdjustment !== false,
       maintainTargetAverage: options.maintainTargetAverage,
     };
     return calculateAllGradeAdjustedElapsedTimes(gradeAdjustedOptions);

@@ -223,8 +223,7 @@ const elapsedTimes = computed(() => {
         getDefaultStoppageTime: getDefaultStoppageTime.value,
         elevationProfile: elevationProfile.value,
         waypointSegments: waypointSegments.value,
-        useGradeAdjustment:
-            userSettingsStore.settings.pacing?.useGradeAdjustment ?? false,
+        useGradeAdjustment: currentPlan.value?.useGradeAdjustment ?? true,
         gradeWindowMeters: smoothingConfig.value.gradeWindowMeters,
         sampleStepMeters: smoothingConfig.value.sampleStepMeters,
         maintainTargetAverage:
@@ -280,6 +279,7 @@ function getSegmentPacingData(waypointId: string) {
         waypointStoppageTimes: waypointStoppageTimes.value || [],
         elevationProfile: elevationProfile.value,
         waypointSegments: waypointSegments.value,
+        useGradeAdjustment: currentPlan.value?.useGradeAdjustment ?? true,
         getDefaultStoppageTime: getDefaultStoppageTime.value,
         gradeWindowMeters: smoothingConfig.value.gradeWindowMeters,
         sampleStepMeters: smoothingConfig.value.sampleStepMeters,
@@ -334,12 +334,10 @@ function getSegmentPace(waypointId: string): string {
 
     let segmentPace = currentPlan.value.pace; // Base pace
 
-    // Apply grade adjustment if enabled
-    if (userSettingsStore.settings.pacing?.useGradeAdjustment) {
-        const pacingData = getSegmentPacingData(waypointId);
-        if (pacingData) {
-            segmentPace = pacingData.adjustedPace;
-        }
+    // Apply pacing strategy and/or grade adjustments
+    const pacingData = getSegmentPacingData(waypointId);
+    if (pacingData) {
+        segmentPace = pacingData.adjustedPace;
     }
 
     const minutes = Math.floor(segmentPace / 60);
@@ -672,9 +670,8 @@ function getSegmentGradeDisplay(waypointId: string): string {
                                             <!-- Grade (when grade adjustment is enabled) -->
                                             <div
                                                 v-if="
-                                                    userSettingsStore.settings
-                                                        .pacing
-                                                        ?.useGradeAdjustment &&
+                                                    (currentPlan?.useGradeAdjustment ??
+                                                        true) &&
                                                     getSegmentPacingData(
                                                         waypoint.id,
                                                     )

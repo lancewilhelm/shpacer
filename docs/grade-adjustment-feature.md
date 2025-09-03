@@ -37,12 +37,20 @@ Where `g` is the grade as a decimal (e.g., 0.05 for 5% grade).
 
 ## Enabling the Feature
 
-### User Settings
+### Per-plan Setting
 
-1. Go to **Settings → General**
-2. Find the **Pacing** section
-3. Toggle **"Grade-adjusted arrival times"** to **Enabled**
-4. The setting description: *"Calculate more realistic arrival times based on elevation changes"*
+The grade-adjusted pacing toggle is configured per plan:
+
+1. Open the Plan Setup modal (Create New Plan or Edit Plan).
+2. On Step 2 "Pacing Method", enable "Use grade-adjusted pacing".
+3. The toggle defaults to enabled for new plans.
+4. This setting is saved on the plan and applied across the UI (waypoint list, splits, and pace chart).
+
+### Pacing Strategy without Grade Adjustment
+
+- When grade-adjusted pacing is disabled for a plan, the grade factor is treated as 1.0 (flat), but your selected pacing strategy still applies.
+- For example, with the Linear strategy, the effort factor varies linearly from start to finish by the configured percent.
+- The pace chart, waypoint segment paces, and mile/km splits reflect the strategy even when grade-adjusted pacing is off.
 
 ### Requirements
 
@@ -78,12 +86,12 @@ When grade adjustment is enabled, the waypoint list displays additional informat
    - Added optional parameters for elevation profile and segments
    - Falls back to simple calculation when grade adjustment is disabled
 
-3. **User Settings**: Added `pacing.useGradeAdjustment` boolean setting
+3. Per-plan configuration: `plans.useGradeAdjustment` boolean (default: true). The former global user setting was removed in favor of the per-plan toggle.
 
 ### Integration Points
 
 - **WaypointList.vue**: Displays grade information and uses adjusted times
-- **Settings/SettingsGeneral.vue**: Toggle for enabling/disabling the feature
+- **PlanSetupModal.vue**: Per-plan toggle on the Pacing Method step to enable/disable grade-adjusted pacing
 - **Elevation Profile**: Uses existing elevation extraction utilities
 - **Waypoint Segments**: Uses existing segment calculation utilities
 
@@ -186,7 +194,7 @@ The grade adjustment factors are based on running physiology research and produc
 ### Common Issues
 
 1. **No grade information showing**: Ensure elevation data exists in route GeoJSON
-2. **Times seem unchanged**: Verify grade adjustment is enabled in settings
+2. **Times seem unchanged**: Verify grade-adjusted pacing is enabled for the plan in Plan Setup → Pacing Method
 3. **Unrealistic adjustments**: Check elevation data quality and waypoint placement
 
 ### Data Requirements

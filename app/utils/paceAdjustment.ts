@@ -98,6 +98,7 @@ export function calculateActualPacesForTarget(
   maintainTargetAverage: boolean = true,
   pacingStrategy: "flat" | "linear" = "flat",
   pacingLinearPercent: number = 0,
+  useGradeAdjustment: boolean = true,
 ): Array<{ distance: number; actualPace: number; grade: number }> {
   const n = elevationPoints.length;
   if (n < 2) return [];
@@ -158,8 +159,10 @@ export function calculateActualPacesForTarget(
     }
   }
 
-  // Convert grade -> adjustment factor
-  const gradeFactors = grades.map((g) => paceAdjustment(g));
+  // Convert grade -> adjustment factor (optionally disable grade effects)
+  const gradeFactors = useGradeAdjustment
+    ? grades.map((g) => paceAdjustment(g))
+    : new Array(n).fill(1.0);
 
   // Pacing strategy factor (per point)
   const startDist = dist[0] ?? 0;

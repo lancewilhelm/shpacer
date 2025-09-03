@@ -299,6 +299,9 @@ const actualPaceData = computed(() => {
         return [];
     }
 
+    // When grade-adjusted pacing is disabled, still compute using pacing strategy (grade factors = 1)
+    // Handled by calculateActualPacesForTarget via useGradeAdjustment=false
+
     const mode = props.plan.paceMode || "pace";
     const maintainTargetAverage = mode !== "normalized";
 
@@ -310,6 +313,7 @@ const actualPaceData = computed(() => {
         maintainTargetAverage,
         props.plan.pacingStrategy === "linear" ? "linear" : "flat",
         props.plan.pacingLinearPercent ?? 0,
+        props.plan.useGradeAdjustment !== false,
     );
 });
 

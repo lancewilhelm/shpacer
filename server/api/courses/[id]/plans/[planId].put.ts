@@ -120,6 +120,17 @@ export default defineEventHandler(async (event) => {
       updateData.defaultStoppageTime = body.defaultStoppageTime;
     }
 
+    // Per-plan grade adjustment toggle
+    if (body.useGradeAdjustment !== undefined) {
+      if (typeof body.useGradeAdjustment !== "boolean") {
+        throw createError({
+          statusCode: 400,
+          statusMessage: "useGradeAdjustment must be a boolean",
+        });
+      }
+      updateData.useGradeAdjustment = body.useGradeAdjustment;
+    }
+
     // Pacing strategy updates
     if (body.pacingStrategy !== undefined) {
       if (!["flat", "linear"].includes(body.pacingStrategy)) {

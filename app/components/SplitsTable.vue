@@ -67,7 +67,7 @@ const smoothing = computed(() =>
     userSettingsStore.getSmoothingForCourse(courseIdForSmoothing.value),
 );
 const useGradeAdjustment = computed<boolean>(
-    () => userSettingsStore.settings.pacing?.useGradeAdjustment ?? false,
+    () => currentPlan.value?.useGradeAdjustment ?? true,
 );
 const maintainTargetAverage = computed<boolean>(
     () => (currentPlan.value?.paceMode || "pace") !== "normalized",
@@ -232,7 +232,6 @@ function getCumulativeStoppageUntil(targetDistance: number): number {
 // Compute global normalization scale to maintain target average pace across the whole course
 const normalizationScale = computed<number>(() => {
     if (
-        !useGradeAdjustment.value ||
         !maintainTargetAverage.value ||
         !currentPlan.value?.pace ||
         elevationProfile.value.length < 2
@@ -250,15 +249,41 @@ const normalizationScale = computed<number>(() => {
             : Math.max(1, smoothing.value.sampleStepMeters ?? 50);
     const gradeWindow = smoothing.value.gradeWindowMeters ?? 100;
 
+    // Determine course end for pacing strategy normalization
+    const wpsArr = waypoints.value ?? [];
+    const courseEnd =
+        wpsArr.length > 0
+            ? (() => {
+                  const sorted = [...wpsArr].sort((a, b) => a.order - b.order);
+                  const last = sorted[sorted.length - 1]!;
+                  return last.distance;
+              })()
+            : totalDist;
+
     let equivalentDistanceSum = 0;
     let pos = 0;
     while (pos < totalDist) {
         const next = Math.min(pos + sampleStep, totalDist);
         const mid = (pos + next) / 2;
         const grade = calculateGradeAtDistance(points, mid, gradeWindow);
-        const factor = calculateGradeAdjustmentFactor(grade);
+        const gradeFactor = useGradeAdjustment.value
+            ? calculateGradeAdjustmentFactor(grade)
+            : 1.0;
+        let pacingFactor = 1.0;
+        if (
+            (currentPlan.value?.pacingStrategy || "flat") === "linear" &&
+            courseEnd > 0
+        ) {
+            const t = Math.max(0, Math.min(1, mid / courseEnd));
+            const P =
+                Math.max(
+                    -50,
+                    Math.min(50, currentPlan.value?.pacingLinearPercent ?? 0),
+                ) / 100;
+            pacingFactor = 1 + (t - 0.5) * P;
+        }
         const dL = next - pos;
-        equivalentDistanceSum += factor * dL;
+        equivalentDistanceSum += gradeFactor * pacingFactor * dL;
         pos = next;
     }
 
@@ -296,8 +321,7 @@ const splits = computed<SplitRow[]>(() => {
         boundaries.push(total);
     }
 
-    const useGA =
-        useGradeAdjustment.value && !!plan?.pace && points.length >= 2;
+    const useGA = !!plan?.pace && points.length >= 2;
     const sampleStep =
         smoothing.value.sampleStepMeters === 0
             ? 50
@@ -331,8 +355,28 @@ const splits = computed<SplitRow[]>(() => {
                 const tn = Math.min(tp + sampleStep, courseEnd);
                 const tm = (tp + tn) / 2;
                 const tg = calculateGradeAtDistance(points, tm, gradeWindow);
-                const tf = useGA ? calculateGradeAdjustmentFactor(tg) : 1.0;
-                const adjPpm = basePacePerMeter * tf * normScale;
+                const gradeFactor = useGradeAdjustment.value
+                    ? calculateGradeAdjustmentFactor(tg)
+                    : 1.0;
+                let pacingFactor = 1.0;
+                if (
+                    (currentPlan.value?.pacingStrategy || "flat") ===
+                        "linear" &&
+                    courseEnd > 0
+                ) {
+                    const t = Math.max(0, Math.min(1, tm / courseEnd));
+                    const P =
+                        Math.max(
+                            -50,
+                            Math.min(
+                                50,
+                                currentPlan.value?.pacingLinearPercent ?? 0,
+                            ),
+                        ) / 100;
+                    pacingFactor = 1 + (t - 0.5) * P;
+                }
+                const adjPpm =
+                    basePacePerMeter * gradeFactor * pacingFactor * normScale;
                 travelBase += (tn - tp) * adjPpm;
                 tp = tn;
             }
@@ -377,7 +421,9 @@ const splits = computed<SplitRow[]>(() => {
                     const n = Math.min(p + sampleStep, end);
                     const m = (p + n) / 2;
                     const g = calculateGradeAtDistance(points, m, gradeWindow);
-                    const gradeFactor = calculateGradeAdjustmentFactor(g);
+                    const gradeFactor = useGradeAdjustment.value
+                        ? calculateGradeAdjustmentFactor(g)
+                        : 1.0;
                     let pacingFactor = 1.0;
                     if (
                         (currentPlan.value?.pacingStrategy || "flat") ===
