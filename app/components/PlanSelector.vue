@@ -98,17 +98,8 @@ onBeforeUnmount(() => {
 
 <template>
     <div class="flex items-center gap-2">
-        <!-- Add Plan Button -->
-        <button
-            class="flex items-center gap-2 px-3 py-2 border border-(--main-color) text-(--main-color) rounded-sm hover:bg-(--main-color) hover:text-(--bg-color) transition-colors text-sm font-medium"
-            @click="addPlan"
-        >
-            <Icon name="lucide:plus" class="h-4 w-4 scale-125" />
-            Add Plan
-        </button>
-
-        <!-- Plan Selector Dropdown (only show if there are plans) -->
-        <div v-if="plans.length > 0" ref="dropdownRef" class="relative">
+        <!-- Plan Selector Dropdown -->
+        <div ref="dropdownRef" class="relative">
             <button
                 class="flex items-center gap-2 px-3 py-2 border border-(--main-color) text-(--main-color) rounded-sm hover:bg-(--main-color) hover:text-(--bg-color) transition-colors text-sm font-medium"
                 @click="dropdownOpen = !dropdownOpen"
@@ -201,6 +192,20 @@ onBeforeUnmount(() => {
                                     />
                                 </button>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Divider -->
+                    <div class="h-px bg-(--sub-color)/20 my-1"></div>
+
+                    <!-- Add Plan Option -->
+                    <div
+                        class="flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition-colors hover:bg-(--sub-color)/10 text-(--main-color)"
+                        @click="addPlan"
+                    >
+                        <div class="flex items-center gap-2">
+                            <Icon name="lucide:plus" class="h-4 w-4" />
+                            <span class="font-medium">Add Plan</span>
                         </div>
                     </div>
                 </div>
