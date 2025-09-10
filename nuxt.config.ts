@@ -70,4 +70,9 @@ export default defineNuxtConfig({
   piniaPluginPersistedstate: {
     key: "shpacer.%id",
   },
+  nitro: {
+    experimental: {
+      asyncContext: true,
+    },
+  },
 });

@@ -6,6 +6,7 @@ import { cloudDb } from "~~/server/utils/db/cloud";
 import * as schema from "./db/schema";
 import { count } from "drizzle-orm";
 import { ac, user, admin, owner } from "./permissions";
+import type { GlobalSettings } from "~/stores/globalSettings";
 
 export const auth = betterAuth({
   baseURL: getBaseURL(),
@@ -49,29 +50,62 @@ export const auth = betterAuth({
     user: {
       create: {
         before: async (user) => {
-          // Check if registration is allowed
-          const response = await cloudDb.select().from(schema.globalSettings);
-          const settings = response[0]?.settings as GlobalSettings;
-          const allowRegistration =
-            settings === undefined || settings.allowRegistration;
-
-          if (!allowRegistration) {
-            throw new APIError("UNAUTHORIZED", {
-              message: "Registration is closed.",
-            });
-          }
-
           // Determine if this is the first user
           const userCount = await cloudDb
             .select({ count: count() })
             .from(schema.users);
           const isFirstUser = !userCount[0] || userCount[0].count === 0;
-          const role = isFirstUser ? "owner" : "user";
+
+          // Determine whether creation is coming from admin endpoints (avoid circular auth reference)
+          let isAdminCreator = false;
+          try {
+            const event = useEvent();
+            const pathname = getRequestURL(event).pathname;
+            isAdminCreator =
+              typeof pathname === "string" &&
+              pathname.includes("/api/auth/admin");
+          } catch (error) {
+            console.log("Failed to determine request context", error);
+            // no-op: assume not admin if request context cannot be determined
+          }
+
+          // Only enforce registration toggle for non-admin creators and non-first user
+          if (!isAdminCreator && !isFirstUser) {
+            const response = await cloudDb.select().from(schema.globalSettings);
+            const settings = response[0]?.settings as GlobalSettings;
+            const allowRegistration =
+              settings === undefined || settings.allowRegistration;
+
+            if (!allowRegistration) {
+              throw new APIError("UNAUTHORIZED", {
+                message: "Registration is closed.",
+              });
+            }
+          }
+
+          // Determine final role:
+          // - first user is always 'owner'
+          // - admin-created users honor requested role except 'owner'
+          // - self-registrations are always 'user'
+          let finalRole: "owner" | "admin" | "user";
+          if (isFirstUser) {
+            finalRole = "owner";
+          } else if (isAdminCreator) {
+            const maybeRole = (user as { role?: unknown }).role;
+            const requestedRole =
+              typeof maybeRole === "string" &&
+              (maybeRole === "admin" || maybeRole === "user")
+                ? (maybeRole as "admin" | "user")
+                : "user";
+            finalRole = requestedRole;
+          } else {
+            finalRole = "user";
+          }
 
           return {
             data: {
               ...user,
-              role,
+              role: finalRole,
             },
           };
         },
@@ -96,4 +130,41 @@ function getTrustedOrigins() {
   const origins = process.env.BETTER_AUTH_TRUSTED_ORIGINS;
   if (!origins) return [];
   return origins.split(",").map((origin) => origin.trim());
+}
+
+export async function requireUser(event: { headers: Headers }) {
+  const session = await auth.api.getSession({
+    headers: event.headers,
+  });
+
+  if (!session) {
+    throw createError({
+      statusCode: 401,
+      statusMessage: "Unauthorized",
+    });
+  }
+
+  return session.user;
+}
+
+export async function requireAdmin(event: { headers: Headers }) {
+  const session = await auth.api.getSession({
+    headers: event.headers,
+  });
+
+  if (!session) {
+    throw createError({
+      statusCode: 401,
+      statusMessage: "Unauthorized",
+    });
+  }
+
+  if (session.user.role !== "admin" && session.user.role !== "owner") {
+    throw createError({
+      statusCode: 403,
+      statusMessage: "Forbidden: Admin access required",
+    });
+  }
+
+  return session.user;
 }
