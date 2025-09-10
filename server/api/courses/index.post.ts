@@ -1,4 +1,4 @@
-import { courses, waypoints } from "~/utils/db/schema";
+import { courses, waypoints, userCourses } from "~/utils/db/schema";
 import { cloudDb } from "~~/server/utils/db/cloud";
 import { auth } from "~/utils/auth";
 import { calculateCourseMetrics } from "~/utils/courseMetrics";
@@ -60,6 +60,7 @@ export default defineEventHandler(async (event) => {
         originalFileContent: body.originalFileContent,
         fileType: body.fileType,
         geoJsonData: body.geoJsonData,
+        public: false,
         totalDistance: metrics.totalDistance,
         elevationGain: metrics.elevationGain,
         elevationLoss: metrics.elevationLoss,
@@ -80,6 +81,20 @@ export default defineEventHandler(async (event) => {
           : null,
       })
       .returning();
+
+    // Insert owner membership into user_courses
+    if (newCourse?.id) {
+      try {
+        await cloudDb.insert(userCourses).values({
+          userId: session.user.id,
+          courseId: newCourse.id,
+          role: "owner",
+        });
+      } catch (e) {
+        // Non-fatal: log and continue
+        console.warn("Failed to insert owner row into user_courses", e);
+      }
+    }
 
     // Insert waypoints if any were found
     if (waypointData.length > 0 && newCourse.id) {

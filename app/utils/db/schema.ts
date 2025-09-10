@@ -1,4 +1,9 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import {
+  sqliteTable,
+  text,
+  integer,
+  primaryKey,
+} from "drizzle-orm/sqlite-core";
 import { v4 as uuidv4 } from "uuid";
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 
@@ -125,6 +130,7 @@ export const courses = sqliteTable("courses", {
   elevationGain: integer("elevation_gain"), // in meters
   elevationLoss: integer("elevation_loss"), // in meters
   raceDate: integer("race_date", { mode: "timestamp" }), // optional race date
+  public: integer("public", { mode: "boolean" }).notNull().default(false), // visibility (false = private)
 
   // Timestamps
   createdAt: integer("created_at", { mode: "timestamp" })
@@ -248,6 +254,29 @@ export const waypointStoppageTimes = sqliteTable("waypoint_stoppage_times", {
     .$defaultFn(() => new Date()),
 });
 
+// USER_COURSES TABLE (tracks ownership and added/public saves)
+export const userCourses = sqliteTable(
+  "user_courses",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    courseId: text("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    role: text("role").notNull().default("added"), // 'owner' | 'added'
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.userId, table.courseId] }),
+  }),
+);
+
 // TYPE
 export type InsertUserSettings = InferInsertModel<typeof userSettings>;
 export type InsertGlobalSettings = InferInsertModel<typeof globalSettings>;
@@ -258,6 +287,7 @@ export type InsertWaypointNote = InferInsertModel<typeof waypointNotes>;
 export type InsertWaypointStoppageTime = InferInsertModel<
   typeof waypointStoppageTimes
 >;
+export type InsertUserCourse = InferInsertModel<typeof userCourses>;
 
 export type SelectUserSettings = InferSelectModel<typeof userSettings>;
 export type SelectGlobalSettings = InferSelectModel<typeof globalSettings>;
@@ -269,3 +299,4 @@ export type SelectWaypointNote = InferSelectModel<typeof waypointNotes>;
 export type SelectWaypointStoppageTime = InferSelectModel<
   typeof waypointStoppageTimes
 >;
+export type SelectUserCourse = InferSelectModel<typeof userCourses>;

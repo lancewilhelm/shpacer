@@ -1,6 +1,6 @@
-import { courses } from "~/utils/db/schema";
+import { courses, userCourses } from "~/utils/db/schema";
 import { cloudDb } from "~~/server/utils/db/cloud";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { auth } from "~/utils/auth";
 
 export default defineEventHandler(async (event) => {
@@ -8,58 +8,61 @@ export default defineEventHandler(async (event) => {
     const session = await auth.api.getSession({
       headers: event.headers,
     });
-    
+
     if (!session?.user?.id) {
       throw createError({
         statusCode: 401,
-        statusMessage: "Unauthorized"
+        statusMessage: "Unauthorized",
       });
     }
 
-    const courseId = getRouterParam(event, 'id');
-    
+    const courseId = getRouterParam(event, "id");
+
     if (!courseId) {
       throw createError({
         statusCode: 400,
-        statusMessage: "Course ID is required"
+        statusMessage: "Course ID is required",
       });
     }
 
-    // Check if course exists and user owns it
-    const [existingCourse] = await cloudDb
-      .select({ userId: courses.userId })
-      .from(courses)
-      .where(eq(courses.id, courseId))
+    // Check ownership via user_courses membership
+    const [membership] = await cloudDb
+      .select({ role: userCourses.role })
+      .from(userCourses)
+      .where(
+        and(
+          eq(userCourses.courseId, courseId),
+          eq(userCourses.userId, session.user.id),
+        ),
+      )
       .limit(1);
 
-    if (!existingCourse) {
+    if (!membership) {
       throw createError({
         statusCode: 404,
-        statusMessage: "Course not found"
+        statusMessage: "Course not found or access denied",
       });
     }
 
-    if (existingCourse.userId !== session.user.id) {
+    if (membership.role !== "owner") {
       throw createError({
         statusCode: 403,
-        statusMessage: "Access denied"
+        statusMessage: "Only the owner can delete this course",
       });
     }
 
     // Delete the course
-    await cloudDb
-      .delete(courses)
-      .where(eq(courses.id, courseId));
+    await cloudDb.delete(courses).where(eq(courses.id, courseId));
 
     return {
       success: true,
-      message: "Course deleted successfully"
+      message: "Course deleted successfully",
     };
   } catch (error) {
     console.error("Error deleting course:", error);
     throw createError({
       statusCode: 500,
-      statusMessage: "Failed to delete course"
+      statusMessage: "Failed to delete course",
     });
   }
 });

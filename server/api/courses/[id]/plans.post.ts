@@ -1,5 +1,5 @@
 import { eq, and } from "drizzle-orm";
-import { plans, courses } from "~/utils/db/schema";
+import { plans, userCourses } from "~/utils/db/schema";
 import { cloudDb } from "~~/server/utils/db/cloud";
 import { auth } from "~/utils/auth";
 
@@ -34,17 +34,22 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    // Verify the course exists and belongs to the user
-    const course = await cloudDb
-      .select()
-      .from(courses)
-      .where(and(eq(courses.id, courseId), eq(courses.userId, session.user.id)))
+    // Verify membership (owner or added)
+    const membership = await cloudDb
+      .select({ role: userCourses.role })
+      .from(userCourses)
+      .where(
+        and(
+          eq(userCourses.courseId, courseId),
+          eq(userCourses.userId, session.user.id),
+        ),
+      )
       .limit(1);
 
-    if (course.length === 0) {
+    if (membership.length === 0) {
       throw createError({
         statusCode: 404,
-        statusMessage: "Course not found",
+        statusMessage: "Course not found or access denied",
       });
     }
 

@@ -8,20 +8,20 @@ export default defineEventHandler(async (event) => {
     const session = await auth.api.getSession({
       headers: event.headers,
     });
-    
+
     if (!session?.user?.id) {
       throw createError({
         statusCode: 401,
-        statusMessage: "Unauthorized"
+        statusMessage: "Unauthorized",
       });
     }
 
-    const courseId = getRouterParam(event, 'id');
-    
+    const courseId = getRouterParam(event, "id");
+
     if (!courseId) {
       throw createError({
         statusCode: 400,
-        statusMessage: "Course ID is required"
+        statusMessage: "Course ID is required",
       });
     }
 
@@ -32,6 +32,7 @@ export default defineEventHandler(async (event) => {
         originalFileContent: courses.originalFileContent,
         fileType: courses.fileType,
         userId: courses.userId,
+        public: courses.public,
       })
       .from(courses)
       .where(eq(courses.id, courseId))
@@ -40,7 +41,7 @@ export default defineEventHandler(async (event) => {
     if (!course) {
       throw createError({
         statusCode: 404,
-        statusMessage: "Course not found"
+        statusMessage: "Course not found",
       });
     }
 
@@ -48,22 +49,29 @@ export default defineEventHandler(async (event) => {
     if (course.userId !== session.user.id) {
       throw createError({
         statusCode: 403,
-        statusMessage: "Access denied"
+        statusMessage: "Access denied",
       });
     }
 
     // Set appropriate headers for file download
-    const contentType = course.fileType === 'gpx' ? 'application/gpx+xml' : 'application/vnd.garmin.tcx+xml';
-    
-    setHeader(event, 'Content-Type', contentType);
-    setHeader(event, 'Content-Disposition', `attachment; filename="${course.originalFileName}"`);
-    
+    const contentType =
+      course.fileType === "gpx"
+        ? "application/gpx+xml"
+        : "application/vnd.garmin.tcx+xml";
+
+    setHeader(event, "Content-Type", contentType);
+    setHeader(
+      event,
+      "Content-Disposition",
+      `attachment; filename="${course.originalFileName}"`,
+    );
+
     return course.originalFileContent;
   } catch (error) {
     console.error("Error downloading course file:", error);
     throw createError({
       statusCode: 500,
-      statusMessage: "Failed to download course file"
+      statusMessage: "Failed to download course file",
     });
   }
 });

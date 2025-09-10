@@ -52,6 +52,16 @@ function formatCourseDistance(meters: number) {
 function formatCourseElevation(meters: number) {
     return formatElevation(meters, userSettingsStore.settings.units.elevation);
 }
+
+// Public courses (placeholder state for upcoming functionality)
+interface PublicCoursePreview {
+    id: string;
+    name: string;
+}
+const publicSearch = ref("");
+const publicPage = ref(1);
+const publicCourses = ref<PublicCoursePreview[]>([]);
+const publicLoading = ref(false);
 </script>
 
 <template>
@@ -62,7 +72,7 @@ function formatCourseElevation(meters: number) {
             <div class="flex items-center justify-between">
                 <div>
                     <h1 class="text-3xl font-bold text-(--main-color)">
-                        Courses
+                        My Courses
                     </h1>
                     <p class="text-(--sub-color) mt-1">
                         {{ courses.length }} course{{
@@ -241,5 +251,103 @@ function formatCourseElevation(meters: number) {
                 </div>
             </div>
         </div>
+        <!-- FIND A COURSE (Public Courses) -->
+        <section class="mt-12">
+            <div class="flex items-center justify-between mb-2">
+                <h2 class="text-2xl font-bold text-(--main-color)">
+                    Find a Course
+                </h2>
+            </div>
+
+            <div class="flex flex-col gap-4">
+                <!-- Search & Pagination Controls -->
+                <div class="flex flex-col md:flex-row gap-2 md:items-center">
+                    <div class="flex items-center gap-2 flex-1">
+                        <input
+                            v-model="publicSearch"
+                            type="text"
+                            placeholder="Search public courses by name..."
+                            class="w-full px-3 py-2 rounded border border-(--sub-color) bg-(--sub-alt-color) focus:outline-none focus:border-(--main-color)"
+                        />
+                        <button
+                            class="px-3 py-2 bg-(--main-color) text-(--bg-color) rounded-md hover:opacity-80 transition-opacity flex items-center gap-1"
+                            @click="/* search action to be implemented */ null"
+                        >
+                            <Icon name="lucide:search" class="h-4 w-4" />
+                            Search
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button
+                            class="px-2 py-1 rounded border border-(--sub-color) text-sm disabled:opacity-40"
+                            :disabled="publicPage === 1 || publicLoading"
+                            @click="publicPage > 1 && (publicPage--, null)"
+                        >
+                            Prev
+                        </button>
+                        <span class="text-sm text-(--sub-color)"
+                            >Page {{ publicPage }}</span
+                        >
+                        <button
+                            class="px-2 py-1 rounded border border-(--sub-color) text-sm disabled:opacity-40"
+                            :disabled="publicLoading"
+                            @click="(publicPage++, null)"
+                        >
+                            Next
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Loading State -->
+                <div
+                    v-if="publicLoading"
+                    class="flex items-center justify-center py-8"
+                >
+                    <Icon
+                        name="svg-spinners:6-dots-scale"
+                        class="text-(--main-color) scale-150"
+                    />
+                </div>
+
+                <!-- Empty State -->
+                <div
+                    v-else-if="publicCourses.length === 0"
+                    class="flex flex-col items-center justify-center py-12 text-center border border-dashed border-(--sub-color) rounded-lg p-6"
+                >
+                    <Icon
+                        name="lucide:search"
+                        class="h-12 w-12 text-(--sub-color) mb-4"
+                    />
+                    <p class="text-(--main-color) font-medium mb-1">
+                        No public courses found
+                    </p>
+                    <p class="text-(--sub-color) text-sm">
+                        Try adjusting your search terms.
+                    </p>
+                </div>
+
+                <!-- Public Courses Grid (Placeholder) -->
+                <div
+                    v-else
+                    class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                >
+                    <div
+                        v-for="pc in publicCourses"
+                        :key="pc.id"
+                        class="bg-(--sub-alt-color) border border-(--sub-color) rounded-lg p-4 opacity-70"
+                    >
+                        <h3
+                            class="font-semibold text-(--main-color) mb-1 truncate"
+                        >
+                            {{ pc.name }}
+                        </h3>
+                        <p class="text-xs text-(--sub-color)">
+                            Public course placeholder
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
     </div>
+    <!-- removed extra closing div -->
 </template>

@@ -1,4 +1,4 @@
-import { courses, waypoints } from "~/utils/db/schema";
+import { waypoints, userCourses } from "~/utils/db/schema";
 import { cloudDb } from "~~/server/utils/db/cloud";
 import { eq, and } from "drizzle-orm";
 import { auth } from "~/utils/auth";
@@ -18,11 +18,11 @@ export default defineEventHandler(async (event) => {
     const session = await auth.api.getSession({
       headers: event.headers,
     });
-    
+
     if (!session?.user?.id) {
       throw createError({
         statusCode: 401,
-        statusMessage: "Unauthorized"
+        statusMessage: "Unauthorized",
       });
     }
 
@@ -30,33 +30,47 @@ export default defineEventHandler(async (event) => {
     if (!courseId) {
       throw createError({
         statusCode: 400,
-        statusMessage: "Course ID is required"
+        statusMessage: "Course ID is required",
       });
     }
 
     const body = await readBody<CreateWaypointRequest>(event);
-    
-    if (!body.name || body.lat === undefined || body.lng === undefined || body.distance === undefined) {
+
+    if (
+      !body.name ||
+      body.lat === undefined ||
+      body.lng === undefined ||
+      body.distance === undefined
+    ) {
       throw createError({
         statusCode: 400,
-        statusMessage: "Name, latitude, longitude, and distance are required"
+        statusMessage: "Name, latitude, longitude, and distance are required",
       });
     }
 
-    // Verify course belongs to user
-    const [course] = await cloudDb
-      .select({ id: courses.id })
-      .from(courses)
-      .where(and(
-        eq(courses.id, courseId),
-        eq(courses.userId, session.user.id)
-      ))
+    // Verify user is owner via user_courses membership
+    const [membership] = await cloudDb
+      .select({ role: userCourses.role })
+      .from(userCourses)
+      .where(
+        and(
+          eq(userCourses.courseId, courseId),
+          eq(userCourses.userId, session.user.id),
+        ),
+      )
       .limit(1);
 
-    if (!course) {
+    if (!membership) {
       throw createError({
         statusCode: 404,
-        statusMessage: "Course not found or access denied"
+        statusMessage: "Course not found or access denied",
+      });
+    }
+
+    if (membership.role !== "owner") {
+      throw createError({
+        statusCode: 403,
+        statusMessage: "Only the owner can add waypoints",
       });
     }
 
@@ -93,13 +107,13 @@ export default defineEventHandler(async (event) => {
 
     return {
       success: true,
-      waypoint: formattedWaypoint
+      waypoint: formattedWaypoint,
     };
   } catch (error) {
     console.error("Error creating waypoint:", error);
     throw createError({
       statusCode: 500,
-      statusMessage: "Failed to create waypoint"
+      statusMessage: "Failed to create waypoint",
     });
   }
 });

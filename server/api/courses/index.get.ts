@@ -1,4 +1,4 @@
-import { courses } from "~/utils/db/schema";
+import { courses, userCourses } from "~/utils/db/schema";
 import { cloudDb } from "~~/server/utils/db/cloud";
 import { eq, desc } from "drizzle-orm";
 import { auth } from "~/utils/auth";
@@ -8,16 +8,16 @@ export default defineEventHandler(async (event) => {
     const session = await auth.api.getSession({
       headers: event.headers,
     });
-    
+
     if (!session?.user?.id) {
       throw createError({
         statusCode: 401,
-        statusMessage: "Unauthorized"
+        statusMessage: "Unauthorized",
       });
     }
 
-    // Get all courses for the user (without file content for performance)
-    const userCourses = await cloudDb
+    // Get all courses the user has access to (owned or added) via membership table
+    const membershipCourses = await cloudDb
       .select({
         id: courses.id,
         name: courses.name,
@@ -30,20 +30,23 @@ export default defineEventHandler(async (event) => {
         raceDate: courses.raceDate,
         createdAt: courses.createdAt,
         updatedAt: courses.updatedAt,
+        public: courses.public,
+        role: userCourses.role,
       })
-      .from(courses)
-      .where(eq(courses.userId, session.user.id))
+      .from(userCourses)
+      .innerJoin(courses, eq(userCourses.courseId, courses.id))
+      .where(eq(userCourses.userId, session.user.id))
       .orderBy(desc(courses.createdAt));
 
     return {
-      courses: userCourses,
-      total: userCourses.length
+      courses: membershipCourses,
+      total: membershipCourses.length,
     };
   } catch (error) {
     console.error("Error fetching courses:", error);
     throw createError({
       statusCode: 500,
-      statusMessage: "Failed to fetch courses"
+      statusMessage: "Failed to fetch courses",
     });
   }
 });
