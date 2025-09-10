@@ -43,6 +43,7 @@ export default defineEventHandler(async (event) => {
         updatedAt: courses.updatedAt,
         userId: courses.userId,
         public: courses.public,
+        forkedFromCourseId: courses.forkedFromCourseId,
         role: userCourses.role,
       })
       .from(userCourses)

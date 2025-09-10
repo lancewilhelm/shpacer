@@ -2,12 +2,12 @@ import { defineEventHandler, getQuery, createError } from "#imports";
 import { auth } from "~/utils/auth";
 import { cloudDb } from "~~/server/utils/db/cloud";
 import { courses, userCourses, users } from "~/utils/db/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, sql, type SQL } from "drizzle-orm";
 
 /**
  * GET /api/public-courses
  *
- * Search & paginate public courses a user has NOT already added (no membership row).
+ * Search & paginate public courses a user has NOT already starred (no membership row).
  *
  * Query Parameters:
  *  - q: (optional) search term (matches course name, case-insensitive, partial)
@@ -62,12 +62,12 @@ export default defineEventHandler(async (event) => {
     const offset = (page - 1) * pageSize;
 
     // Dynamic WHERE conditions
-    const conditions: any[] = [];
+    const conditions: SQL[] = [];
 
     // Only public courses
     conditions.push(eq(courses.public, true));
 
-    // Exclude any course already in user's memberships (owner or added)
+    // Exclude any course already in user's memberships (owner or starred)
     // We'll do this by LEFT JOIN + IS NULL filter in the select queries
     // (Implemented in join conditions below)
 
@@ -127,7 +127,7 @@ export default defineEventHandler(async (event) => {
       .where(
         and(
           ...conditions,
-            // Ensure the user does not already have this course (not owner or added)
+          // Ensure the user does not already have this course (not owner or added)
           sql`(${userCourses.userId} IS NULL)`,
         ),
       )

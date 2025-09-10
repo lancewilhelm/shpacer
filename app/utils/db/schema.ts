@@ -131,6 +131,7 @@ export const courses = sqliteTable("courses", {
   elevationLoss: integer("elevation_loss"), // in meters
   raceDate: integer("race_date", { mode: "timestamp" }), // optional race date
   public: integer("public", { mode: "boolean" }).notNull().default(false), // visibility (false = private)
+  forkedFromCourseId: text("forked_from_course_id"), // nullable; provenance pointer to original course
 
   // Timestamps
   createdAt: integer("created_at", { mode: "timestamp" })
@@ -264,7 +265,7 @@ export const userCourses = sqliteTable(
     courseId: text("course_id")
       .notNull()
       .references(() => courses.id, { onDelete: "cascade" }),
-    role: text("role").notNull().default("added"), // 'owner' | 'added'
+    role: text("role").notNull().default("starred"), // 'owner' | 'starred'
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .$defaultFn(() => new Date()),

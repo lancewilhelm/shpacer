@@ -7,24 +7,29 @@ import { and, eq } from "drizzle-orm";
 /**
  * POST /api/courses/:id/add
  *
- * Adds a public course (or any course the user doesn't already have) to the
- * current user's course memberships with role = 'added'.
+ * Stars a public course (or any public course the user doesn't already star/own)
+ * adding a membership row with role = 'starred'.
+ *
+ * Terminology Migration:
+ * - Previous term "added" is now "starred".
+ * - Existing rows may still have role = 'added'; we normalize them to 'starred' in responses.
  *
  * Rules:
  * - Auth required.
- * - If the user already owns or added the course: return success with flags.
+ * - If the user already owns or has starred the course: return success with flags.
  * - If the course is private and the user is not the owner: 403.
- * - If the course is public and user not yet a member: insert membership row.
+ * - If the course is public and user not yet a member: insert membership row (role='starred').
  *
  * Response shape:
  * {
  *   success: boolean;
  *   alreadyOwned?: boolean;
- *   alreadyAdded?: boolean;
+ *   alreadyStarred?: boolean;
+ *   (legacy) alreadyAdded?: boolean; // backward compatibility
  *   membership?: {
  *     userId: string;
  *     courseId: string;
- *     role: 'owner' | 'added';
+ *     role: 'owner' | 'starred';
  *   };
  *   course?: {
  *     id: string;
@@ -39,7 +44,7 @@ import { and, eq } from "drizzle-orm";
  *     updatedAt: Date;
  *     ownerId: string;
  *     ownerName: string | null;
- *     role: 'owner' | 'added';
+ *     role: 'owner' | 'starred';
  *   };
  * }
  */
@@ -126,56 +131,61 @@ export default defineEventHandler(async (event) => {
       })
       .from(userCourses)
       .where(
-        and(
-          eq(userCourses.userId, userId),
-            eq(userCourses.courseId, courseId),
-        ),
+        and(eq(userCourses.userId, userId), eq(userCourses.courseId, courseId)),
       )
       .limit(1);
 
     if (existingMembership) {
+      const normalizedRole =
+        existingMembership.role === "owner" ? "owner" : "starred";
+      const alreadyStarred = normalizedRole !== "owner";
       return {
         success: true,
-        alreadyAdded: existingMembership.role !== "owner",
+        alreadyOwned: normalizedRole === "owner",
+        alreadyStarred,
+        // legacy field for frontend not yet migrated
+        alreadyAdded: alreadyStarred,
         course: {
           ...courseRow,
-          role: (existingMembership.role as "owner" | "added") ?? "added",
+          role: normalizedRole as "owner" | "starred",
         },
         membership: {
           userId: existingMembership.userId,
           courseId: existingMembership.courseId,
-          role: existingMembership.role as "owner" | "added",
+          role: normalizedRole as "owner" | "starred",
         },
       };
     }
 
-    // Insert new membership
+    // Insert new membership (role = starred)
     await cloudDb.insert(userCourses).values({
       userId,
       courseId,
-      role: "added",
+      role: "starred",
     });
 
     return {
       success: true,
+      alreadyStarred: false,
+      alreadyAdded: false,
       membership: {
         userId,
         courseId,
-        role: "added" as const,
+        role: "starred" as const,
       },
       course: {
         ...courseRow,
-        role: "added" as const,
+        role: "starred" as const,
       },
     };
   } catch (error) {
     if (error && typeof error === "object" && "statusCode" in error) {
       throw error;
     }
-    console.error("Error adding public course:", error);
+    console.error("Error starring public course:", error);
     throw createError({
       statusCode: 500,
-      statusMessage: "Failed to add course",
+      statusMessage: "Failed to star course",
     });
   }
 });

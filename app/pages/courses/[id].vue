@@ -48,7 +48,9 @@ const {
     pending,
     error,
     refresh,
-} = await useFetch<{ course: SelectCourse }>(`/api/courses/${courseId}`);
+} = await useFetch<{ course: SelectCourse & { role?: string } }>(
+    `/api/courses/${courseId}`,
+);
 
 // Fetch waypoints data
 const {
@@ -130,6 +132,7 @@ useHead({
 
 // Course edit modal state
 const courseEditModalOpen = ref(false);
+const courseInfoModalOpen = ref(false);
 
 async function toggleCoursePublic() {
     if (!course.value) return;
@@ -169,6 +172,24 @@ async function toggleCoursePublic() {
     }
 }
 
+// Clone (copy) the current course (used when user is non-owner)
+async function cloneCourse() {
+    if (!course.value) return;
+    try {
+        const resp = await $fetch<{ course: SelectCourse & { role?: string } }>(
+            `/api/courses/${course.value.id}/clone`,
+            { method: "POST" },
+        );
+        if (resp?.course?.id) {
+            navigateTo(`/courses/${resp.course.id}`);
+        }
+    } catch (e) {
+        console.error(e);
+        if (globalThis.alert) {
+            globalThis.alert("Failed to copy course");
+        }
+    }
+}
 // Client-only fetch of waypoint notes & stoppage times to avoid SSR 401 issues
 if (import.meta.client) {
     const loadPlanAncillary = async (planId: string | null) => {
@@ -341,8 +362,8 @@ async function downloadOriginalFile() {
 }
 
 /**
- * Delete the course (owner) OR remove membership (added user).
- * When removing membership, also deletes the user's plans / notes / stoppage times (handled server-side).
+ * Delete the course (owner) OR unstar (remove membership for starred user).
+ * When un-starring, also deletes the user's plans / notes / stoppage times (handled server-side).
  */
 async function deleteCourse() {
     if (!course.value) return;
@@ -752,6 +773,14 @@ function closeCourseEditModal() {
     courseEditModalOpen.value = false;
 }
 
+function openCourseInfoModal() {
+    courseInfoModalOpen.value = true;
+}
+
+function closeCourseInfoModal() {
+    courseInfoModalOpen.value = false;
+}
+
 function handleCourseUpdated(updatedCourse: SelectCourse) {
     if (courseData.value) {
         courseData.value.course = updatedCourse;
@@ -1084,6 +1113,7 @@ onUnmounted(() => {
                         </div>
                         <div class="flex items-center gap-2">
                             <PlanSelector
+                                v-if="course.role === 'owner'"
                                 :plans="plans"
                                 :current-plan-id="currentPlanId"
                                 :course-id="courseId"
@@ -1099,6 +1129,8 @@ onUnmounted(() => {
                                 @download-file="downloadOriginalFile"
                                 @delete-course="deleteCourse"
                                 @toggle-public="toggleCoursePublic"
+                                @info-course="openCourseInfoModal"
+                                @copy-course="cloneCourse"
                             />
                         </div>
                     </div>
@@ -1495,6 +1527,12 @@ onUnmounted(() => {
             @close="closePlanSetupModal"
             @plan-created="handlePlanCreated"
             @plan-updated="handlePlanUpdated"
+        />
+        <CourseInfoModal
+            :open="courseInfoModalOpen"
+            :course="course || null"
+            :waypoint-count="waypoints.length"
+            @close="closeCourseInfoModal"
         />
     </div>
 </template>

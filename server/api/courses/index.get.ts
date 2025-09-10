@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    // Get all courses the user has access to (owned or added) via membership table
+    // Get all courses the user has a membership for (owned or legacy added/starred)
     const membershipCourses = await cloudDb
       .select({
         id: courses.id,
@@ -38,9 +38,21 @@ export default defineEventHandler(async (event) => {
       .where(eq(userCourses.userId, session.user.id))
       .orderBy(desc(courses.createdAt));
 
+    // Normalize roles: anything not 'owner' becomes 'starred' (handles legacy 'added')
+    const normalized = membershipCourses.map((c) => ({
+      ...c,
+      role: c.role === "owner" ? "owner" : "starred",
+    }));
+    const owned = normalized.filter((c) => c.role === "owner");
+    const starred = normalized.filter((c) => c.role !== "owner");
+
     return {
-      courses: membershipCourses,
-      total: membershipCourses.length,
+      owned,
+      starred,
+      courses: normalized, // backward compatibility (was a flat combined list)
+      totalOwned: owned.length,
+      totalStarred: starred.length,
+      total: normalized.length,
     };
   } catch (error) {
     console.error("Error fetching courses:", error);

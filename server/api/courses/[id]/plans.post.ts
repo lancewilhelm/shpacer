@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    // Verify membership (owner or added)
+    // Verify ownership (only owners can create plans)
     const membership = await cloudDb
       .select({ role: userCourses.role })
       .from(userCourses)
@@ -50,6 +50,14 @@ export default defineEventHandler(async (event) => {
       throw createError({
         statusCode: 404,
         statusMessage: "Course not found or access denied",
+      });
+    }
+
+    if (membership[0].role !== "owner") {
+      throw createError({
+        statusCode: 403,
+        statusMessage:
+          "Only the course owner can create plans. Clone the course to make your own.",
       });
     }
 

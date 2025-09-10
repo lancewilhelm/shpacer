@@ -16,7 +16,7 @@ interface Course {
     createdAt: Date;
     updatedAt: Date;
     public?: boolean;
-    role?: string; // 'owner' | 'added'
+    role?: string; // 'owner' | 'starred' (legacy 'added')
 }
 
 interface Props {
@@ -25,7 +25,13 @@ interface Props {
 
 interface Emits {
     (
-        e: "edit-course" | "download-file" | "delete-course" | "toggle-public",
+        e:
+            | "edit-course"
+            | "download-file"
+            | "delete-course"
+            | "toggle-public"
+            | "info-course"
+            | "copy-course",
     ): void;
 }
 
@@ -60,9 +66,6 @@ const actions = computed<ActionItem[]>(() => {
                     popupVisible.value = false;
                 },
                 icon: _props.course?.public ? "lucide:lock" : "lucide:globe",
-                description: _props.course?.public
-                    ? "Hide from other users"
-                    : "Allow all users to find this course",
             },
             {
                 name: "Delete Course",
@@ -74,28 +77,49 @@ const actions = computed<ActionItem[]>(() => {
                 destructive: true,
             },
         );
-    } else if (_props.course?.role === "added") {
-        // Added (non-owner) user can remove membership
+    } else if (
+        _props.course?.role === "starred" ||
+        _props.course?.role === "added"
+    ) {
+        // Starred (non-owner) user can unstar (remove membership). Accept legacy 'added'.
         list.push({
-            name: "Remove from My Courses",
+            name: "Unstar Course",
             action: () => {
-                emit("delete-course"); // reuse existing delete-course event for membership removal
+                emit("delete-course"); // reuse existing delete-course event for unstar (membership removal)
                 popupVisible.value = false;
             },
             icon: "lucide:minus-circle",
             destructive: true,
         });
     }
-    // Download is available to any member (owner or added)
+    // Copy / Info / Download available to any member (owner or starred)
     if (_props.course) {
-        list.push({
-            name: "Download GPX",
-            action: () => {
-                emit("download-file");
-                popupVisible.value = false;
+        list.push(
+            {
+                name: "Copy Course",
+                action: () => {
+                    emit("copy-course");
+                    popupVisible.value = false;
+                },
+                icon: "lucide:copy",
             },
-            icon: "lucide:download",
-        });
+            {
+                name: "Course Info",
+                action: () => {
+                    emit("info-course");
+                    popupVisible.value = false;
+                },
+                icon: "lucide:info",
+            },
+            {
+                name: "Download GPX",
+                action: () => {
+                    emit("download-file");
+                    popupVisible.value = false;
+                },
+                icon: "lucide:download",
+            },
+        );
     }
     return list;
 });

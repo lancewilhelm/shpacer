@@ -1435,15 +1435,30 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                     </div>
 
                     <!-- Public Visibility -->
-                    <div class="p-3 border border-(--sub-color) rounded-lg">
-                        <SettingsToggleItem
-                            :value="editPublic"
-                            title="Public Visibility"
-                            true-label="Public"
-                            false-label="Private"
-                            description="toggle to make this course visible to all users (public) or only to you (private)"
-                            @toggle="editPublic = !editPublic"
-                        />
+                    <div
+                        class="p-3 border border-(--sub-color) rounded-lg flex items-center"
+                    >
+                        <div class="grow text-(--main-color)">
+                            Make course public
+                        </div>
+                        <button
+                            :class="[
+                                'flex col-start-2 row-span-2 w-[60px] border-2! border-(--sub-alt-color)! bg-(--bg-color)! rounded-full! p-0!',
+                                editPublic
+                                    ? 'justify-end! bg-(--main-color)!'
+                                    : 'justify-start!',
+                            ]"
+                            @click.stop="editPublic = !editPublic"
+                        >
+                            <div
+                                :class="[
+                                    'w-[30px] h-[30px] border-4 rounded-full',
+                                    editPublic
+                                        ? ' bg-(--bg-color) border-(--main-color)'
+                                        : 'bg-(--main-color) border-(--bg-color)',
+                                ]"
+                            />
+                        </button>
                     </div>
 
                     <!-- Per-course smoothing controls -->

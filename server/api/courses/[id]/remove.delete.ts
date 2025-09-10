@@ -12,7 +12,7 @@ import { and, eq, inArray } from "drizzle-orm";
 /**
  * DELETE /api/courses/:id/remove
  *
- * Removes a user's membership (role='added') for a course they previously added.
+ * Unstars a course (removes user's membership with role='starred'; legacy 'added' also supported).
  *
  * Additional behavior:
  * - All user-specific plans for this course (and their waypoint notes / stoppage times)
@@ -22,7 +22,7 @@ import { and, eq, inArray } from "drizzle-orm";
  * - Auth required.
  * - If membership doesn't exist: 404.
  * - If membership exists but role='owner': reject (cannot remove ownership).
- * - If membership exists and role='added': delete it (and cascade user-owned plan data).
+ * - If membership exists and role='starred' (or legacy 'added'): delete it (and cascade user-owned plan data).
  *
  * Response (success):
  * {
@@ -106,14 +106,14 @@ export default defineEventHandler(async (event) => {
       deletedPlanCount = planIds.length;
     }
 
-    // Delete the 'added' membership
+    // Delete the starred membership (supports legacy role='added')
     await cloudDb
       .delete(userCourses)
       .where(
         and(
           eq(userCourses.userId, userId),
           eq(userCourses.courseId, courseId),
-          eq(userCourses.role, "added"),
+          inArray(userCourses.role, ["starred", "added"]),
         ),
       );
 
