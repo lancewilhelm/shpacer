@@ -169,38 +169,50 @@ async function toggleCoursePublic() {
     }
 }
 
-// Fetch waypoint notes and stoppage times when current plan changes
-watchEffect(async () => {
-    if (currentPlanId.value) {
+// Client-only fetch of waypoint notes & stoppage times to avoid SSR 401 issues
+if (import.meta.client) {
+    const loadPlanAncillary = async (planId: string | null) => {
+        if (!planId) {
+            waypointNotes.value = [];
+            waypointStoppageTimes.value = [];
+            return;
+        }
         try {
             const [notesResponse, stoppageTimesResponse] = await Promise.all([
                 $fetch<{ notes: SelectWaypointNote[] }>(
-                    `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-notes`,
+                    `/api/courses/${courseId}/plans/${planId}/waypoint-notes`,
                 ),
                 $fetch<{ stoppageTimes: SelectWaypointStoppageTime[] }>(
-                    `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-stoppage-times`,
+                    `/api/courses/${courseId}/plans/${planId}/waypoint-stoppage-times`,
                 ),
             ]);
             waypointNotes.value = notesResponse.notes;
             waypointStoppageTimes.value = stoppageTimesResponse.stoppageTimes;
         } catch (error) {
-            // Silently handle auth errors during navigation, log others
+            // Ignore 401 silently (likely hydration/session timing); log others
             if (
-                error &&
-                typeof error === "object" &&
-                "statusCode" in error &&
-                error.statusCode !== 401
+                !(
+                    error &&
+                    typeof error === "object" &&
+                    "statusCode" in error &&
+                    // runtime narrowing (statusCode validated above)
+                    error.statusCode === 401
+                )
             ) {
-                console.error("Error fetching waypoint data:", error);
+                console.error("Error fetching waypoint ancillary data", error);
             }
             waypointNotes.value = [];
             waypointStoppageTimes.value = [];
         }
-    } else {
-        waypointNotes.value = [];
-        waypointStoppageTimes.value = [];
-    }
-});
+    };
+    watch(
+        () => currentPlanId.value,
+        (pid) => {
+            loadPlanAncillary(pid);
+        },
+        { immediate: true },
+    );
+}
 
 // Panel resizing state
 const isResizing = ref(false);
@@ -329,25 +341,35 @@ async function downloadOriginalFile() {
 }
 
 /**
- * Delete the course
+ * Delete the course (owner) OR remove membership (added user).
+ * When removing membership, also deletes the user's plans / notes / stoppage times (handled server-side).
  */
 async function deleteCourse() {
     if (!course.value) return;
 
-    const confirmed = confirm(
-        `Are you sure you want to delete "${course.value.name}"? This action cannot be undone.`,
-    );
-    if (!confirmed) return;
+    const role = (course.value as { role?: string }).role;
+    const isOwner = role === "owner";
+
+    const message = isOwner
+        ? `Are you sure you want to delete "${course.value.name}"? This action cannot be undone.`
+        : `Remove "${course.value.name}" from My Courses?\n\nAll of your plans, waypoint notes, and stoppage times for this course will be deleted.`;
+
+    if (!confirm(message)) return;
 
     try {
-        await $fetch(`/api/courses/${courseId}`, {
-            method: "DELETE",
-        });
-
+        if (isOwner) {
+            await $fetch(`/api/courses/${courseId}`, {
+                method: "DELETE",
+            });
+        } else {
+            await $fetch(`/api/courses/${courseId}/remove`, {
+                method: "DELETE",
+            });
+        }
         await navigateTo("/courses");
     } catch (error) {
-        console.error("Error deleting course:", error);
-        alert("Failed to delete course");
+        console.error("Error removing course or membership:", error);
+        alert(isOwner ? "Failed to delete course" : "Failed to remove course");
     }
 }
 
@@ -720,6 +742,9 @@ function handleElevationWaypointClick(chartWaypoint: {
 
 // Course edit modal handlers
 function openCourseEditModal() {
+    // Only allow owners to open the edit modal
+    if (!course.value || (course.value as { role?: string }).role !== "owner")
+        return;
     courseEditModalOpen.value = true;
 }
 

@@ -41,47 +41,62 @@ interface ActionItem {
 }
 
 const actions = computed<ActionItem[]>(() => {
-    const list: ActionItem[] = [
-        {
-            name: "Edit Course",
+    const list: ActionItem[] = [];
+    // Owner-only actions
+    if (_props.course?.role === "owner") {
+        list.push(
+            {
+                name: "Edit Course",
+                action: () => {
+                    emit("edit-course");
+                    popupVisible.value = false;
+                },
+                icon: "lucide:pencil",
+            },
+            {
+                name: _props.course?.public ? "Make Private" : "Make Public",
+                action: () => {
+                    emit("toggle-public");
+                    popupVisible.value = false;
+                },
+                icon: _props.course?.public ? "lucide:lock" : "lucide:globe",
+                description: _props.course?.public
+                    ? "Hide from other users"
+                    : "Allow all users to find this course",
+            },
+            {
+                name: "Delete Course",
+                action: () => {
+                    emit("delete-course");
+                    popupVisible.value = false;
+                },
+                icon: "lucide:trash-2",
+                destructive: true,
+            },
+        );
+    } else if (_props.course?.role === "added") {
+        // Added (non-owner) user can remove membership
+        list.push({
+            name: "Remove from My Courses",
             action: () => {
-                emit("edit-course");
+                emit("delete-course"); // reuse existing delete-course event for membership removal
                 popupVisible.value = false;
             },
-            icon: "lucide:pencil",
-        },
-        {
+            icon: "lucide:minus-circle",
+            destructive: true,
+        });
+    }
+    // Download is available to any member (owner or added)
+    if (_props.course) {
+        list.push({
             name: "Download GPX",
             action: () => {
                 emit("download-file");
                 popupVisible.value = false;
             },
             icon: "lucide:download",
-        },
-    ];
-    // Owner-only public toggle
-    if (_props.course?.role === "owner") {
-        list.push({
-            name: _props.course?.public ? "Make Private" : "Make Public",
-            action: () => {
-                emit("toggle-public");
-                popupVisible.value = false;
-            },
-            icon: _props.course?.public ? "lucide:lock" : "lucide:globe",
-            description: _props.course?.public
-                ? "Hide from other users"
-                : "Allow all users to find this course",
         });
     }
-    list.push({
-        name: "Delete Course",
-        action: () => {
-            emit("delete-course");
-            popupVisible.value = false;
-        },
-        icon: "lucide:trash-2",
-        destructive: true,
-    });
     return list;
 });
 
