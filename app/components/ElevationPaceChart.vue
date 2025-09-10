@@ -1603,21 +1603,19 @@ watch(
 );
 // Setup resize observer
 // Handle component resize
+let resizeObserver: ResizeObserver | null = null;
+let paceResizeObserver: ResizeObserver | null = null;
+
 onMounted(() => {
     if (chartContainer.value) {
-        const resizeObserver = new ResizeObserver(() => {
+        resizeObserver = new ResizeObserver(() => {
             handleResize();
         });
         resizeObserver.observe(chartContainer.value);
-
-        onUnmounted(() => {
-            resizeObserver.disconnect();
-        });
     }
 
-    // Also observe pace chart container if it exists
     if (paceChartContainer.value) {
-        const paceResizeObserver = new ResizeObserver(() => {
+        paceResizeObserver = new ResizeObserver(() => {
             if (hasPaceData.value && props.showPaceChart) {
                 nextTick(() => {
                     initPaceChart();
@@ -1625,10 +1623,17 @@ onMounted(() => {
             }
         });
         paceResizeObserver.observe(paceChartContainer.value);
+    }
+});
 
-        onUnmounted(() => {
-            paceResizeObserver.disconnect();
-        });
+onUnmounted(() => {
+    if (resizeObserver) {
+        resizeObserver.disconnect();
+        resizeObserver = null;
+    }
+    if (paceResizeObserver) {
+        paceResizeObserver.disconnect();
+        paceResizeObserver = null;
     }
 });
 </script>

@@ -1,6 +1,5 @@
 import { logger } from "~/utils/logger";
-import { cloudDb } from "~~/server/utils/db/cloud";
-import { eq } from "drizzle-orm";
+
 import { auth } from "~/utils/auth";
 
 export default defineEventHandler(async (event) => {
@@ -18,7 +17,7 @@ export default defineEventHandler(async (event) => {
       message: "Unauthorized",
     };
   }
-  const userId = session.user.id;
+  // userId not needed here since endpoint doesn't use it
 
   try {
     return { success: true };
