@@ -103,7 +103,10 @@ export default defineEventHandler(async (event) => {
 
     return {
       success: true,
-      course: updatedCourse,
+      course: {
+        ...updatedCourse,
+        role: membership.role, // preserve membership role so frontend menu toggles correctly
+      },
     };
   } catch (error) {
     console.error("Error updating course:", error);

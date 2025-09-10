@@ -131,6 +131,44 @@ useHead({
 // Course edit modal state
 const courseEditModalOpen = ref(false);
 
+async function toggleCoursePublic() {
+    if (!course.value) return;
+    const originalPublic = course.value.public;
+    const nextPublic = !originalPublic;
+
+    // Optimistic UI update so the menu item flips immediately
+    courseData.value = {
+        course: {
+            ...(course.value as SelectCourse),
+            public: nextPublic,
+        },
+    };
+
+    try {
+        const response = await $fetch<{ course: SelectCourse }>(
+            `/api/courses/${course.value.id}`,
+            {
+                method: "PUT",
+                body: {
+                    public: nextPublic,
+                },
+            },
+        );
+        // Replace with authoritative server response (includes role)
+        courseData.value = { course: response.course };
+    } catch (err) {
+        // Revert on failure
+        courseData.value = {
+            course: {
+                ...(course.value as SelectCourse),
+                public: originalPublic,
+            },
+        };
+        console.error("Failed to toggle course public flag:", err);
+        alert("Failed to update course visibility. Please try again.");
+    }
+}
+
 // Fetch waypoint notes and stoppage times when current plan changes
 watchEffect(async () => {
     if (currentPlanId.value) {
@@ -996,7 +1034,22 @@ onUnmounted(() => {
                     <div class="flex items-center justify-between gap-4 mb-4">
                         <div class="flex-1">
                             <h1 class="text-2xl font-bold text-(--main-color)">
-                                {{ course.name }}
+                                <span class="inline-flex items-center gap-2">
+                                    <span>{{ course.name }}</span>
+                                    <Icon
+                                        v-tooltip="
+                                            course.public
+                                                ? 'Public course'
+                                                : 'Private course'
+                                        "
+                                        :name="
+                                            course.public
+                                                ? 'lucide:globe'
+                                                : 'lucide:lock'
+                                        "
+                                        class="h-4 w-4 scale-90 text-(--sub-color)"
+                                    />
+                                </span>
                             </h1>
                             <div v-if="course.description" class="mt-2">
                                 <p class="text-(--sub-color)">
@@ -1020,6 +1073,7 @@ onUnmounted(() => {
                                 @edit-course="openCourseEditModal"
                                 @download-file="downloadOriginalFile"
                                 @delete-course="deleteCourse"
+                                @toggle-public="toggleCoursePublic"
                             />
                         </div>
                     </div>

@@ -325,6 +325,16 @@ const _elevationProfile = computed((): ElevationPoint[] => {
     return extractElevationProfile(combinedGeoJson);
 });
 
+const editPublic = ref(!!props.course?.public);
+// Re-sync toggle when course changes (e.g., modal reopened or updated)
+watch(
+    () => props.course?.id,
+    () => {
+        if (props.course) {
+            editPublic.value = !!props.course.public;
+        }
+    },
+);
 function closeModal() {
     updateError.value = "";
     waypointUpdateError.value = "";
@@ -423,6 +433,7 @@ async function saveCourseChanges() {
                     name: editName.value.trim(),
                     description: editDescription.value.trim() || undefined,
                     raceDate: raceDateTime,
+                    public: editPublic.value,
                 },
             },
         );
@@ -1423,6 +1434,18 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                         </div>
                     </div>
 
+                    <!-- Public Visibility -->
+                    <div class="p-3 border border-(--sub-color) rounded-lg">
+                        <SettingsToggleItem
+                            :value="editPublic"
+                            title="Public Visibility"
+                            true-label="Public"
+                            false-label="Private"
+                            description="toggle to make this course visible to all users (public) or only to you (private)"
+                            @toggle="editPublic = !editPublic"
+                        />
+                    </div>
+
                     <!-- Per-course smoothing controls -->
                     <div
                         class="space-y-3 p-3 border border-(--sub-color) rounded-lg"
@@ -1474,6 +1497,7 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                                 />
                             </div>
                         </div>
+
                         <div class="text-xs text-(--sub-color)">
                             These settings control grade estimation and pace
                             smoothing for this course. Set to <b>0</b> for no

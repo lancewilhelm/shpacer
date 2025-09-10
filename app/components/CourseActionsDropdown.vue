@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from "vue";
 interface Course {
     id: string;
     name: string;
@@ -14,6 +15,8 @@ interface Course {
     raceDate?: Date | null;
     createdAt: Date;
     updatedAt: Date;
+    public?: boolean;
+    role?: string; // 'owner' | 'added'
 }
 
 interface Props {
@@ -21,7 +24,9 @@ interface Props {
 }
 
 interface Emits {
-    (e: "edit-course" | "download-file" | "delete-course"): void;
+    (
+        e: "edit-course" | "download-file" | "delete-course" | "toggle-public",
+    ): void;
 }
 
 const _props = defineProps<Props>();
@@ -35,24 +40,40 @@ interface ActionItem {
     description?: string;
 }
 
-const actions: ActionItem[] = [
-    {
-        name: "Edit Course",
-        action: () => {
-            emit("edit-course");
-            popupVisible.value = false;
+const actions = computed<ActionItem[]>(() => {
+    const list: ActionItem[] = [
+        {
+            name: "Edit Course",
+            action: () => {
+                emit("edit-course");
+                popupVisible.value = false;
+            },
+            icon: "lucide:pencil",
         },
-        icon: "lucide:pencil",
-    },
-    {
-        name: "Download GPX",
-        action: () => {
-            emit("download-file");
-            popupVisible.value = false;
+        {
+            name: "Download GPX",
+            action: () => {
+                emit("download-file");
+                popupVisible.value = false;
+            },
+            icon: "lucide:download",
         },
-        icon: "lucide:download",
-    },
-    {
+    ];
+    // Owner-only public toggle
+    if (_props.course?.role === "owner") {
+        list.push({
+            name: _props.course?.public ? "Make Private" : "Make Public",
+            action: () => {
+                emit("toggle-public");
+                popupVisible.value = false;
+            },
+            icon: _props.course?.public ? "lucide:lock" : "lucide:globe",
+            description: _props.course?.public
+                ? "Hide from other users"
+                : "Allow all users to find this course",
+        });
+    }
+    list.push({
         name: "Delete Course",
         action: () => {
             emit("delete-course");
@@ -60,8 +81,9 @@ const actions: ActionItem[] = [
         },
         icon: "lucide:trash-2",
         destructive: true,
-    },
-];
+    });
+    return list;
+});
 
 const popupVisible = ref(false);
 const popupRef = ref<HTMLElement | null>(null);
