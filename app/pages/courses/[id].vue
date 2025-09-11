@@ -1462,42 +1462,19 @@ onUnmounted(() => {
                                 @edit-plan="openEditPlanModal"
                                 @delete-plan="handlePlanDeleted"
                             />
-                            <!-- Plan Share Controls (owner only in member mode) -->
-                            <div
-                                v-if="
-                                    currentPlan &&
-                                    mode === 'member' &&
-                                    capabilities.canManagePlans
-                                "
-                                class="flex items-center gap-2"
-                            >
-                                <button
-                                    class="px-2 py-1 border text-xs rounded hover:bg-(--main-color) hover:text-(--bg-color) transition-colors"
-                                    @click="toggleCurrentPlanShare"
-                                >
-                                    {{
-                                        currentPlan.shareEnabled
-                                            ? "Disable Plan Share"
-                                            : "Enable Plan Share"
-                                    }}
-                                </button>
-                                <button
-                                    v-if="currentPlan.shareEnabled"
-                                    class="px-2 py-1 border text-xs rounded hover:bg-(--main-color) hover:text-(--bg-color) transition-colors"
-                                    @click="copyPlanShareLink"
-                                >
-                                    Copy Plan Share Link
-                                </button>
-                            </div>
+
                             <CourseActionsDropdown
                                 v-if="course && mode === 'member'"
                                 :course="course"
+                                :current-plan="currentPlan"
                                 @edit-course="openCourseEditModal"
                                 @download-file="downloadOriginalFile"
                                 @delete-course="deleteCourse"
                                 @toggle-public="toggleCoursePublic"
                                 @toggle-share="toggleCourseShare"
+                                @toggle-plan-share="toggleCurrentPlanShare"
                                 @copy-share-link="handleCopyShareLink"
+                                @copy-plan-share-link="copyPlanShareLink"
                                 @info-course="openCourseInfoModal"
                                 @copy-course="cloneCourse"
                             />
