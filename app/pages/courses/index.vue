@@ -200,201 +200,99 @@ async function addPublicCourse(id: string) {
 <template>
     <div class="flex flex-col w-full h-full overflow-hidden">
         <AppHeader class="w-full" />
-        <div class="w-full h-full p-4 flex flex-col gap-10 overflow-auto">
-            <!-- Owned Courses -->
-            <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-3xl font-bold text-(--main-color)">
-                        My Courses
-                    </h1>
-                    <p class="text-(--sub-color) mt-1">
-                        {{ ownedCourses.length }} course{{
-                            ownedCourses.length !== 1 ? "s" : ""
-                        }}
-                    </p>
-                </div>
-                <NuxtLink
-                    to="/courses/new"
-                    class="px-4 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity flex items-center gap-2"
-                >
-                    <Icon name="lucide:plus" class="h-5 w-5 scale-125" />
-                    New Course
-                </NuxtLink>
-            </div>
-
-            <div
-                v-if="coursesPending"
-                class="flex items-center justify-center py-12"
-            >
-                <Icon
-                    name="svg-spinners:6-dots-scale"
-                    class="text-(--main-color) scale-200"
-                />
-            </div>
-
-            <div
-                v-else-if="coursesError"
-                class="flex items-center justify-center py-12"
-            >
-                <div class="text-center">
-                    <Icon
-                        name="lucide:triangle-alert"
-                        class="h-12 w-12 text-(--error-color) mx-auto mb-4"
-                    />
-                    <button
-                        class="mt-2 px-4 py-2 bg-(--main-color) text-(--bg-color) rounded"
-                        @click="refreshCourses()"
-                    >
-                        Try Again
-                    </button>
-                    <p class="text-(--error-color) mt-4">
-                        Failed to load courses
-                    </p>
-                </div>
-            </div>
-
-            <div
-                v-else-if="ownedCourses.length === 0"
-                class="flex items-center justify-center py-12"
-            >
-                <div class="text-center">
-                    <Icon
-                        name="lucide:map"
-                        class="h-16 w-16 text-(--sub-color) mx-auto mb-4 scale-300"
-                    />
-                    <h3 class="text-xl font-semibold text-(--main-color) mb-2">
-                        No owned courses yet
-                    </h3>
-                    <p class="text-(--sub-color) mb-4">
-                        Create your first course by uploading a GPX or TCX file
-                    </p>
-                    <NuxtLink
-                        to="/courses/new"
-                        class="px-4 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity"
-                    >
-                        Create First Course
-                    </NuxtLink>
-                </div>
-            </div>
-
-            <div
-                v-else
-                class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-            >
-                <div
-                    v-for="course in ownedCourses"
-                    :key="course.id"
-                    class="bg-(--sub-alt-color) border border-(--sub-color) rounded-lg p-4 hover:border-(--main-color) transition-colors group cursor-pointer flex flex-col"
-                    @click="$router.push(`/courses/${course.id}`)"
-                >
-                    <h3
-                        class="font-semibold text-(--main-color) mb-1 group-hover:text-(--main-color) transition-colors truncate flex items-center gap-2"
-                    >
-                        <span class="truncate">{{ course.name }}</span>
-                        <Icon
-                            v-tooltip="course.public ? 'Public' : 'Private'"
-                            :name="
-                                course.public ? 'lucide:globe' : 'lucide:lock'
-                            "
-                            class="h-3 w-3 text-(--sub-color) flex-shrink-0"
-                        />
-                    </h3>
-                    <p
-                        v-if="course.description"
-                        class="text-xs text-(--sub-color) line-clamp-2 mb-2"
-                    >
-                        {{ course.description }}
-                    </p>
-                    <div class="flex items-center gap-3 mb-2 text-[11px]">
-                        <div
-                            v-if="course.totalDistance"
-                            class="flex items-center gap-1 text-(--main-color)"
-                        >
-                            <Icon
-                                name="lucide:move-horizontal"
-                                class="h-3 w-3"
-                            />
-                            <span>{{
-                                formatCourseDistance(
-                                    course.totalDistance,
-                                    course,
-                                )
-                            }}</span>
-                        </div>
-                        <div
-                            v-if="course.elevationGain"
-                            class="flex items-center gap-1 text-(--main-color)"
-                        >
-                            <Icon name="lucide:arrow-up" class="h-3 w-3" />
-                            <span>{{
-                                formatCourseElevation(
-                                    course.elevationGain,
-                                    course,
-                                )
-                            }}</span>
-                        </div>
-                        <div
-                            v-if="course.elevationLoss"
-                            class="flex items-center gap-1 text-(--main-color)"
-                        >
-                            <Icon name="lucide:arrow-down" class="h-3 w-3" />
-                            <span>{{
-                                formatCourseElevation(
-                                    course.elevationLoss,
-                                    course,
-                                )
-                            }}</span>
-                        </div>
-                        <div
-                            v-if="course.raceDate"
-                            class="flex items-center gap-1 text-(--main-color)"
-                        >
-                            <Icon name="lucide:calendar" class="h-3 w-3" />
-                            <span>{{ formatRaceDate(course.raceDate) }}</span>
-                        </div>
-                    </div>
-                    <div
-                        class="mt-auto flex items-center justify-between text-[11px] text-(--sub-color)"
-                    >
-                        <span class="truncate">{{
-                            course.originalFileName
-                        }}</span>
-                        <span>{{ formatDate(course.createdAt) }}</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Starred Courses -->
-            <section v-if="starredCourses.length" class="flex flex-col gap-6">
+        <div class="w-full h-full p-4 flex flex-col gap-6">
+            <div class="flex-1 min-h-0 flex flex-col gap-10 overflow-auto">
+                <!-- Owned Courses -->
                 <div class="flex items-center justify-between">
                     <div>
-                        <h2 class="text-2xl font-bold text-(--main-color)">
-                            Starred Courses
-                        </h2>
-                        <p class="text-(--sub-color) mt-1 text-sm">
-                            {{ starredCourses.length }} starred course{{
-                                starredCourses.length !== 1 ? "s" : ""
+                        <h1 class="text-3xl font-bold text-(--main-color)">
+                            My Courses
+                        </h1>
+                        <p class="text-(--sub-color) mt-1">
+                            {{ ownedCourses.length }} course{{
+                                ownedCourses.length !== 1 ? "s" : ""
                             }}
                         </p>
                     </div>
+                    <NuxtLink
+                        to="/courses/new"
+                        class="px-4 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity flex items-center gap-2"
+                    >
+                        <Icon name="lucide:plus" class="h-5 w-5 scale-125" />
+                        New Course
+                    </NuxtLink>
                 </div>
+
                 <div
+                    v-if="coursesPending"
+                    class="flex items-center justify-center py-12"
+                >
+                    <Icon
+                        name="svg-spinners:6-dots-scale"
+                        class="text-(--main-color) scale-200"
+                    />
+                </div>
+
+                <div
+                    v-else-if="coursesError"
+                    class="flex items-center justify-center py-12"
+                >
+                    <div class="text-center">
+                        <Icon
+                            name="lucide:triangle-alert"
+                            class="h-12 w-12 text-(--error-color) mx-auto mb-4"
+                        />
+                        <button
+                            class="mt-2 px-4 py-2 bg-(--main-color) text-(--bg-color) rounded"
+                            @click="refreshCourses()"
+                        >
+                            Try Again
+                        </button>
+                        <p class="text-(--error-color) mt-4">
+                            Failed to load courses
+                        </p>
+                    </div>
+                </div>
+
+                <div
+                    v-else-if="ownedCourses.length === 0"
+                    class="flex items-center justify-center py-12"
+                >
+                    <div class="text-center">
+                        <Icon
+                            name="lucide:map"
+                            class="h-16 w-16 text-(--sub-color) mx-auto mb-4 scale-300"
+                        />
+                        <h3
+                            class="text-xl font-semibold text-(--main-color) mb-2"
+                        >
+                            No owned courses yet
+                        </h3>
+                        <p class="text-(--sub-color) mb-4">
+                            Create your first course by uploading a GPX or TCX
+                            file
+                        </p>
+                        <NuxtLink
+                            to="/courses/new"
+                            class="px-4 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity"
+                        >
+                            Create First Course
+                        </NuxtLink>
+                    </div>
+                </div>
+
+                <div
+                    v-else
                     class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
                 >
                     <div
-                        v-for="course in starredCourses"
+                        v-for="course in ownedCourses"
                         :key="course.id"
-                        class="bg-(--sub-alt-color) border border-(--sub-color) rounded-lg p-4 hover:border-(--main-color) transition-colors group cursor-pointer flex flex-col relative"
+                        class="bg-(--sub-alt-color) border border-(--sub-color) rounded-lg p-4 hover:border-(--main-color) transition-colors group cursor-pointer flex flex-col"
                         @click="$router.push(`/courses/${course.id}`)"
                     >
-                        <div
-                            class="absolute top-2 right-2 flex items-center gap-1 text-(--main-color) text-[11px] px-2 py-0.5 rounded bg-(--main-color)/10"
-                        >
-                            <Icon name="lucide:star" class="h-3 w-3" />
-                            <span>Starred</span>
-                        </div>
                         <h3
-                            class="font-semibold text-(--main-color) mb-1 group-hover:text-(--main-color) transition-colors truncate flex items-center gap-2 pr-12"
+                            class="font-semibold text-(--main-color) mb-1 group-hover:text-(--main-color) transition-colors truncate flex items-center gap-2"
                         >
                             <span class="truncate">{{ course.name }}</span>
                             <Icon
@@ -476,7 +374,134 @@ async function addPublicCourse(id: string) {
                         </div>
                     </div>
                 </div>
-            </section>
+
+                <!-- Starred Courses -->
+                <section
+                    v-if="starredCourses.length"
+                    class="flex flex-col gap-6"
+                >
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-(--main-color)">
+                                Starred Courses
+                            </h2>
+                            <p class="text-(--sub-color) mt-1 text-sm">
+                                {{ starredCourses.length }} starred course{{
+                                    starredCourses.length !== 1 ? "s" : ""
+                                }}
+                            </p>
+                        </div>
+                    </div>
+                    <div
+                        class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                    >
+                        <div
+                            v-for="course in starredCourses"
+                            :key="course.id"
+                            class="bg-(--sub-alt-color) border border-(--sub-color) rounded-lg p-4 hover:border-(--main-color) transition-colors group cursor-pointer flex flex-col relative"
+                            @click="$router.push(`/courses/${course.id}`)"
+                        >
+                            <div
+                                class="absolute top-2 right-2 flex items-center gap-1 text-(--main-color) text-[11px] px-2 py-0.5 rounded bg-(--main-color)/10"
+                            >
+                                <Icon name="lucide:star" class="h-3 w-3" />
+                                <span>Starred</span>
+                            </div>
+                            <h3
+                                class="font-semibold text-(--main-color) mb-1 group-hover:text-(--main-color) transition-colors truncate flex items-center gap-2 pr-12"
+                            >
+                                <span class="truncate">{{ course.name }}</span>
+                                <Icon
+                                    v-tooltip="
+                                        course.public ? 'Public' : 'Private'
+                                    "
+                                    :name="
+                                        course.public
+                                            ? 'lucide:globe'
+                                            : 'lucide:lock'
+                                    "
+                                    class="h-3 w-3 text-(--sub-color) flex-shrink-0"
+                                />
+                            </h3>
+                            <p
+                                v-if="course.description"
+                                class="text-xs text-(--sub-color) line-clamp-2 mb-2"
+                            >
+                                {{ course.description }}
+                            </p>
+                            <div
+                                class="flex items-center gap-3 mb-2 text-[11px]"
+                            >
+                                <div
+                                    v-if="course.totalDistance"
+                                    class="flex items-center gap-1 text-(--main-color)"
+                                >
+                                    <Icon
+                                        name="lucide:move-horizontal"
+                                        class="h-3 w-3"
+                                    />
+                                    <span>{{
+                                        formatCourseDistance(
+                                            course.totalDistance,
+                                            course,
+                                        )
+                                    }}</span>
+                                </div>
+                                <div
+                                    v-if="course.elevationGain"
+                                    class="flex items-center gap-1 text-(--main-color)"
+                                >
+                                    <Icon
+                                        name="lucide:arrow-up"
+                                        class="h-3 w-3"
+                                    />
+                                    <span>{{
+                                        formatCourseElevation(
+                                            course.elevationGain,
+                                            course,
+                                        )
+                                    }}</span>
+                                </div>
+                                <div
+                                    v-if="course.elevationLoss"
+                                    class="flex items-center gap-1 text-(--main-color)"
+                                >
+                                    <Icon
+                                        name="lucide:arrow-down"
+                                        class="h-3 w-3"
+                                    />
+                                    <span>{{
+                                        formatCourseElevation(
+                                            course.elevationLoss,
+                                            course,
+                                        )
+                                    }}</span>
+                                </div>
+                                <div
+                                    v-if="course.raceDate"
+                                    class="flex items-center gap-1 text-(--main-color)"
+                                >
+                                    <Icon
+                                        name="lucide:calendar"
+                                        class="h-3 w-3"
+                                    />
+                                    <span>{{
+                                        formatRaceDate(course.raceDate)
+                                    }}</span>
+                                </div>
+                            </div>
+                            <div
+                                class="mt-auto flex items-center justify-between text-[11px] text-(--sub-color)"
+                            >
+                                <span class="truncate">{{
+                                    course.originalFileName
+                                }}</span>
+                                <span>{{ formatDate(course.createdAt) }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
 
             <!-- Public Courses Search -->
             <section class="flex flex-col gap-4">
