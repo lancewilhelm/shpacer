@@ -21,6 +21,7 @@ interface Props {
     getDefaultStoppageTime?: () => number;
     selectedSplitIndex?: number | null;
     selectedSplitRange?: { startIndex: number; endIndex: number } | null;
+    readOnly?: boolean;
 }
 
 const _props = withDefaults(defineProps<Props>(), {
@@ -31,6 +32,7 @@ const _props = withDefaults(defineProps<Props>(), {
     getDefaultStoppageTime: () => 0,
     selectedSplitIndex: null,
     selectedSplitRange: null,
+    readOnly: false,
 });
 const {
     geoJsonData,

@@ -32,6 +32,13 @@ type Waypoint = {
 };
 
 interface Props {
+    /**
+     * When true, the list is rendered in read-only mode:
+     * - No editing modal
+     * - No saving / deleting notes
+     * - No stoppage time edits
+     */
+    readOnly?: boolean;
     waypoints?: Waypoint[];
     selectedWaypoint?: Waypoint | null;
     currentPlanId?: string | null;
@@ -75,6 +82,7 @@ const {
     getWaypointStoppageTime,
     getDefaultStoppageTime,
     geoJsonData,
+    readOnly,
 } = toRefs(_props);
 
 const emit = defineEmits<Emits>();
@@ -168,8 +176,9 @@ function getWaypointDisplayContent(waypoint: Waypoint): string {
     return (regularIndex + 1).toString();
 }
 
-function openEditModal(waypoint: Waypoint) {
-    editingWaypoint.value = waypoint;
+function openEditModal(waypoint?: Waypoint) {
+    if (_props.readOnly) return;
+    editingWaypoint.value = waypoint || null;
     editModalOpen.value = true;
 }
 
@@ -179,18 +188,22 @@ function closeEditModal() {
 }
 
 function handleSaveNote(waypointId: string, notes: string) {
+    if (_props.readOnly) return;
     emit("save-waypoint-note", waypointId, notes);
 }
 
 function handleDeleteNote(waypointId: string) {
+    if (_props.readOnly) return;
     emit("delete-waypoint-note", waypointId);
 }
 
 function handleSaveStoppageTime(waypointId: string, stoppageTime: number) {
+    if (_props.readOnly) return;
     emit("save-waypoint-stoppage-time", waypointId, stoppageTime);
 }
 
 function handleDeleteStoppageTime(waypointId: string) {
+    if (_props.readOnly) return;
     emit("delete-waypoint-stoppage-time", waypointId);
 }
 
@@ -411,7 +424,7 @@ function getSegmentGradeDisplay(waypointId: string): string {
 
                                         <!-- Edit Waypoint Plan Button -->
                                         <button
-                                            v-if="currentPlanId"
+                                            v-if="currentPlanId && !readOnly"
                                             v-tooltip="'Edit waypoint'"
                                             class="text-(--sub-color) transition-colors flex-shrink-0 m-0! p-1! rounded!"
                                             @click.stop="
@@ -710,6 +723,7 @@ function getSegmentGradeDisplay(waypointId: string): string {
 
         <!-- Waypoint Edit Modal -->
         <WaypointEditModal
+            v-if="!readOnly"
             :is-open="editModalOpen"
             :waypoint="editingWaypoint"
             :waypoints="waypoints"

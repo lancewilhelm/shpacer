@@ -8,6 +8,7 @@ interface UpdateCourseRequest {
   description?: string;
   raceDate?: string | null;
   public?: boolean;
+  shareEnabled?: boolean;
 }
 
 export default defineEventHandler(async (event) => {
@@ -93,6 +94,10 @@ export default defineEventHandler(async (event) => {
 
     if (body.public !== undefined) {
       updateData.public = body.public;
+    }
+
+    if (body.shareEnabled !== undefined) {
+      updateData.shareEnabled = body.shareEnabled;
     }
 
     const [updatedCourse] = await cloudDb

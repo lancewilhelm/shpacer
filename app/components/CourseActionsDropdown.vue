@@ -16,6 +16,7 @@ interface Course {
     createdAt: Date;
     updatedAt: Date;
     public?: boolean;
+    shareEnabled?: boolean;
     role?: string; // 'owner' | 'starred' (legacy 'added')
 }
 
@@ -30,8 +31,10 @@ interface Emits {
             | "download-file"
             | "delete-course"
             | "toggle-public"
+            | "toggle-share"
             | "info-course"
-            | "copy-course",
+            | "copy-course"
+            | "copy-share-link",
     ): void;
 }
 
@@ -67,6 +70,42 @@ const actions = computed<ActionItem[]>(() => {
                 },
                 icon: _props.course?.public ? "lucide:lock" : "lucide:globe",
             },
+            {
+                name: _props.course?.shareEnabled
+                    ? "Disable Share Link"
+                    : "Enable Share Link",
+                action: () => {
+                    emit("toggle-share");
+                    popupVisible.value = false;
+                },
+                icon: _props.course?.shareEnabled
+                    ? "lucide:link-2-off"
+                    : "lucide:link-2",
+            },
+            ...(_props.course?.shareEnabled
+                ? [
+                      {
+                          name: "Copy Share Link",
+                          action: () => {
+                              const shareUrl = `${window.location.origin}/courses/${_props.course?.id}`;
+                              if (navigator?.clipboard?.writeText) {
+                                  navigator.clipboard
+                                      .writeText(shareUrl)
+                                      .catch(() => {
+                                          window.alert(
+                                              "Share URL: " + shareUrl,
+                                          );
+                                      });
+                              } else {
+                                  window.alert("Share URL: " + shareUrl);
+                              }
+                              popupVisible.value = false;
+                              emit("copy-share-link");
+                          },
+                          icon: "lucide:share-2",
+                      } as ActionItem,
+                  ]
+                : []),
             {
                 name: "Delete Course",
                 action: () => {

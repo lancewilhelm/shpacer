@@ -131,6 +131,9 @@ export const courses = sqliteTable("courses", {
   elevationLoss: integer("elevation_loss"), // in meters
   raceDate: integer("race_date", { mode: "timestamp" }), // optional race date
   public: integer("public", { mode: "boolean" }).notNull().default(false), // visibility (false = private)
+  shareEnabled: integer("share_enabled", { mode: "boolean" })
+    .notNull()
+    .default(false), // public share link (read-only) enabled
   forkedFromCourseId: text("forked_from_course_id"), // nullable; provenance pointer to original course
 
   // Timestamps
@@ -198,6 +201,9 @@ export const plans = sqliteTable("plans", {
   // Example: 10 => factor varies from -5% at start (0.95x) to +5% at end (1.05x).
   // Negative values produce negative splits (faster at end).
   pacingLinearPercent: integer("pacing_linear_percent").default(0),
+  shareEnabled: integer("share_enabled", { mode: "boolean" })
+    .notNull()
+    .default(false), // public share link (read-only) enabled
 
   // Timestamps
   createdAt: integer("created_at", { mode: "timestamp" })

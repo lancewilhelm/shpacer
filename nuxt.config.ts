@@ -29,6 +29,12 @@ export default defineNuxtConfig({
           href: "/favicon.svg",
         },
       ],
+      meta: [
+        {
+          name: "robots",
+          content: "noindex,nofollow",
+        },
+      ],
     },
   },
   css: ["~/assets/css/main.css"],

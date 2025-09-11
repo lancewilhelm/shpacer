@@ -26,12 +26,9 @@ type Waypoint = {
     order: number;
 };
 
-definePageMeta({
-    auth: {
-        only: "user",
-        redirectGuestTo: "/login",
-    },
-});
+// Auth guard removed: this page now supports unified public (read‑only) and member modes.
+// Access/security is handled by the unified /api/courses/:id endpoint which supplies
+// `mode` ("public" | "member") and a capabilities map for gating UI & mutations.
 
 // Get the course ID from the route parameters
 const route = useRoute();
@@ -48,19 +45,28 @@ const {
     pending,
     error,
     refresh,
-} = await useFetch<{ course: SelectCourse & { role?: string } }>(
-    `/api/courses/${courseId}`,
-);
+} = await useFetch<{
+    mode: "member" | "public";
+    capabilities: {
+        canEditCourse: boolean;
+        canDeleteCourse: boolean;
+        canTogglePublic: boolean;
+        canToggleShare: boolean;
+        canManagePlans: boolean;
+        canViewPlans: boolean;
+        canEditWaypoints: boolean;
+        canMutateNotes: boolean;
+        canClone: boolean;
+        canDownloadOriginal: boolean;
+        canSeeRawFileName: boolean;
+    };
+    course: (SelectCourse & { role?: string }) | null;
+}>(`/api/courses/${courseId}`);
 
-// Fetch waypoints data
-const {
-    data: waypointsData,
-    pending: _waypointsPending,
-    error: _waypointsError,
-    refresh: refreshWaypoints,
-} = await useFetch<{ waypoints: Waypoint[] }>(
-    `/api/courses/${courseId}/waypoints`,
-);
+// Waypoints are now embedded in the course response (server/api/courses/[id].get.ts)
+// Legacy waypoint fetch removed. Use `course.waypoints` directly.
+// Provide a no-op refreshWaypoints for existing handlers; call `refresh()` to refetch.
+const refreshWaypoints = () => {};
 
 // Fetch plans data
 const {
@@ -68,7 +74,15 @@ const {
     pending: _plansPending,
     error: _plansError,
     refresh: refreshPlans,
-} = await useFetch<{ plans: SelectPlan[] }>(`/api/courses/${courseId}/plans`);
+} = await useFetch<{ plans: SelectPlan[] }>(`/api/courses/${courseId}/plans`, {
+    default: () => ({ plans: [] }),
+    onResponseError(ctx) {
+        // Public (unauthenticated) mode will 401 here; swallow & leave plans empty.
+        if (ctx.response.status === 401) {
+            ctx.error = null as unknown as never;
+        }
+    },
+});
 
 // Plans state
 const plans = computed(() => plansData.value?.plans || []);
@@ -114,7 +128,31 @@ const editingPlanPayload = computed(() => {
 
 // Store the course and waypoints data in computed properties
 const course = computed(() => courseData.value?.course);
-const waypoints = computed(() => waypointsData.value?.waypoints || []);
+
+// Unified mode + capabilities (public vs member)
+const mode = computed<"member" | "public">(
+    () => courseData.value?.mode || "member",
+);
+const capabilities = computed(
+    () =>
+        courseData.value?.capabilities || {
+            canEditCourse: false,
+            canDeleteCourse: false,
+            canTogglePublic: false,
+            canToggleShare: false,
+            canManagePlans: false,
+            canViewPlans: false,
+            canEditWaypoints: false,
+            canMutateNotes: false,
+            canClone: false,
+            canDownloadOriginal: false,
+            canSeeRawFileName: false,
+        },
+);
+const waypoints = computed<Waypoint[]>(() => {
+    const w = (course.value as { waypoints?: unknown })?.waypoints;
+    return Array.isArray(w) ? (w as Waypoint[]) : [];
+});
 const currentPlan = computed(() =>
     currentPlanId.value
         ? plans.value.find((p) => p.id === currentPlanId.value)
@@ -125,9 +163,17 @@ const distanceUnit = computed<DistanceUnit>(
     () => userSettingsStore.settings.units.distance,
 );
 
-// Set the page title dynamically based on the course name
+// Set the page title dynamically; always discourage SEO indexing for any public (shared) view
 useHead({
     title: computed(() => course.value?.name || "Course"),
+    meta: computed(() => {
+        // Always add noindex,nofollow for shared (public mode) pages
+        const tags: { name: string; content: string }[] = [];
+        if (mode.value === "public") {
+            tags.push({ name: "robots", content: "noindex,nofollow" });
+        }
+        return tags;
+    }),
 });
 
 // Course edit modal state
@@ -141,6 +187,8 @@ async function toggleCoursePublic() {
 
     // Optimistic UI update so the menu item flips immediately
     courseData.value = {
+        mode: courseData.value?.mode || mode.value,
+        capabilities: courseData.value?.capabilities || capabilities.value,
         course: {
             ...(course.value as SelectCourse),
             public: nextPublic,
@@ -158,10 +206,16 @@ async function toggleCoursePublic() {
             },
         );
         // Replace with authoritative server response (includes role)
-        courseData.value = { course: response.course };
+        courseData.value = {
+            mode: courseData.value?.mode || mode.value,
+            capabilities: courseData.value?.capabilities || capabilities.value,
+            course: response.course,
+        };
     } catch (err) {
         // Revert on failure
         courseData.value = {
+            mode: courseData.value?.mode || mode.value,
+            capabilities: courseData.value?.capabilities || capabilities.value,
             course: {
                 ...(course.value as SelectCourse),
                 public: originalPublic,
@@ -169,6 +223,72 @@ async function toggleCoursePublic() {
         };
         console.error("Failed to toggle course public flag:", err);
         alert("Failed to update course visibility. Please try again.");
+    }
+}
+
+async function toggleCourseShare() {
+    if (!course.value) return;
+    const originalShare = !!course.value.shareEnabled;
+    const nextShare = !originalShare;
+
+    // Optimistic update
+    courseData.value = {
+        mode: courseData.value?.mode || mode.value,
+        capabilities: courseData.value?.capabilities || capabilities.value,
+        course: {
+            ...(course.value as SelectCourse),
+            shareEnabled: nextShare,
+        },
+    };
+
+    try {
+        const response = await $fetch<{ course: SelectCourse }>(
+            `/api/courses/${course.value.id}`,
+            {
+                method: "PUT",
+                body: {
+                    shareEnabled: nextShare,
+                },
+            },
+        );
+        courseData.value = {
+            mode: courseData.value?.mode || mode.value,
+            capabilities: courseData.value?.capabilities || capabilities.value,
+            course: response.course,
+        };
+    } catch (err) {
+        // Revert
+        courseData.value = {
+            mode: courseData.value?.mode || mode.value,
+            capabilities: courseData.value?.capabilities || capabilities.value,
+            course: {
+                ...(course.value as SelectCourse),
+                shareEnabled: originalShare,
+            },
+        };
+        console.error("Failed to toggle course share link:", err);
+        alert("Failed to update sharing status. Please try again.");
+    }
+}
+
+function handleCopyShareLink() {
+    if (!course.value?.id || !course.value?.shareEnabled) return;
+    const shareUrl = `${window.location.origin}/courses/${course.value.id}`;
+    try {
+        if (navigator?.clipboard?.writeText) {
+            navigator.clipboard.writeText(shareUrl).then(
+                () => {
+                    // Optional: toast could be added here
+                },
+                () => {
+                    window.alert("Share URL: " + shareUrl);
+                },
+            );
+        } else {
+            window.alert("Share URL: " + shareUrl);
+        }
+    } catch {
+        window.alert("Share URL: " + shareUrl);
     }
 }
 
@@ -1113,7 +1233,10 @@ onUnmounted(() => {
                         </div>
                         <div class="flex items-center gap-2">
                             <PlanSelector
-                                v-if="course.role === 'owner'"
+                                v-if="
+                                    mode === 'member' &&
+                                    capabilities.canManagePlans
+                                "
                                 :plans="plans"
                                 :current-plan-id="currentPlanId"
                                 :course-id="courseId"
@@ -1123,12 +1246,14 @@ onUnmounted(() => {
                                 @delete-plan="handlePlanDeleted"
                             />
                             <CourseActionsDropdown
-                                v-if="course"
+                                v-if="course && mode === 'member'"
                                 :course="course"
                                 @edit-course="openCourseEditModal"
                                 @download-file="downloadOriginalFile"
                                 @delete-course="deleteCourse"
                                 @toggle-public="toggleCoursePublic"
+                                @toggle-share="toggleCourseShare"
+                                @copy-share-link="handleCopyShareLink"
                                 @info-course="openCourseInfoModal"
                                 @copy-course="cloneCourse"
                             />
@@ -1220,12 +1345,12 @@ onUnmounted(() => {
                             </div>
 
                             <div
-                                v-if="currentPlan"
+                                v-if="currentPlan && capabilities.canViewPlans"
                                 class="w-px h-8 bg-(--sub-color) opacity-60"
                             ></div>
 
                             <div
-                                v-if="currentPlan"
+                                v-if="currentPlan && capabilities.canViewPlans"
                                 class="flex items-center gap-6 text-sm"
                             >
                                 <div
@@ -1447,6 +1572,10 @@ onUnmounted(() => {
                                 class="h-full"
                             >
                                 <WaypointList
+                                    :read-only="
+                                        mode === 'public' ||
+                                        !capabilities.canEditWaypoints
+                                    "
                                     :waypoints="waypoints"
                                     :selected-waypoint="selectedWaypoint"
                                     :current-plan-id="currentPlanId"
@@ -1477,6 +1606,7 @@ onUnmounted(() => {
                             </div>
                             <div v-else class="h-full">
                                 <SplitsTable
+                                    :read-only="mode === 'public'"
                                     :geo-json-data="geoJsonData"
                                     :current-plan="currentPlan"
                                     :waypoints="
@@ -1520,6 +1650,7 @@ onUnmounted(() => {
 
         <!-- Plan Setup Modal -->
         <PlanSetupModal
+            v-if="mode === 'member' && capabilities.canManagePlans"
             :is-open="planSetupModalOpen"
             :course-id="courseId"
             :course-total-distance="course?.totalDistance || null"
