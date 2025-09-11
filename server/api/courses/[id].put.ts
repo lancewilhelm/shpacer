@@ -9,6 +9,8 @@ interface UpdateCourseRequest {
   raceDate?: string | null;
   public?: boolean;
   shareEnabled?: boolean;
+  defaultDistanceUnit?: "kilometers" | "miles";
+  defaultElevationUnit?: "meters" | "feet";
 }
 
 export default defineEventHandler(async (event) => {
@@ -34,6 +36,26 @@ export default defineEventHandler(async (event) => {
     }
 
     const body = await readBody<UpdateCourseRequest>(event);
+
+    // Optional validation for default units
+    if (
+      body.defaultDistanceUnit !== undefined &&
+      !["kilometers", "miles"].includes(body.defaultDistanceUnit)
+    ) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "Invalid defaultDistanceUnit",
+      });
+    }
+    if (
+      body.defaultElevationUnit !== undefined &&
+      !["meters", "feet"].includes(body.defaultElevationUnit)
+    ) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "Invalid defaultElevationUnit",
+      });
+    }
 
     // Check membership & ownership via user_courses
     const [membership] = await cloudDb
@@ -98,6 +120,14 @@ export default defineEventHandler(async (event) => {
 
     if (body.shareEnabled !== undefined) {
       updateData.shareEnabled = body.shareEnabled;
+    }
+
+    if (body.defaultDistanceUnit !== undefined) {
+      updateData.defaultDistanceUnit = body.defaultDistanceUnit;
+    }
+
+    if (body.defaultElevationUnit !== undefined) {
+      updateData.defaultElevationUnit = body.defaultElevationUnit;
     }
 
     const [updatedCourse] = await cloudDb

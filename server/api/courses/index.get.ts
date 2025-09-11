@@ -31,6 +31,8 @@ export default defineEventHandler(async (event) => {
         createdAt: courses.createdAt,
         updatedAt: courses.updatedAt,
         public: courses.public,
+        defaultDistanceUnit: courses.defaultDistanceUnit,
+        defaultElevationUnit: courses.defaultElevationUnit,
         role: userCourses.role,
       })
       .from(userCourses)

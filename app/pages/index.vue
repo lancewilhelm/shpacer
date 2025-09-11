@@ -44,12 +44,20 @@ const userSettingsStore = useUserSettingsStore();
 const courses = computed(() => (coursesData.value?.courses ?? []).slice(0, 4));
 const plans = computed(() => plansData.value?.plans ?? []);
 
-function formatCourseDistance(meters: number) {
-    return formatDistance(meters, userSettingsStore.settings.units.distance);
+function formatCourseDistance(
+    meters: number,
+    course?: { defaultDistanceUnit?: "kilometers" | "miles" },
+) {
+    const unit = userSettingsStore.getDistanceUnitForCourse(course);
+    return formatDistance(meters, unit);
 }
 
-function formatCourseElevation(meters: number) {
-    return formatElevation(meters, userSettingsStore.settings.units.elevation);
+function formatCourseElevation(
+    meters: number,
+    course?: { defaultElevationUnit?: "meters" | "feet" },
+) {
+    const unit = userSettingsStore.getElevationUnitForCourse(course);
+    return formatElevation(meters, unit);
 }
 
 function formatPace(pace: number, paceUnit: string) {
@@ -124,6 +132,7 @@ function formatPace(pace: number, paceUnit: string) {
                                         {{
                                             formatCourseDistance(
                                                 course.totalDistance,
+                                                course,
                                             )
                                         }}
                                     </span>
@@ -140,6 +149,7 @@ function formatPace(pace: number, paceUnit: string) {
                                         {{
                                             formatCourseElevation(
                                                 course.elevationGain,
+                                                course,
                                             )
                                         }}
                                     </span>
@@ -156,6 +166,7 @@ function formatPace(pace: number, paceUnit: string) {
                                         {{
                                             formatCourseElevation(
                                                 course.elevationLoss,
+                                                course,
                                             )
                                         }}
                                     </span>

@@ -33,6 +33,8 @@ import { and, eq, sql, type SQL } from "drizzle-orm";
  *     updatedAt: Date;
  *     ownerId: string;
  *     ownerName: string | null;
+ *     defaultDistanceUnit: "kilometers" | "miles";
+ *     defaultElevationUnit: "meters" | "feet";
  *   }>
  * }
  */
@@ -112,6 +114,8 @@ export default defineEventHandler(async (event) => {
         raceDate: courses.raceDate,
         createdAt: courses.createdAt,
         updatedAt: courses.updatedAt,
+        defaultDistanceUnit: courses.defaultDistanceUnit,
+        defaultElevationUnit: courses.defaultElevationUnit,
         ownerId: courses.userId,
         ownerName: users.name,
       })

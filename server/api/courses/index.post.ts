@@ -12,6 +12,8 @@ interface CreateCourseRequest {
   fileType: "gpx" | "tcx";
   geoJsonData: GeoJSON.FeatureCollection;
   raceDate?: string | null;
+  defaultDistanceUnit?: "kilometers" | "miles";
+  defaultElevationUnit?: "meters" | "feet";
 }
 
 export default defineEventHandler(async (event) => {
@@ -64,6 +66,8 @@ export default defineEventHandler(async (event) => {
         totalDistance: metrics.totalDistance,
         elevationGain: metrics.elevationGain,
         elevationLoss: metrics.elevationLoss,
+        defaultDistanceUnit: body.defaultDistanceUnit ?? "miles",
+        defaultElevationUnit: body.defaultElevationUnit ?? "feet",
         raceDate: body.raceDate
           ? (() => {
               // Parse the datetime string (format: YYYY-MM-DDTHH:MM:SS)

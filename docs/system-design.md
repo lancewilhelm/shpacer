@@ -74,7 +74,7 @@ Settings Access → Category Selection → Preference Updates → Real-time Sync
 
 1. **Settings Access**: Navigate to settings through user menu
 2. **Category Selection**: Choose from General, Appearance, Cloud, or Admin settings
-3. **Preference Updates**: Modify themes, units, fonts, and system preferences
+3. Preference Updates: Modify themes, unit strategy (follow course or override) and units, fonts, and system preferences
 4. **Real-time Sync**: Changes synchronized across user sessions
 5. **Visual Updates**: UI immediately reflects new preferences
 
@@ -88,7 +88,7 @@ Settings Access → Category Selection → Preference Updates → Real-time Sync
 - **FR003**: System shall provide interactive map visualization with waypoint management
 - **FR004**: System shall support multiple user accounts with role-based permissions
 - **FR005**: System shall maintain course data persistence and user preferences
-- **FR006**: System shall provide customizable themes and display options
+- **FR006**: System shall provide customizable themes, unit preferences, and display options (supports course default units with user override)
 
 #### Waypoint Management
 - **FR007**: System shall automatically extract waypoints from GPS files
@@ -160,9 +160,9 @@ Settings Access → Category Selection → Preference Updates → Real-time Sync
 
 #### Core Entities
 1. **Users**: Authentication and profile information
-2. **Courses**: GPS track data and metadata
+2. **Courses**: GPS track data, metadata, and default unit preferences (distance/elevation)
 3. **Waypoints**: Point-of-interest data along routes
-4. **User Settings**: Personalization preferences
+4. **User Settings**: Personalization preferences, including unit strategy (follow course vs override) and global unit defaults
 5. **Global Settings**: System-wide configuration
 
 #### Relationships

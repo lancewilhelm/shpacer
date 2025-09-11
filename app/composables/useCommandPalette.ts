@@ -32,8 +32,16 @@ export function useCommandPalette() {
   const allThemes = computed<Theme[]>(() => sortedThemesList);
 
   const options = ref<Option[]>([
-    { label: "change distance unit", icon: "lucide:move-horizontal", options: getDistanceUnitOptions() },
-    { label: "change elevation unit", icon: "lucide:move-vertical", options: getElevationUnitOptions() },
+    {
+      label: "change distance unit",
+      icon: "lucide:move-horizontal",
+      options: getDistanceUnitOptions(),
+    },
+    {
+      label: "change elevation unit",
+      icon: "lucide:move-vertical",
+      options: getElevationUnitOptions(),
+    },
     { label: "theme", icon: "lucide:palette" },
     { label: "favorite themes", icon: "lucide:star" },
     {
@@ -350,24 +358,48 @@ function getFontFamilyOptions() {
 
 function getDistanceUnitOptions() {
   const userSettingsStore = useUserSettingsStore();
-  return distanceUnits.map((unit) => ({
-    label: unit,
-    action: () => {
-      userSettingsStore.updateSettings({ units: { ...userSettingsStore.settings.units, distance: unit } });
-      useUiStore().setCommandPaletteVisible(false);
-    },
-    active: computed(() => userSettingsStore.settings.units.distance === unit),
-  }));
+  return distanceUnits.map((unit) => {
+    const label =
+      unit === "follow_course"
+        ? "follow course"
+        : unit === "kilometers"
+          ? "kilometers (km)"
+          : "miles (mi)";
+    return {
+      label,
+      action: () => {
+        userSettingsStore.updateSettings({
+          units: { ...userSettingsStore.settings.units, distance: unit },
+        });
+        useUiStore().setCommandPaletteVisible(false);
+      },
+      active: computed(
+        () => userSettingsStore.settings.units.distance === unit,
+      ),
+    };
+  });
 }
 
 function getElevationUnitOptions() {
   const userSettingsStore = useUserSettingsStore();
-  return elevationUnits.map((unit) => ({
-    label: unit,
-    action: () => {
-      userSettingsStore.updateSettings({ units: { ...userSettingsStore.settings.units, elevation: unit } });
-      useUiStore().setCommandPaletteVisible(false);
-    },
-    active: computed(() => userSettingsStore.settings.units.elevation === unit),
-  }));
+  return elevationUnits.map((unit) => {
+    const label =
+      unit === "follow_course"
+        ? "follow course"
+        : unit === "meters"
+          ? "meters (m)"
+          : "feet (ft)";
+    return {
+      label,
+      action: () => {
+        userSettingsStore.updateSettings({
+          units: { ...userSettingsStore.settings.units, elevation: unit },
+        });
+        useUiStore().setCommandPaletteVisible(false);
+      },
+      active: computed(
+        () => userSettingsStore.settings.units.elevation === unit,
+      ),
+    };
+  });
 }

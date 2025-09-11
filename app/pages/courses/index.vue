@@ -55,13 +55,25 @@ function formatRaceDate(date: Date | string | number | null) {
         day: "numeric",
     });
 }
-function formatCourseDistance(meters?: number | null) {
+function formatCourseDistance(
+    meters?: number | null,
+    course?: { defaultDistanceUnit?: "kilometers" | "miles" },
+) {
     if (meters == null) return "";
-    return formatDistance(meters, userSettingsStore.settings.units.distance);
+    const unit = userSettingsStore.getDistanceUnitForCourse(
+        course || undefined,
+    );
+    return formatDistance(meters, unit);
 }
-function formatCourseElevation(meters?: number | null) {
+function formatCourseElevation(
+    meters?: number | null,
+    course?: { defaultElevationUnit?: "meters" | "feet" },
+) {
     if (meters == null) return "";
-    return formatElevation(meters, userSettingsStore.settings.units.elevation);
+    const unit = userSettingsStore.getElevationUnitForCourse(
+        course || undefined,
+    );
+    return formatElevation(meters, unit);
 }
 
 interface PublicCourse {
@@ -74,6 +86,8 @@ interface PublicCourse {
     raceDate: string | null;
     createdAt: string | Date;
     updatedAt: string | Date;
+    defaultDistanceUnit?: "kilometers" | "miles";
+    defaultElevationUnit?: "meters" | "feet";
     ownerId: string;
     ownerName: string | null;
 }
@@ -301,7 +315,10 @@ async function addPublicCourse(id: string) {
                                 class="h-3 w-3"
                             />
                             <span>{{
-                                formatCourseDistance(course.totalDistance)
+                                formatCourseDistance(
+                                    course.totalDistance,
+                                    course,
+                                )
                             }}</span>
                         </div>
                         <div
@@ -310,7 +327,10 @@ async function addPublicCourse(id: string) {
                         >
                             <Icon name="lucide:arrow-up" class="h-3 w-3" />
                             <span>{{
-                                formatCourseElevation(course.elevationGain)
+                                formatCourseElevation(
+                                    course.elevationGain,
+                                    course,
+                                )
                             }}</span>
                         </div>
                         <div
@@ -319,7 +339,10 @@ async function addPublicCourse(id: string) {
                         >
                             <Icon name="lucide:arrow-down" class="h-3 w-3" />
                             <span>{{
-                                formatCourseElevation(course.elevationLoss)
+                                formatCourseElevation(
+                                    course.elevationLoss,
+                                    course,
+                                )
                             }}</span>
                         </div>
                         <div
@@ -400,7 +423,10 @@ async function addPublicCourse(id: string) {
                                     class="h-3 w-3"
                                 />
                                 <span>{{
-                                    formatCourseDistance(course.totalDistance)
+                                    formatCourseDistance(
+                                        course.totalDistance,
+                                        course,
+                                    )
                                 }}</span>
                             </div>
                             <div
@@ -409,7 +435,10 @@ async function addPublicCourse(id: string) {
                             >
                                 <Icon name="lucide:arrow-up" class="h-3 w-3" />
                                 <span>{{
-                                    formatCourseElevation(course.elevationGain)
+                                    formatCourseElevation(
+                                        course.elevationGain,
+                                        course,
+                                    )
                                 }}</span>
                             </div>
                             <div
@@ -421,7 +450,10 @@ async function addPublicCourse(id: string) {
                                     class="h-3 w-3"
                                 />
                                 <span>{{
-                                    formatCourseElevation(course.elevationLoss)
+                                    formatCourseElevation(
+                                        course.elevationLoss,
+                                        course,
+                                    )
                                 }}</span>
                             </div>
                             <div
@@ -588,21 +620,25 @@ async function addPublicCourse(id: string) {
                                     name="lucide:move-horizontal"
                                     class="inline h-3 w-3 -translate-y-0.5"
                                 />
-                                {{ formatCourseDistance(pc.totalDistance) }}
+                                {{ formatCourseDistance(pc.totalDistance, pc) }}
                             </div>
                             <div v-if="pc.elevationGain">
                                 <Icon
                                     name="lucide:arrow-up"
                                     class="inline h-3 w-3 -translate-y-0.5"
                                 />
-                                {{ formatCourseElevation(pc.elevationGain) }}
+                                {{
+                                    formatCourseElevation(pc.elevationGain, pc)
+                                }}
                             </div>
                             <div v-if="pc.elevationLoss">
                                 <Icon
                                     name="lucide:arrow-down"
                                     class="inline h-3 w-3 -translate-y-0.5"
                                 />
-                                {{ formatCourseElevation(pc.elevationLoss) }}
+                                {{
+                                    formatCourseElevation(pc.elevationLoss, pc)
+                                }}
                             </div>
                             <div v-if="pc.ownerName">
                                 <Icon

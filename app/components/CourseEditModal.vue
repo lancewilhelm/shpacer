@@ -44,6 +44,12 @@ const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 
 const userSettingsStore = useUserSettingsStore();
+const distanceUnitIsMiles = computed(
+    () =>
+        userSettingsStore.getDistanceUnitForCourse(
+            props.course || undefined,
+        ) === "miles",
+);
 
 // Tab state
 const activeTab = ref<"course" | "waypoints">("course");
@@ -55,6 +61,8 @@ const editRaceDate = ref("");
 const editStartTime = ref("");
 const isUpdating = ref(false);
 const updateError = ref("");
+const editDefaultDistanceUnit = ref<"kilometers" | "miles">("kilometers");
+const editDefaultElevationUnit = ref<"meters" | "feet">("meters");
 
 // Per-course smoothing state (defaults from docs: Wg=100m, Δ=50m, Wp=300m)
 const smoothingGradeWindow = ref<number>(100);
@@ -143,6 +151,10 @@ watchEffect(() => {
     if (props.course) {
         editName.value = props.course.name;
         editDescription.value = props.course.description || "";
+        editDefaultDistanceUnit.value =
+            props.course?.defaultDistanceUnit ?? "kilometers";
+        editDefaultElevationUnit.value =
+            props.course?.defaultElevationUnit ?? "meters";
 
         const raceDate = props.course.raceDate;
         if (raceDate) {
@@ -183,12 +195,11 @@ watchEffect(() => {
 watch(selectedWaypointForEdit, (newWaypoint) => {
     if (newWaypoint) {
         // Convert from meters to user's preferred units
-        const distanceInUserUnits =
-            userSettingsStore.settings.units.distance === "miles"
-                ? newWaypoint.distance * 0.000621371 // Convert meters to miles
-                : newWaypoint.distance / 1000; // Convert meters to kilometers
+        const distanceInUserUnits = distanceUnitIsMiles.value
+            ? newWaypoint.distance * 0.000621371 // Convert meters to miles
+            : newWaypoint.distance / 1000; // Convert meters to kilometers
         editingWaypointDistance.value = distanceInUserUnits.toFixed(
-            userSettingsStore.settings.units.distance === "miles" ? 3 : 1,
+            distanceUnitIsMiles.value ? 3 : 1,
         );
     } else {
         editingWaypointDistance.value = "";
@@ -434,6 +445,8 @@ async function saveCourseChanges() {
                     description: editDescription.value.trim() || undefined,
                     raceDate: raceDateTime,
                     public: editPublic.value,
+                    defaultDistanceUnit: editDefaultDistanceUnit.value,
+                    defaultElevationUnit: editDefaultElevationUnit.value,
                 },
             },
         );
@@ -607,15 +620,13 @@ async function createWaypoint(
         }
 
         // Generate a default name based on distance
-        const distanceInUserUnits =
-            userSettingsStore.settings.units.distance === "miles"
-                ? distance * 0.000621371
-                : distance / 1000; // Convert to km
+        const distanceInUserUnits = distanceUnitIsMiles.value
+            ? distance * 0.000621371
+            : distance / 1000; // Convert to km
         const formattedDistance = distanceInUserUnits.toFixed(
-            userSettingsStore.settings.units.distance === "miles" ? 1 : 1,
+            distanceUnitIsMiles.value ? 1 : 1,
         );
-        const unit =
-            userSettingsStore.settings.units.distance === "miles" ? "mi" : "km";
+        const unit = distanceUnitIsMiles.value ? "mi" : "km";
         const defaultName =
             customName || `Waypoint ${formattedDistance}${unit}`;
 
@@ -684,7 +695,7 @@ function startManualWaypointCreation() {
     // Set this as the selected waypoint for editing
     selectedWaypointForEdit.value = newWaypointBeingCreated.value as Waypoint;
     editingWaypointDistance.value = distanceInUserUnits.toFixed(
-        userSettingsStore.settings.units.distance === "miles" ? 3 : 1,
+        distanceUnitIsMiles.value ? 3 : 1,
     );
 }
 
@@ -903,12 +914,11 @@ function handleMapLineClick(coords: { lat: number; lng: number }) {
         }
 
         // Update the distance input field in user's preferred units
-        const distanceInUserUnits =
-            userSettingsStore.settings.units.distance === "miles"
-                ? distanceAtClick * 0.000621371 // Convert meters to miles
-                : distanceAtClick / 1000; // Convert meters to kilometers
+        const distanceInUserUnits = distanceUnitIsMiles.value
+            ? distanceAtClick * 0.000621371 // Convert meters to miles
+            : distanceAtClick / 1000; // Convert meters to kilometers
         editingWaypointDistance.value = distanceInUserUnits.toFixed(
-            userSettingsStore.settings.units.distance === "miles" ? 3 : 1,
+            distanceUnitIsMiles.value ? 3 : 1,
         );
     }
 
@@ -1135,10 +1145,9 @@ function adjustWaypointDistance(
     preventMapCentering.value = true;
 
     // Convert step size from user units to meters
-    const stepSizeInMeters =
-        userSettingsStore.settings.units.distance === "miles"
-            ? editingStepSize.value * 1609.34 // Convert miles to meters
-            : editingStepSize.value * 1000; // Convert kilometers to meters
+    const stepSizeInMeters = distanceUnitIsMiles.value
+        ? editingStepSize.value * 1609.34 // Convert miles to meters
+        : editingStepSize.value * 1000; // Convert kilometers to meters
 
     const adjustment =
         direction === "forward" ? stepSizeInMeters : -stepSizeInMeters;
@@ -1181,12 +1190,11 @@ function adjustWaypointDistance(
         }
 
         // Update the distance input field in user's preferred units
-        const distanceInUserUnits =
-            userSettingsStore.settings.units.distance === "miles"
-                ? newDistance * 0.000621371 // Convert meters to miles
-                : newDistance / 1000; // Convert meters to kilometers
+        const distanceInUserUnits = distanceUnitIsMiles.value
+            ? newDistance * 0.000621371 // Convert meters to miles
+            : newDistance / 1000; // Convert meters to kilometers
         editingWaypointDistance.value = distanceInUserUnits.toFixed(
-            userSettingsStore.settings.units.distance === "miles" ? 3 : 1,
+            distanceUnitIsMiles.value ? 3 : 1,
         );
     }
 
@@ -1213,12 +1221,11 @@ function updateWaypointFromDistanceInput() {
     const inputDistance = parseFloat(editingWaypointDistance.value);
     if (isNaN(inputDistance) || inputDistance < 0) {
         // Reset to current distance if invalid
-        const distanceInUserUnits =
-            userSettingsStore.settings.units.distance === "miles"
-                ? selectedWaypointForEdit.value.distance * 0.000621371 // Convert meters to miles
-                : selectedWaypointForEdit.value.distance / 1000; // Convert meters to kilometers
+        const distanceInUserUnits = distanceUnitIsMiles.value
+            ? selectedWaypointForEdit.value.distance * 0.000621371 // Convert meters to miles
+            : selectedWaypointForEdit.value.distance / 1000; // Convert meters to kilometers
         editingWaypointDistance.value = distanceInUserUnits.toFixed(
-            userSettingsStore.settings.units.distance === "miles" ? 3 : 1,
+            distanceUnitIsMiles.value ? 3 : 1,
         );
 
         // Reset the flag
@@ -1229,10 +1236,9 @@ function updateWaypointFromDistanceInput() {
     }
 
     // Convert from user units to meters
-    const newDistanceInMeters =
-        userSettingsStore.settings.units.distance === "miles"
-            ? inputDistance * 1609.34 // Convert miles to meters
-            : inputDistance * 1000; // Convert kilometers to meters
+    const newDistanceInMeters = distanceUnitIsMiles.value
+        ? inputDistance * 1609.34 // Convert miles to meters
+        : inputDistance * 1000; // Convert kilometers to meters
 
     // Calculate new position based on distance
     const newPosition = calculatePositionFromDistance(newDistanceInMeters);
@@ -1415,6 +1421,38 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                                 type="date"
                                 class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
                             />
+                            <div
+                                class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3"
+                            >
+                                <div class="flex flex-col">
+                                    <label
+                                        class="text-xs uppercase text-(--sub-color) mb-1"
+                                        >default distance unit</label
+                                    >
+                                    <select
+                                        v-model="editDefaultDistanceUnit"
+                                        class="px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
+                                    >
+                                        <option value="kilometers">
+                                            kilometers
+                                        </option>
+                                        <option value="miles">miles</option>
+                                    </select>
+                                </div>
+                                <div class="flex flex-col">
+                                    <label
+                                        class="text-xs uppercase text-(--sub-color) mb-1"
+                                        >default elevation unit</label
+                                    >
+                                    <select
+                                        v-model="editDefaultElevationUnit"
+                                        class="px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
+                                    >
+                                        <option value="meters">meters</option>
+                                        <option value="feet">feet</option>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
                         <div>
                             <label
@@ -1610,7 +1648,9 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                             {{
                                 formatDistance(
                                     mapClickLocation.distance,
-                                    userSettingsStore.settings.units.distance,
+                                    userSettingsStore.getDistanceUnitForCourse(
+                                        props.course || undefined,
+                                    ),
                                 )
                             }}?
                         </div>
@@ -1733,7 +1773,7 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                                                     : '0.1'
                                             "
                                             class="flex-1 px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
-                                            :placeholder="`Enter distance in ${userSettingsStore.settings.units.distance}`"
+                                            :placeholder="`Enter distance in ${distanceUnitIsMiles ? 'miles' : 'kilometers'}`"
                                             @blur="
                                                 updateWaypointFromDistanceInput
                                             "
@@ -1757,7 +1797,7 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                                     >
                                         <button
                                             v-tooltip="
-                                                `Move waypoint forward ${editingStepSize} ${userSettingsStore.settings.units.distance}`
+                                                `Move waypoint forward ${editingStepSize} ${distanceUnitIsMiles ? 'miles' : 'kilometers'}`
                                             "
                                             class="p-2 transition-colors disabled:opacity-50 border rounded hover:bg-(--text-color)! hover:text-(--bg-color)!"
                                             :disabled="
@@ -1779,7 +1819,7 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                                         </button>
                                         <button
                                             v-tooltip="
-                                                `Move waypoint backward ${editingStepSize} ${userSettingsStore.settings.units.distance}`
+                                                `Move waypoint backward ${editingStepSize} ${distanceUnitIsMiles ? 'miles' : 'kilometers'}`
                                             "
                                             class="p-2 transition-colors disabled:opacity-50 border rounded hover:bg-(--text-color)! hover:text-(--bg-color)!"
                                             :disabled="
@@ -2037,10 +2077,7 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                                                             {{
                                                                 formatDistance(
                                                                     waypoint.distance,
-                                                                    userSettingsStore
-                                                                        .settings
-                                                                        .units
-                                                                        .distance,
+                                                                    userSettingsStore.getDistanceUnitForCourse(),
                                                                 )
                                                             }}
                                                         </span>
@@ -2060,10 +2097,7 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                                                                 formatElevation(
                                                                     waypoint.elevation ??
                                                                         0,
-                                                                    userSettingsStore
-                                                                        .settings
-                                                                        .units
-                                                                        .elevation,
+                                                                    userSettingsStore.getElevationUnitForCourse(),
                                                                 )
                                                             }}
                                                         </span>

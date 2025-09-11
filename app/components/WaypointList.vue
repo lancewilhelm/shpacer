@@ -141,12 +141,15 @@ function handleWaypointLeave() {
 }
 
 function formatWaypointDistance(meters: number) {
-    return formatDistance(meters, userSettingsStore.settings.units.distance);
+    return formatDistance(meters, userSettingsStore.getDistanceUnitForCourse());
 }
 
 function formatWaypointElevation(meters: number | null) {
     if (meters === null) return "";
-    return formatElevation(meters, userSettingsStore.settings.units.elevation);
+    return formatElevation(
+        meters,
+        userSettingsStore.getElevationUnitForCourse(),
+    );
 }
 
 function getWaypointPrimaryColor(waypoint: Waypoint): string {
@@ -208,11 +211,14 @@ function handleDeleteStoppageTime(waypointId: string) {
 }
 
 function formatSegmentDistance(meters: number) {
-    return formatDistance(meters, userSettingsStore.settings.units.distance);
+    return formatDistance(meters, userSettingsStore.getDistanceUnitForCourse());
 }
 
 function formatSegmentElevation(meters: number) {
-    return formatElevation(meters, userSettingsStore.settings.units.elevation);
+    return formatElevation(
+        meters,
+        userSettingsStore.getElevationUnitForCourse(),
+    );
 }
 
 function getSegmentForWaypoint(waypointId: string): WaypointSegment | null {

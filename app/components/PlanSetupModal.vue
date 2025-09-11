@@ -14,6 +14,7 @@ interface Props {
     isOpen: boolean;
     courseId: string;
     courseTotalDistance?: number | null;
+    courseDefaultDistanceUnit?: "kilometers" | "miles";
     existingPlan?: {
         id: string;
         name: string;
@@ -37,6 +38,18 @@ const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 
 const userSettingsStore = useUserSettingsStore();
+
+function getDefaultPaceUnit(): "min_per_km" | "min_per_mi" {
+    const strategy =
+        (userSettingsStore.settings.units as { strategy?: string }).strategy ||
+        "override";
+    const distancePref =
+        strategy === "follow_course"
+            ? (props.courseDefaultDistanceUnit ??
+              userSettingsStore.settings.units.distance)
+            : userSettingsStore.settings.units.distance;
+    return distancePref === "kilometers" ? "min_per_km" : "min_per_mi";
+}
 
 interface PlanFormState {
     name: string;
@@ -70,6 +83,7 @@ const formData = ref<PlanFormState>({
     useGradeAdjustment: true,
 });
 
+formData.value.paceUnit = getDefaultPaceUnit();
 const isSubmitting = ref(false);
 const error = ref("");
 const courseTotalDistance = computed(() => props.courseTotalDistance ?? null);
@@ -176,10 +190,7 @@ function resetForm() {
     formData.value.targetHours = "";
     formData.value.targetMinutes = "";
     formData.value.targetSeconds = "";
-    formData.value.paceUnit =
-        userSettingsStore.settings.units.distance === "kilometers"
-            ? "min_per_km"
-            : "min_per_mi";
+    formData.value.paceUnit = getDefaultPaceUnit();
     formData.value.defaultStopMinutes = "";
     formData.value.defaultStopSeconds = "";
     formData.value.pacingStrategy = "flat";

@@ -97,7 +97,9 @@ const distanceDisplay = computed(() =>
     props.course?.totalDistance != null
         ? formatDistance(
               props.course.totalDistance,
-              useUserSettingsStore().settings.units.distance,
+              useUserSettingsStore().getDistanceUnitForCourse(
+                  props.course || undefined,
+              ),
           )
         : "—",
 );
@@ -106,7 +108,9 @@ const elevationGainDisplay = computed(() =>
     props.course?.elevationGain != null
         ? formatElevation(
               props.course.elevationGain,
-              useUserSettingsStore().settings.units.elevation,
+              useUserSettingsStore().getElevationUnitForCourse(
+                  props.course || undefined,
+              ),
           )
         : "—",
 );
@@ -114,7 +118,9 @@ const elevationLossDisplay = computed(() =>
     props.course?.elevationLoss != null
         ? formatElevation(
               props.course.elevationLoss,
-              useUserSettingsStore().settings.units.elevation,
+              useUserSettingsStore().getElevationUnitForCourse(
+                  props.course || undefined,
+              ),
           )
         : "—",
 );

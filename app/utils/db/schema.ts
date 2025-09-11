@@ -136,6 +136,16 @@ export const courses = sqliteTable("courses", {
     .default(false), // public share link (read-only) enabled
   forkedFromCourseId: text("forked_from_course_id"), // nullable; provenance pointer to original course
 
+  // Default units (display) for this course
+  defaultDistanceUnit: text("default_distance_unit")
+    .$type<"kilometers" | "miles">()
+    .notNull()
+    .default("miles"),
+  defaultElevationUnit: text("default_elevation_unit")
+    .$type<"meters" | "feet">()
+    .notNull()
+    .default("feet"),
+
   // Timestamps
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()

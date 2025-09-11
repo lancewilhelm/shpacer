@@ -58,7 +58,7 @@ const emit = defineEmits<{
 }>();
 const userSettingsStore = useUserSettingsStore();
 const distanceUnit = computed<DistanceUnit>(
-    () => userSettingsStore.settings.units.distance,
+    () => userSettingsStore.getDistanceUnitForCourse() as DistanceUnit,
 );
 
 // Per-course smoothing (defaults when courseId unknown)
@@ -651,7 +651,7 @@ function onRowClick(row: SplitRow, e: MouseEvent) {
                             {{
                                 formatElevation(
                                     row.gain,
-                                    userSettingsStore.settings.units.elevation,
+                                    userSettingsStore.getElevationUnitForCourse(),
                                 )
                             }}
                         </td>
@@ -661,7 +661,7 @@ function onRowClick(row: SplitRow, e: MouseEvent) {
                             {{
                                 formatElevation(
                                     row.loss,
-                                    userSettingsStore.settings.units.elevation,
+                                    userSettingsStore.getElevationUnitForCourse(),
                                 )
                             }}
                         </td>

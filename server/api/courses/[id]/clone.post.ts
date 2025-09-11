@@ -114,6 +114,8 @@ export default defineEventHandler(async (event) => {
       raceDate: sourceCourse.raceDate,
       public: false, // always start private
       forkedFromCourseId: sourceCourse.id,
+      defaultDistanceUnit: sourceCourse.defaultDistanceUnit,
+      defaultElevationUnit: sourceCourse.defaultElevationUnit,
       createdAt: new Date(),
       updatedAt: new Date(),
     };

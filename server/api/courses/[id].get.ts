@@ -97,6 +97,8 @@ export default defineEventHandler(async (event) => {
           public: courses.public,
           forkedFromCourseId: courses.forkedFromCourseId,
           shareEnabled: courses.shareEnabled,
+          defaultDistanceUnit: courses.defaultDistanceUnit,
+          defaultElevationUnit: courses.defaultElevationUnit,
           role: userCourses.role,
         })
         .from(userCourses)
@@ -166,6 +168,8 @@ export default defineEventHandler(async (event) => {
         updatedAt: courses.updatedAt,
         public: courses.public,
         shareEnabled: courses.shareEnabled,
+        defaultDistanceUnit: courses.defaultDistanceUnit,
+        defaultElevationUnit: courses.defaultElevationUnit,
       })
       .from(courses)
       .where(eq(courses.id, courseId))

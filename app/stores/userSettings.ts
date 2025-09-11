@@ -16,11 +16,14 @@ export type FontFamily = (typeof fontFamilyOptions)[number];
 export const funboxModes = ["confetti", "snow"];
 export type FunboxMode = (typeof funboxModes)[number];
 
-export const distanceUnits = ["kilometers", "miles"] as const;
-export type DistanceUnit = (typeof distanceUnits)[number];
+export const distanceUnits = ["follow_course", "kilometers", "miles"] as const;
+export type DistanceUnitSetting = (typeof distanceUnits)[number];
+export type DistanceUnit = Exclude<DistanceUnitSetting, "follow_course">;
 
-export const elevationUnits = ["meters", "feet"] as const;
-export type ElevationUnit = (typeof elevationUnits)[number];
+export const elevationUnits = ["follow_course", "meters", "feet"] as const;
+export type ElevationUnitSetting = (typeof elevationUnits)[number];
+export type ElevationUnit = Exclude<ElevationUnitSetting, "follow_course">;
+export type UnitStrategy = "follow_course" | "override";
 
 export interface UserSettings {
   theme?: string;
@@ -32,8 +35,9 @@ export interface UserSettings {
   };
   funboxModes: FunboxMode[];
   units: {
-    distance: DistanceUnit;
-    elevation: ElevationUnit;
+    distance: DistanceUnitSetting;
+    elevation: ElevationUnitSetting;
+    strategy?: UnitStrategy;
   };
 
   smoothing: {
@@ -63,8 +67,9 @@ function getDefaultSettings(): UserSettings {
     },
     funboxModes: [],
     units: {
-      distance: "kilometers",
-      elevation: "meters",
+      strategy: "override",
+      distance: "follow_course",
+      elevation: "follow_course",
     },
 
     smoothing: {
@@ -106,6 +111,39 @@ export const useUserSettingsStore = defineStore(
       settings.value = getDefaultSettings();
       updatedAt.value = new Date(0);
       synced.value = true;
+    }
+
+    // Unit helpers
+    function resolveUnitsForCourse(
+      course?: Partial<{
+        defaultDistanceUnit: DistanceUnit;
+        defaultElevationUnit: ElevationUnit;
+      }>,
+    ) {
+      const u = settings.value.units;
+      const distance: DistanceUnit = (
+        u.distance === "follow_course"
+          ? (course?.defaultDistanceUnit ?? "miles")
+          : u.distance
+      ) as DistanceUnit;
+      const elevation: ElevationUnit = (
+        u.elevation === "follow_course"
+          ? (course?.defaultElevationUnit ?? "feet")
+          : u.elevation
+      ) as ElevationUnit;
+      return { distance, elevation };
+    }
+
+    function getDistanceUnitForCourse(
+      course?: Partial<{ defaultDistanceUnit: DistanceUnit }>,
+    ) {
+      return resolveUnitsForCourse(course).distance;
+    }
+
+    function getElevationUnitForCourse(
+      course?: Partial<{ defaultElevationUnit: ElevationUnit }>,
+    ) {
+      return resolveUnitsForCourse(course).elevation;
     }
 
     // Smoothing helpers
@@ -207,6 +245,10 @@ export const useUserSettingsStore = defineStore(
       synced,
       setSynced,
       $reset,
+      // unit helpers
+      resolveUnitsForCourse,
+      getDistanceUnitForCourse,
+      getElevationUnitForCourse,
       // smoothing helpers
       getSmoothingForCourse,
       updateSmoothingDefaults,

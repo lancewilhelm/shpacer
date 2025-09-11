@@ -219,8 +219,11 @@ const currentPlan = computed(() =>
         : null,
 );
 
-const distanceUnit = computed<DistanceUnit>(
-    () => userSettingsStore.settings.units.distance,
+const distanceUnit = computed<DistanceUnit>(() =>
+    userSettingsStore.getDistanceUnitForCourse(
+        (course.value as unknown as { defaultDistanceUnit?: DistanceUnit }) ||
+            undefined,
+    ),
 );
 
 // Set the page title dynamically; always discourage SEO indexing for any public (shared) view
@@ -1496,8 +1499,9 @@ onUnmounted(() => {
                                     <span class="font-medium">{{
                                         formatDistance(
                                             course.totalDistance,
-                                            userSettingsStore.settings.units
-                                                .distance,
+                                            userSettingsStore.getDistanceUnitForCourse(
+                                                course || undefined,
+                                            ),
                                         )
                                     }}</span>
                                     <span class="text-xs text-(--sub-color)"
@@ -1517,8 +1521,9 @@ onUnmounted(() => {
                                     <span class="font-medium">{{
                                         formatElevation(
                                             course.elevationGain,
-                                            userSettingsStore.settings.units
-                                                .elevation,
+                                            userSettingsStore.getElevationUnitForCourse(
+                                                course || undefined,
+                                            ),
                                         )
                                     }}</span>
                                     <span class="text-xs text-(--sub-color)"
@@ -1538,8 +1543,9 @@ onUnmounted(() => {
                                     <span class="font-medium">{{
                                         formatElevation(
                                             course.elevationLoss,
-                                            userSettingsStore.settings.units
-                                                .elevation,
+                                            userSettingsStore.getElevationUnitForCourse(
+                                                course || undefined,
+                                            ),
                                         )
                                     }}</span>
                                     <span class="text-xs text-(--sub-color)"
@@ -1883,6 +1889,9 @@ onUnmounted(() => {
             :is-open="planSetupModalOpen"
             :course-id="courseId"
             :course-total-distance="course?.totalDistance || null"
+            :course-default-distance-unit="
+                course?.defaultDistanceUnit || undefined
+            "
             :existing-plan="editingPlanPayload"
             @close="closePlanSetupModal"
             @plan-created="handlePlanCreated"
