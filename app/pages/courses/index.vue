@@ -60,9 +60,21 @@ function formatCourseDistance(
     course?: { defaultDistanceUnit?: "kilometers" | "miles" },
 ) {
     if (meters == null) return "";
-    const unit = userSettingsStore.getDistanceUnitForCourse(
-        course || undefined,
-    );
+    const s: unknown = userSettingsStore;
+    const unit =
+        s &&
+        typeof s === "object" &&
+        "getDistanceUnitForCourse" in s &&
+        typeof (s as { getDistanceUnitForCourse: unknown })
+            .getDistanceUnitForCourse === "function"
+            ? (
+                  s as {
+                      getDistanceUnitForCourse: (course?: {
+                          defaultDistanceUnit?: "kilometers" | "miles";
+                      }) => "kilometers" | "miles";
+                  }
+              ).getDistanceUnitForCourse(course || undefined)
+            : (course?.defaultDistanceUnit ?? "miles");
     return formatDistance(meters, unit);
 }
 function formatCourseElevation(
@@ -70,9 +82,21 @@ function formatCourseElevation(
     course?: { defaultElevationUnit?: "meters" | "feet" },
 ) {
     if (meters == null) return "";
-    const unit = userSettingsStore.getElevationUnitForCourse(
-        course || undefined,
-    );
+    const s: unknown = userSettingsStore;
+    const unit =
+        s &&
+        typeof s === "object" &&
+        "getElevationUnitForCourse" in s &&
+        typeof (s as { getElevationUnitForCourse: unknown })
+            .getElevationUnitForCourse === "function"
+            ? (
+                  s as {
+                      getElevationUnitForCourse: (course?: {
+                          defaultElevationUnit?: "meters" | "feet";
+                      }) => "meters" | "feet";
+                  }
+              ).getElevationUnitForCourse(course || undefined)
+            : (course?.defaultElevationUnit ?? "feet");
     return formatElevation(meters, unit);
 }
 
