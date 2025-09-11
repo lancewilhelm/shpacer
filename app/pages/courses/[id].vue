@@ -186,12 +186,26 @@ async function toggleCoursePublic() {
     const nextPublic = !originalPublic;
 
     // Optimistic UI update so the menu item flips immediately
+    // Preserve existing waypoints during optimistic update
+    const existingWaypoints = (() => {
+        const c = course.value as unknown;
+        if (
+            c &&
+            typeof c === "object" &&
+            "waypoints" in (c as Record<string, unknown>)
+        ) {
+            const w = (c as { waypoints?: unknown }).waypoints;
+            return Array.isArray(w) ? (w as Waypoint[]) : [];
+        }
+        return [] as Waypoint[];
+    })();
     courseData.value = {
         mode: courseData.value?.mode || mode.value,
         capabilities: courseData.value?.capabilities || capabilities.value,
         course: {
             ...(course.value as SelectCourse),
             public: nextPublic,
+            ...(existingWaypoints ? { waypoints: existingWaypoints } : {}),
         },
     };
 
@@ -206,10 +220,43 @@ async function toggleCoursePublic() {
             },
         );
         // Replace with authoritative server response (includes role)
+        // Server response omits waypoints; merge them back in to avoid UI flicker
         courseData.value = {
             mode: courseData.value?.mode || mode.value,
             capabilities: courseData.value?.capabilities || capabilities.value,
-            course: response.course,
+            course: {
+                ...response.course,
+                ...((() => {
+                    const c = course.value as unknown;
+                    if (
+                        c &&
+                        typeof c === "object" &&
+                        "waypoints" in (c as Record<string, unknown>)
+                    ) {
+                        const w = (c as { waypoints?: unknown }).waypoints;
+                        return Array.isArray(w) && w.length > 0 ? w : null;
+                    }
+                    return null;
+                })()
+                    ? {
+                          waypoints: (() => {
+                              const c = course.value as unknown;
+                              if (
+                                  c &&
+                                  typeof c === "object" &&
+                                  "waypoints" in (c as Record<string, unknown>)
+                              ) {
+                                  const w = (c as { waypoints?: unknown })
+                                      .waypoints;
+                                  return Array.isArray(w)
+                                      ? (w as Waypoint[])
+                                      : [];
+                              }
+                              return [];
+                          })(),
+                      }
+                    : {}),
+            },
         };
     } catch (err) {
         // Revert on failure
@@ -232,12 +279,28 @@ async function toggleCourseShare() {
     const nextShare = !originalShare;
 
     // Optimistic update
+    // Preserve existing waypoints during optimistic share toggle
+    const existingWaypointsShare = (() => {
+        const c = course.value as unknown;
+        if (
+            c &&
+            typeof c === "object" &&
+            "waypoints" in (c as Record<string, unknown>)
+        ) {
+            const w = (c as { waypoints?: unknown }).waypoints;
+            return Array.isArray(w) ? (w as Waypoint[]) : [];
+        }
+        return [] as Waypoint[];
+    })();
     courseData.value = {
         mode: courseData.value?.mode || mode.value,
         capabilities: courseData.value?.capabilities || capabilities.value,
         course: {
             ...(course.value as SelectCourse),
             shareEnabled: nextShare,
+            ...(existingWaypointsShare
+                ? { waypoints: existingWaypointsShare }
+                : {}),
         },
     };
 
@@ -251,10 +314,43 @@ async function toggleCourseShare() {
                 },
             },
         );
+        // Merge waypoints back after server response
         courseData.value = {
             mode: courseData.value?.mode || mode.value,
             capabilities: courseData.value?.capabilities || capabilities.value,
-            course: response.course,
+            course: {
+                ...response.course,
+                ...((() => {
+                    const c = course.value as unknown;
+                    if (
+                        c &&
+                        typeof c === "object" &&
+                        "waypoints" in (c as Record<string, unknown>)
+                    ) {
+                        const w = (c as { waypoints?: unknown }).waypoints;
+                        return Array.isArray(w) && w.length > 0 ? w : null;
+                    }
+                    return null;
+                })()
+                    ? {
+                          waypoints: (() => {
+                              const c = course.value as unknown;
+                              if (
+                                  c &&
+                                  typeof c === "object" &&
+                                  "waypoints" in (c as Record<string, unknown>)
+                              ) {
+                                  const w = (c as { waypoints?: unknown })
+                                      .waypoints;
+                                  return Array.isArray(w)
+                                      ? (w as Waypoint[])
+                                      : [];
+                              }
+                              return [];
+                          })(),
+                      }
+                    : {}),
+            },
         };
     } catch (err) {
         // Revert
