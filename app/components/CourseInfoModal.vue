@@ -97,9 +97,13 @@ const distanceDisplay = computed(() =>
     props.course?.totalDistance != null
         ? formatDistance(
               props.course.totalDistance,
-              useUserSettingsStore().getDistanceUnitForCourse(
-                  props.course || undefined,
-              ),
+              typeof useUserSettingsStore === "function" &&
+                  typeof useUserSettingsStore()?.getDistanceUnitForCourse ===
+                      "function"
+                  ? useUserSettingsStore().getDistanceUnitForCourse(
+                        props.course || undefined,
+                    )
+                  : (props.course?.defaultDistanceUnit ?? "miles"),
           )
         : "—",
 );
@@ -108,9 +112,13 @@ const elevationGainDisplay = computed(() =>
     props.course?.elevationGain != null
         ? formatElevation(
               props.course.elevationGain,
-              useUserSettingsStore().getElevationUnitForCourse(
-                  props.course || undefined,
-              ),
+              typeof useUserSettingsStore === "function" &&
+                  typeof useUserSettingsStore()?.getElevationUnitForCourse ===
+                      "function"
+                  ? useUserSettingsStore().getElevationUnitForCourse(
+                        props.course || undefined,
+                    )
+                  : (props.course?.defaultElevationUnit ?? "feet"),
           )
         : "—",
 );
@@ -118,9 +126,13 @@ const elevationLossDisplay = computed(() =>
     props.course?.elevationLoss != null
         ? formatElevation(
               props.course.elevationLoss,
-              useUserSettingsStore().getElevationUnitForCourse(
-                  props.course || undefined,
-              ),
+              typeof useUserSettingsStore === "function" &&
+                  typeof useUserSettingsStore()?.getElevationUnitForCourse ===
+                      "function"
+                  ? useUserSettingsStore().getElevationUnitForCourse(
+                        props.course || undefined,
+                    )
+                  : (props.course?.defaultElevationUnit ?? "feet"),
           )
         : "—",
 );

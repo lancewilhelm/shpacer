@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { formatDistance, formatElevation } from "~/utils/courseMetrics";
+import { getDistanceUnitSSR, getElevationUnitSSR } from "~/utils/units";
 import { getTagsByIds } from "~/utils/waypointTags";
 import { getWaypointColorFromOrder } from "~/utils/waypoints";
 import {
@@ -141,15 +142,12 @@ function handleWaypointLeave() {
 }
 
 function formatWaypointDistance(meters: number) {
-    return formatDistance(meters, userSettingsStore.getDistanceUnitForCourse());
+    return formatDistance(meters, getDistanceUnitSSR());
 }
 
 function formatWaypointElevation(meters: number | null) {
     if (meters === null) return "";
-    return formatElevation(
-        meters,
-        userSettingsStore.getElevationUnitForCourse(),
-    );
+    return formatElevation(meters, getElevationUnitSSR());
 }
 
 function getWaypointPrimaryColor(waypoint: Waypoint): string {
@@ -211,14 +209,11 @@ function handleDeleteStoppageTime(waypointId: string) {
 }
 
 function formatSegmentDistance(meters: number) {
-    return formatDistance(meters, userSettingsStore.getDistanceUnitForCourse());
+    return formatDistance(meters, getDistanceUnitSSR());
 }
 
 function formatSegmentElevation(meters: number) {
-    return formatElevation(
-        meters,
-        userSettingsStore.getElevationUnitForCourse(),
-    );
+    return formatElevation(meters, getElevationUnitSSR());
 }
 
 function getSegmentForWaypoint(waypointId: string): WaypointSegment | null {

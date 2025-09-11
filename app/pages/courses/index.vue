@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import type { SelectCourse } from "~/utils/db/schema";
-import { formatDistance, formatElevation } from "~/utils/courseMetrics";
+import {
+    formatCourseDistanceSSR,
+    formatCourseElevationSSR,
+} from "~/utils/units";
 
 definePageMeta({
     auth: {
@@ -35,7 +38,7 @@ const {
     refresh: refreshCourses,
 } = await useFetch<CourseListResponse>("/api/courses");
 
-const userSettingsStore = useUserSettingsStore();
+// (removed) userSettingsStore reference not needed due to SSR-safe unit helpers
 
 const ownedCourses = computed(() => coursesData.value?.owned || []);
 const starredCourses = computed(() => coursesData.value?.starred || []);
@@ -59,45 +62,13 @@ function formatCourseDistance(
     meters?: number | null,
     course?: { defaultDistanceUnit?: "kilometers" | "miles" },
 ) {
-    if (meters == null) return "";
-    const s: unknown = userSettingsStore;
-    const unit =
-        s &&
-        typeof s === "object" &&
-        "getDistanceUnitForCourse" in s &&
-        typeof (s as { getDistanceUnitForCourse: unknown })
-            .getDistanceUnitForCourse === "function"
-            ? (
-                  s as {
-                      getDistanceUnitForCourse: (course?: {
-                          defaultDistanceUnit?: "kilometers" | "miles";
-                      }) => "kilometers" | "miles";
-                  }
-              ).getDistanceUnitForCourse(course || undefined)
-            : (course?.defaultDistanceUnit ?? "miles");
-    return formatDistance(meters, unit);
+    return formatCourseDistanceSSR(meters, course);
 }
 function formatCourseElevation(
     meters?: number | null,
     course?: { defaultElevationUnit?: "meters" | "feet" },
 ) {
-    if (meters == null) return "";
-    const s: unknown = userSettingsStore;
-    const unit =
-        s &&
-        typeof s === "object" &&
-        "getElevationUnitForCourse" in s &&
-        typeof (s as { getElevationUnitForCourse: unknown })
-            .getElevationUnitForCourse === "function"
-            ? (
-                  s as {
-                      getElevationUnitForCourse: (course?: {
-                          defaultElevationUnit?: "meters" | "feet";
-                      }) => "meters" | "feet";
-                  }
-              ).getElevationUnitForCourse(course || undefined)
-            : (course?.defaultElevationUnit ?? "feet");
-    return formatElevation(meters, unit);
+    return formatCourseElevationSSR(meters, course);
 }
 
 interface PublicCourse {

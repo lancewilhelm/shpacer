@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { getDistanceUnitSSR, getElevationUnitSSR } from "~/utils/units";
 import { computed, toRefs, ref } from "vue";
 import { useUserSettingsStore } from "~/stores/userSettings";
 import type { SelectPlan } from "~/utils/db/schema";
@@ -58,7 +59,7 @@ const emit = defineEmits<{
 }>();
 const userSettingsStore = useUserSettingsStore();
 const distanceUnit = computed<DistanceUnit>(
-    () => userSettingsStore.getDistanceUnitForCourse() as DistanceUnit,
+    () => getDistanceUnitSSR() as DistanceUnit,
 );
 
 // Per-course smoothing (defaults when courseId unknown)
@@ -649,20 +650,14 @@ function onRowClick(row: SplitRow, e: MouseEvent) {
                             class="p-x-1! py-1! text-(--main-color) text-right whitespace-nowrap"
                         >
                             {{
-                                formatElevation(
-                                    row.gain,
-                                    userSettingsStore.getElevationUnitForCourse(),
-                                )
+                                formatElevation(row.gain, getElevationUnitSSR())
                             }}
                         </td>
                         <td
                             class="p-x-1! py-1! text-(--main-color) text-right whitespace-nowrap"
                         >
                             {{
-                                formatElevation(
-                                    row.loss,
-                                    userSettingsStore.getElevationUnitForCourse(),
-                                )
+                                formatElevation(row.loss, getElevationUnitSSR())
                             }}
                         </td>
                         <td

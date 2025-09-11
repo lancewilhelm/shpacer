@@ -1499,9 +1499,12 @@ onUnmounted(() => {
                                     <span class="font-medium">{{
                                         formatDistance(
                                             course.totalDistance,
-                                            userSettingsStore.getDistanceUnitForCourse(
-                                                course || undefined,
-                                            ),
+                                            userSettingsStore.getDistanceUnitForCourse
+                                                ? userSettingsStore.getDistanceUnitForCourse(
+                                                      course || undefined,
+                                                  )
+                                                : (course?.defaultDistanceUnit ??
+                                                      "miles"),
                                         )
                                     }}</span>
                                     <span class="text-xs text-(--sub-color)"
@@ -1521,9 +1524,12 @@ onUnmounted(() => {
                                     <span class="font-medium">{{
                                         formatElevation(
                                             course.elevationGain,
-                                            userSettingsStore.getElevationUnitForCourse(
-                                                course || undefined,
-                                            ),
+                                            userSettingsStore.getElevationUnitForCourse
+                                                ? userSettingsStore.getElevationUnitForCourse(
+                                                      course || undefined,
+                                                  )
+                                                : (course?.defaultElevationUnit ??
+                                                      "feet"),
                                         )
                                     }}</span>
                                     <span class="text-xs text-(--sub-color)"
@@ -1543,9 +1549,12 @@ onUnmounted(() => {
                                     <span class="font-medium">{{
                                         formatElevation(
                                             course.elevationLoss,
-                                            userSettingsStore.getElevationUnitForCourse(
-                                                course || undefined,
-                                            ),
+                                            userSettingsStore.getElevationUnitForCourse
+                                                ? userSettingsStore.getElevationUnitForCourse(
+                                                      course || undefined,
+                                                  )
+                                                : (course?.defaultElevationUnit ??
+                                                      "feet"),
                                         )
                                     }}</span>
                                     <span class="text-xs text-(--sub-color)"

@@ -46,9 +46,15 @@ const emit = defineEmits<Emits>();
 const userSettingsStore = useUserSettingsStore();
 const distanceUnitIsMiles = computed(
     () =>
-        userSettingsStore.getDistanceUnitForCourse(
-            props.course || undefined,
-        ) === "miles",
+        (typeof (
+            userSettingsStore as unknown as {
+                getDistanceUnitForCourse?: unknown;
+            }
+        )?.getDistanceUnitForCourse === "function"
+            ? userSettingsStore.getDistanceUnitForCourse(
+                  props.course || undefined,
+              )
+            : (props.course?.defaultDistanceUnit ?? "miles")) === "miles",
 );
 
 // Tab state
@@ -1648,9 +1654,14 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                             {{
                                 formatDistance(
                                     mapClickLocation.distance,
-                                    userSettingsStore.getDistanceUnitForCourse(
-                                        props.course || undefined,
-                                    ),
+                                    typeof (userSettingsStore as any)
+                                        ?.getDistanceUnitForCourse ===
+                                        "function"
+                                        ? userSettingsStore.getDistanceUnitForCourse(
+                                              props.course || undefined,
+                                          )
+                                        : (props.course?.defaultDistanceUnit ??
+                                              "miles"),
                                 )
                             }}?
                         </div>
@@ -2077,7 +2088,13 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                                                             {{
                                                                 formatDistance(
                                                                     waypoint.distance,
-                                                                    userSettingsStore.getDistanceUnitForCourse(),
+                                                                    typeof (
+                                                                        userSettingsStore as any
+                                                                    )
+                                                                        ?.getDistanceUnitForCourse ===
+                                                                        "function"
+                                                                        ? userSettingsStore.getDistanceUnitForCourse()
+                                                                        : "miles",
                                                                 )
                                                             }}
                                                         </span>
@@ -2097,7 +2114,13 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                                                                 formatElevation(
                                                                     waypoint.elevation ??
                                                                         0,
-                                                                    userSettingsStore.getElevationUnitForCourse(),
+                                                                    typeof (
+                                                                        userSettingsStore as any
+                                                                    )
+                                                                        ?.getElevationUnitForCourse ===
+                                                                        "function"
+                                                                        ? userSettingsStore.getElevationUnitForCourse()
+                                                                        : "feet",
                                                                 )
                                                             }}
                                                         </span>

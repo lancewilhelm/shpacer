@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import type { SelectCourse, SelectPlan } from "~/utils/db/schema";
-import { formatDistance, formatElevation } from "~/utils/courseMetrics";
+import {
+    formatCourseDistanceSSR,
+    formatCourseElevationSSR,
+} from "~/utils/units";
 import { formatElapsedTime } from "~/utils/timeCalculations";
-import { useUserSettingsStore } from "~/stores/userSettings";
+/* using SSR-safe unit helpers (no direct store usage here) */
 
 definePageMeta({
     auth: {
@@ -39,7 +42,7 @@ const {
     error: plansError,
 } = await useFetch<PlanListResponse>("/api/plans?limit=4");
 
-const userSettingsStore = useUserSettingsStore();
+/* SSR-safe unit helpers avoid direct store calls here */
 
 const courses = computed(() => (coursesData.value?.courses ?? []).slice(0, 4));
 const plans = computed(() => plansData.value?.plans ?? []);
@@ -48,16 +51,14 @@ function formatCourseDistance(
     meters: number,
     course?: { defaultDistanceUnit?: "kilometers" | "miles" },
 ) {
-    const unit = userSettingsStore.getDistanceUnitForCourse(course);
-    return formatDistance(meters, unit);
+    return formatCourseDistanceSSR(meters, course);
 }
 
 function formatCourseElevation(
     meters: number,
     course?: { defaultElevationUnit?: "meters" | "feet" },
 ) {
-    const unit = userSettingsStore.getElevationUnitForCourse(course);
-    return formatElevation(meters, unit);
+    return formatCourseElevationSSR(meters, course);
 }
 
 function formatPace(pace: number, paceUnit: string) {

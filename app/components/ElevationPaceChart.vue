@@ -477,7 +477,7 @@ function addWaypointPins() {
         pinGroup
             .append("title")
             .text(
-                `${waypoint.name} - ${formatDistance(waypoint.distance, userSettingsStore.getDistanceUnitForCourse())}`,
+                `${waypoint.name} - ${formatDistance(waypoint.distance, typeof (userSettingsStore as unknown as { getDistanceUnitForCourse?: unknown })?.getDistanceUnitForCourse === "function" ? userSettingsStore.getDistanceUnitForCourse() : "miles")}`,
             );
     });
 }
@@ -584,7 +584,13 @@ function initChart() {
         .tickFormat((d) =>
             formatDistance(
                 Number(d),
-                userSettingsStore.getDistanceUnitForCourse(),
+                typeof (
+                    userSettingsStore as unknown as {
+                        getDistanceUnitForCourse?: unknown;
+                    }
+                )?.getDistanceUnitForCourse === "function"
+                    ? userSettingsStore.getDistanceUnitForCourse()
+                    : "miles",
             ),
         );
 
@@ -594,7 +600,13 @@ function initChart() {
         .tickFormat((d) =>
             formatElevation(
                 Number(d),
-                userSettingsStore.getElevationUnitForCourse(),
+                typeof (
+                    userSettingsStore as unknown as {
+                        getElevationUnitForCourse?: unknown;
+                    }
+                )?.getElevationUnitForCourse === "function"
+                    ? userSettingsStore.getElevationUnitForCourse()
+                    : "feet",
             ),
         );
 
@@ -783,7 +795,13 @@ function showElevationChartHover(distance: number) {
             );
             if (closestPacePoint) {
                 const isMiles =
-                    userSettingsStore.getDistanceUnitForCourse() === "miles";
+                    (typeof (
+                        userSettingsStore as unknown as {
+                            getDistanceUnitForCourse?: unknown;
+                        }
+                    )?.getDistanceUnitForCourse === "function"
+                        ? userSettingsStore.getDistanceUnitForCourse()
+                        : "miles") === "miles";
                 const paceWithUnits =
                     formatPace(closestPacePoint.actualPace) +
                     (isMiles ? "/mi" : "/km");
@@ -794,11 +812,23 @@ function showElevationChartHover(distance: number) {
         tooltipData.value = {
             distance: formatDistance(
                 interpolatedPoint.distance,
-                userSettingsStore.getDistanceUnitForCourse(),
+                typeof (
+                    userSettingsStore as unknown as {
+                        getDistanceUnitForCourse?: unknown;
+                    }
+                )?.getDistanceUnitForCourse === "function"
+                    ? userSettingsStore.getDistanceUnitForCourse()
+                    : "miles",
             ),
             elevation: formatElevation(
                 interpolatedPoint.elevation,
-                userSettingsStore.getElevationUnitForCourse(),
+                typeof (
+                    userSettingsStore as unknown as {
+                        getElevationUnitForCourse?: unknown;
+                    }
+                )?.getElevationUnitForCourse === "function"
+                    ? userSettingsStore.getElevationUnitForCourse()
+                    : "feet",
             ),
             grade: gradeFormatted,
             actualPace: actualPace,
@@ -963,7 +993,13 @@ function initPaceChart() {
         .tickFormat((d) =>
             formatDistance(
                 d as number,
-                userSettingsStore.getDistanceUnitForCourse(),
+                typeof (
+                    userSettingsStore as unknown as {
+                        getDistanceUnitForCourse?: unknown;
+                    }
+                )?.getDistanceUnitForCourse === "function"
+                    ? userSettingsStore.getDistanceUnitForCourse()
+                    : "miles",
             ),
         );
 
@@ -1050,7 +1086,13 @@ function handleMouseMove(event: MouseEvent) {
             );
             if (closestPacePoint) {
                 const isMiles =
-                    userSettingsStore.getDistanceUnitForCourse() === "miles";
+                    (typeof (
+                        userSettingsStore as unknown as {
+                            getDistanceUnitForCourse?: unknown;
+                        }
+                    )?.getDistanceUnitForCourse === "function"
+                        ? userSettingsStore.getDistanceUnitForCourse()
+                        : "miles") === "miles";
                 const paceWithUnits =
                     formatPace(closestPacePoint.actualPace) +
                     (isMiles ? "/mi" : "/km");
@@ -1062,11 +1104,23 @@ function handleMouseMove(event: MouseEvent) {
         tooltipData.value = {
             distance: formatDistance(
                 interpolatedPoint.distance,
-                userSettingsStore.getDistanceUnitForCourse(),
+                typeof (
+                    userSettingsStore as unknown as {
+                        getDistanceUnitForCourse?: unknown;
+                    }
+                )?.getDistanceUnitForCourse === "function"
+                    ? userSettingsStore.getDistanceUnitForCourse()
+                    : "miles",
             ),
             elevation: formatElevation(
                 interpolatedPoint.elevation,
-                userSettingsStore.getElevationUnitForCourse(),
+                typeof (
+                    userSettingsStore as unknown as {
+                        getElevationUnitForCourse?: unknown;
+                    }
+                )?.getElevationUnitForCourse === "function"
+                    ? userSettingsStore.getElevationUnitForCourse()
+                    : "feet",
             ),
             grade: gradeFormatted,
             actualPace: actualPace,
@@ -1187,11 +1241,23 @@ function updateMapHoverCrosshair() {
             tooltipData.value = {
                 distance: formatDistance(
                     interpolatedPoint.distance,
-                    userSettingsStore.getDistanceUnitForCourse(),
+                    typeof (
+                        userSettingsStore as unknown as {
+                            getDistanceUnitForCourse?: unknown;
+                        }
+                    )?.getDistanceUnitForCourse === "function"
+                        ? userSettingsStore.getDistanceUnitForCourse()
+                        : "miles",
                 ),
                 elevation: formatElevation(
                     interpolatedPoint.elevation,
-                    userSettingsStore.getElevationUnitForCourse(),
+                    typeof (
+                        userSettingsStore as unknown as {
+                            getElevationUnitForCourse?: unknown;
+                        }
+                    )?.getElevationUnitForCourse === "function"
+                        ? userSettingsStore.getElevationUnitForCourse()
+                        : "feet",
                 ),
                 grade: gradeFormatted,
                 actualPace: "",
@@ -1209,8 +1275,13 @@ function updateMapHoverCrosshair() {
                 );
                 if (closestPacePoint) {
                     const isMiles =
-                        userSettingsStore.getDistanceUnitForCourse() ===
-                        "miles";
+                        (typeof (
+                            userSettingsStore as unknown as {
+                                getDistanceUnitForCourse?: unknown;
+                            }
+                        )?.getDistanceUnitForCourse === "function"
+                            ? userSettingsStore.getDistanceUnitForCourse()
+                            : "miles") === "miles";
                     const paceWithUnits =
                         formatPace(closestPacePoint.actualPace) +
                         (isMiles ? "/mi" : "/km");
@@ -1365,8 +1436,13 @@ function updateWaypointCrosshair() {
                 );
                 if (closestPacePoint) {
                     const isMiles =
-                        userSettingsStore.getDistanceUnitForCourse() ===
-                        "miles";
+                        (typeof (
+                            userSettingsStore as unknown as {
+                                getDistanceUnitForCourse?: unknown;
+                            }
+                        )?.getDistanceUnitForCourse === "function"
+                            ? userSettingsStore.getDistanceUnitForCourse()
+                            : "miles") === "miles";
                     const paceWithUnits =
                         formatPace(closestPacePoint.actualPace) +
                         (isMiles ? "/mi" : "/km");
@@ -1378,11 +1454,23 @@ function updateWaypointCrosshair() {
             tooltipData.value = {
                 distance: formatDistance(
                     interpolatedPoint.distance,
-                    userSettingsStore.getDistanceUnitForCourse(),
+                    typeof (
+                        userSettingsStore as unknown as {
+                            getDistanceUnitForCourse?: unknown;
+                        }
+                    )?.getDistanceUnitForCourse === "function"
+                        ? userSettingsStore.getDistanceUnitForCourse()
+                        : "miles",
                 ),
                 elevation: formatElevation(
                     interpolatedPoint.elevation,
-                    userSettingsStore.getElevationUnitForCourse(),
+                    typeof (
+                        userSettingsStore as unknown as {
+                            getElevationUnitForCourse?: unknown;
+                        }
+                    )?.getElevationUnitForCourse === "function"
+                        ? userSettingsStore.getElevationUnitForCourse()
+                        : "feet",
                 ),
                 grade: gradeFormatted,
                 actualPace: actualPace,
