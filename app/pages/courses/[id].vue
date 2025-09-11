@@ -87,23 +87,71 @@ const {
 // Plans state
 const plans = computed(() => plansData.value?.plans || []);
 const currentPlanId = ref<string | null>(null);
+const publicSharedPlan = ref<SelectPlan | null>(null); // populated when viewing a publicly shared plan (logged-out)
 
 // Initialize plan from URL query parameter
-watchEffect(() => {
+watchEffect(async () => {
     const planIdFromUrl = route.query.plan as string | undefined;
-    if (planIdFromUrl) {
-        // Check if the plan exists in the current plans
+    if (!planIdFromUrl) {
+        currentPlanId.value = null;
+        publicSharedPlan.value = null;
+        return;
+    }
+    // Member mode: use existing plans list
+    const effectiveMode =
+        courseData.value?.mode === "public" ? "public" : "member";
+    if (effectiveMode === "member") {
         if (plans.value.some((p) => p.id === planIdFromUrl)) {
             currentPlanId.value = planIdFromUrl;
-        } else if (plans.value.length > 0) {
-            // Plan doesn't exist, remove it from URL
+            return;
+        }
+        if (plans.value.length > 0) {
             const query = { ...route.query };
             delete query.plan;
-            router.replace({
-                path: route.path,
-                query,
-            });
+            router.replace({ path: route.path, query });
         }
+        return;
+    }
+    // Public mode: fetch plan directly (shared plan)
+    try {
+        const resp = await $fetch<{
+            mode: "member" | "public";
+            plan: SelectPlan;
+            course: unknown;
+            notes: { waypointId: string; notes: string }[];
+            stoppageTimes: { waypointId: string; stoppageTime: number }[];
+        }>(`/api/plans/${planIdFromUrl}`);
+        publicSharedPlan.value = resp.plan;
+        currentPlanId.value = resp.plan.id;
+        // Populate notes / stoppage times with synthetic objects matching SelectWaypointNote/SelectWaypointStoppageTime
+        waypointNotes.value = resp.notes.map(
+            (n) =>
+                ({
+                    id: `${resp.plan.id}:${n.waypointId}`,
+                    planId: resp.plan.id,
+                    waypointId: n.waypointId,
+                    userId: "public",
+                    notes: n.notes,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                }) as unknown as SelectWaypointNote,
+        );
+        waypointStoppageTimes.value = resp.stoppageTimes.map(
+            (s) =>
+                ({
+                    id: `${resp.plan.id}:${s.waypointId}`,
+                    planId: resp.plan.id,
+                    waypointId: s.waypointId,
+                    stoppageTime: s.stoppageTime,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                }) as unknown as SelectWaypointStoppageTime,
+        );
+    } catch (e) {
+        console.warn(
+            "Failed to load public shared plan (maybe not shared):",
+            e,
+        );
     }
 });
 const waypointNotes = ref<SelectWaypointNote[]>([]);
@@ -130,32 +178,44 @@ const editingPlanPayload = computed(() => {
 const course = computed(() => courseData.value?.course);
 
 // Unified mode + capabilities (public vs member)
-const mode = computed<"member" | "public">(
-    () => courseData.value?.mode || "member",
-);
-const capabilities = computed(
-    () =>
-        courseData.value?.capabilities || {
-            canEditCourse: false,
-            canDeleteCourse: false,
-            canTogglePublic: false,
-            canToggleShare: false,
-            canManagePlans: false,
-            canViewPlans: false,
-            canEditWaypoints: false,
-            canMutateNotes: false,
-            canClone: false,
-            canDownloadOriginal: false,
-            canSeeRawFileName: false,
-        },
-);
+// Converted from computed() defined after usage to early refs to avoid
+// temporal initialization issues during SSR hydration when watchEffect
+// logic (plan loading) runs before the previous computed declarations
+const mode = ref<"member" | "public">("member");
+const capabilities = ref({
+    canEditCourse: false,
+    canDeleteCourse: false,
+    canTogglePublic: false,
+    canToggleShare: false,
+    canManagePlans: false,
+    canViewPlans: false,
+    canEditWaypoints: false,
+    canMutateNotes: false,
+    canClone: false,
+    canDownloadOriginal: false,
+    canSeeRawFileName: false,
+});
+// Keep these derived from courseData reactively
+watchEffect(() => {
+    // Safe guards: only update when response object present
+    if (courseData.value?.mode === "public") {
+        mode.value = "public";
+    } else {
+        mode.value = "member";
+    }
+    if (courseData.value?.capabilities) {
+        capabilities.value = courseData.value
+            .capabilities as typeof capabilities.value;
+    }
+});
 const waypoints = computed<Waypoint[]>(() => {
     const w = (course.value as { waypoints?: unknown })?.waypoints;
     return Array.isArray(w) ? (w as Waypoint[]) : [];
 });
 const currentPlan = computed(() =>
     currentPlanId.value
-        ? plans.value.find((p) => p.id === currentPlanId.value)
+        ? plans.value.find((p) => p.id === currentPlanId.value) ||
+          publicSharedPlan.value
         : null,
 );
 
@@ -406,8 +466,69 @@ async function cloneCourse() {
         }
     }
 }
+async function toggleCurrentPlanShare() {
+    if (!currentPlan.value) return;
+    const targetPlanId = currentPlan.value.id;
+    const original = !!currentPlan.value.shareEnabled;
+    const next = !original;
+    // Optimistic update
+    if (plansData.value?.plans) {
+        const idx = plansData.value.plans.findIndex(
+            (p) => p.id === targetPlanId,
+        );
+        if (idx !== -1) {
+            const updated: SelectPlan = {
+                ...plansData.value.plans[idx]!,
+                shareEnabled: next,
+            };
+            plansData.value.plans[idx] = updated;
+        }
+    }
+    try {
+        const response = await $fetch<{ plan: SelectPlan }>(
+            `/api/plans/${targetPlanId}`,
+            {
+                method: "PUT",
+                body: { shareEnabled: next },
+            },
+        );
+        if (plansData.value?.plans) {
+            const idx = plansData.value.plans.findIndex(
+                (p) => p.id === targetPlanId,
+            );
+            if (idx !== -1) {
+                plansData.value.plans[idx] = response.plan;
+            }
+        }
+    } catch (e) {
+        // Revert
+        if (plansData.value?.plans) {
+            const idx = plansData.value.plans.findIndex(
+                (p) => p.id === targetPlanId,
+            );
+            if (idx !== -1) {
+                const reverted: SelectPlan = {
+                    ...plansData.value.plans[idx]!,
+                    shareEnabled: original,
+                };
+                plansData.value.plans[idx] = reverted;
+            }
+        }
+        console.error("Failed to toggle plan shareEnabled", e);
+        alert("Failed to update plan sharing status.");
+    }
+}
+function copyPlanShareLink() {
+    if (!currentPlan.value?.shareEnabled || !course.value?.id) return;
+    const url = `${window.location.origin}/courses/${course.value.id}?plan=${currentPlan.value.id}`;
+    if (navigator?.clipboard?.writeText) {
+        navigator.clipboard.writeText(url).catch(() => alert(url));
+    } else {
+        alert(url);
+    }
+}
 // Client-only fetch of waypoint notes & stoppage times to avoid SSR 401 issues
-if (import.meta.client) {
+if (import.meta.client && mode.value === "member") {
     const loadPlanAncillary = async (planId: string | null) => {
         if (!planId) {
             waypointNotes.value = [];
@@ -1341,6 +1462,33 @@ onUnmounted(() => {
                                 @edit-plan="openEditPlanModal"
                                 @delete-plan="handlePlanDeleted"
                             />
+                            <!-- Plan Share Controls (owner only in member mode) -->
+                            <div
+                                v-if="
+                                    currentPlan &&
+                                    mode === 'member' &&
+                                    capabilities.canManagePlans
+                                "
+                                class="flex items-center gap-2"
+                            >
+                                <button
+                                    class="px-2 py-1 border text-xs rounded hover:bg-(--main-color) hover:text-(--bg-color) transition-colors"
+                                    @click="toggleCurrentPlanShare"
+                                >
+                                    {{
+                                        currentPlan.shareEnabled
+                                            ? "Disable Plan Share"
+                                            : "Enable Plan Share"
+                                    }}
+                                </button>
+                                <button
+                                    v-if="currentPlan.shareEnabled"
+                                    class="px-2 py-1 border text-xs rounded hover:bg-(--main-color) hover:text-(--bg-color) transition-colors"
+                                    @click="copyPlanShareLink"
+                                >
+                                    Copy Plan Share Link
+                                </button>
+                            </div>
                             <CourseActionsDropdown
                                 v-if="course && mode === 'member'"
                                 :course="course"
@@ -1441,12 +1589,20 @@ onUnmounted(() => {
                             </div>
 
                             <div
-                                v-if="currentPlan && capabilities.canViewPlans"
+                                v-if="
+                                    currentPlan &&
+                                    (capabilities.canViewPlans ||
+                                        (mode === 'public' && publicSharedPlan))
+                                "
                                 class="w-px h-8 bg-(--sub-color) opacity-60"
                             ></div>
 
                             <div
-                                v-if="currentPlan && capabilities.canViewPlans"
+                                v-if="
+                                    currentPlan &&
+                                    (capabilities.canViewPlans ||
+                                        (mode === 'public' && publicSharedPlan))
+                                "
                                 class="flex items-center gap-6 text-sm"
                             >
                                 <div
