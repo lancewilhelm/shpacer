@@ -1087,7 +1087,7 @@ function handleMapLeave() {
 // Waypoint interaction state
 const selectedWaypoint = ref<Waypoint | null>(null);
 const waypointPanelTab = ref<"waypoints" | "splits">("waypoints");
-const mobilePanelTab = ref<"course" | "waypoints" | "splits">("course");
+const mobilePanelTab = ref<"map" | "charts" | "waypoints" | "splits">("map");
 
 // Handle waypoint events
 function handleWaypointSelect(waypoint: Waypoint) {
@@ -1716,13 +1716,25 @@ onUnmounted(() => {
                             class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
                             :class="{
                                 'bg-(--main-color) text-(--bg-color)':
-                                    mobilePanelTab === 'course',
+                                    mobilePanelTab === 'map',
                                 'text-(--sub-color) hover:text-(--main-color)':
-                                    mobilePanelTab !== 'course',
+                                    mobilePanelTab !== 'map',
                             }"
-                            @click="mobilePanelTab = 'course'"
+                            @click="mobilePanelTab = 'map'"
                         >
-                            Course
+                            Map
+                        </button>
+                        <button
+                            class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
+                            :class="{
+                                'bg-(--main-color) text-(--bg-color)':
+                                    mobilePanelTab === 'charts',
+                                'text-(--sub-color) hover:text-(--main-color)':
+                                    mobilePanelTab !== 'charts',
+                            }"
+                            @click="mobilePanelTab = 'charts'"
+                        >
+                            Charts
                         </button>
                         <button
                             class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
@@ -1754,47 +1766,9 @@ onUnmounted(() => {
                 <!-- Mobile panels -->
                 <div class="md:hidden flex-1 flex flex-col overflow-hidden">
                     <div
-                        v-if="mobilePanelTab === 'course'"
+                        v-if="mobilePanelTab === 'map'"
                         class="flex-1 flex flex-col overflow-hidden"
                     >
-                        <div
-                            class="border-b border-(--sub-color) relative overflow-hidden"
-                            :style="{ height: `${chartPanelHeight}px` }"
-                        >
-                            <div class="h-full p-2">
-                                <ElevationPaceChart
-                                    :geo-json-data="geoJsonData"
-                                    :height="Math.max(0, chartPanelHeight - 16)"
-                                    :map-hover-distance="mapHoverDistance"
-                                    :selected-waypoint-distance="
-                                        waypointPanelTab === 'waypoints'
-                                            ? selectedWaypoint?.distance || null
-                                            : null
-                                    "
-                                    :waypoints="displayWaypoints"
-                                    :plan="currentPlan"
-                                    :show-pace-chart="!!currentPlan"
-                                    @elevation-hover="handleElevationHover"
-                                    @elevation-leave="handleElevationLeave"
-                                    @pace-hover="handlePaceHover"
-                                    @pace-leave="handlePaceLeave"
-                                    @waypoint-click="
-                                        handleElevationWaypointClick
-                                    "
-                                />
-                                <div
-                                    class="absolute left-0 bottom-0 w-full h-1 cursor-row-resize transition-all duration-200 z-10 hover:h-[3px] hover:bg-(--main-color)"
-                                    :class="{
-                                        'h-2 bg-(--main-color)':
-                                            chartIsResizing,
-                                        'bg-transparent hover:bg-(--main-color)':
-                                            !chartIsResizing,
-                                    }"
-                                    @mousedown="startChartResize"
-                                    @touchstart.stop.prevent="startChartResize"
-                                />
-                            </div>
-                        </div>
                         <div class="flex-1 p-4">
                             <div class="h-full rounded-lg overflow-hidden">
                                 <ClientOnly>
@@ -1837,6 +1811,50 @@ onUnmounted(() => {
                                         </div>
                                     </template>
                                 </ClientOnly>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div
+                        v-else-if="mobilePanelTab === 'charts'"
+                        class="flex-1 flex flex-col overflow-hidden"
+                    >
+                        <div
+                            class="border-b border-(--sub-color) relative overflow-hidden"
+                            :style="{ height: `${chartPanelHeight}px` }"
+                        >
+                            <div class="h-full p-2">
+                                <ElevationPaceChart
+                                    :geo-json-data="geoJsonData"
+                                    :height="Math.max(0, chartPanelHeight - 16)"
+                                    :map-hover-distance="mapHoverDistance"
+                                    :selected-waypoint-distance="
+                                        waypointPanelTab === 'waypoints'
+                                            ? selectedWaypoint?.distance || null
+                                            : null
+                                    "
+                                    :waypoints="displayWaypoints"
+                                    :plan="currentPlan"
+                                    :show-pace-chart="!!currentPlan"
+                                    @elevation-hover="handleElevationHover"
+                                    @elevation-leave="handleElevationLeave"
+                                    @pace-hover="handlePaceHover"
+                                    @pace-leave="handlePaceLeave"
+                                    @waypoint-click="
+                                        handleElevationWaypointClick
+                                    "
+                                />
+                                <div
+                                    class="absolute left-0 bottom-0 w-full h-1 cursor-row-resize transition-all duration-200 z-10 hover:h-[3px] hover:bg-(--main-color)"
+                                    :class="{
+                                        'h-2 bg-(--main-color)':
+                                            chartIsResizing,
+                                        'bg-transparent hover:bg-(--main-color)':
+                                            !chartIsResizing,
+                                    }"
+                                    @mousedown="startChartResize"
+                                    @touchstart.stop.prevent="startChartResize"
+                                />
                             </div>
                         </div>
                     </div>
