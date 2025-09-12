@@ -34,6 +34,9 @@ export interface UserSettings {
     reverseSort: boolean;
   };
   funboxModes: FunboxMode[];
+  chartStyle: {
+    showAreaGradient: boolean;
+  };
   units: {
     distance: DistanceUnitSetting;
     elevation: ElevationUnitSetting;
@@ -66,6 +69,9 @@ function getDefaultSettings(): UserSettings {
       reverseSort: false,
     },
     funboxModes: [],
+    chartStyle: {
+      showAreaGradient: true,
+    },
     units: {
       strategy: "override",
       distance: "follow_course",

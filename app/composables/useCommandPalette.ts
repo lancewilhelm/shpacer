@@ -66,6 +66,11 @@ export function useCommandPalette() {
       options: getFontFamilyOptions(),
     },
     {
+      label: "chart settings",
+      icon: "lucide:line-chart",
+      options: getChartSettingsOptions(),
+    },
+    {
       label: "settings",
       icon: "lucide:settings",
       action: () => {
@@ -354,6 +359,53 @@ function getFontFamilyOptions() {
     },
     active: computed(() => userSettingsStore.settings.fontFamily === font),
   }));
+}
+
+function getChartSettingsOptions(): Option[] {
+  return [
+    {
+      label: "area gradient",
+      icon: "lucide:chart-no-axes-combined",
+      options: getChartGradientOptions(),
+    },
+  ];
+}
+
+function getChartGradientOptions() {
+  const userSettingsStore = useUserSettingsStore();
+  const options = [
+    {
+      label: "enabled",
+      action: () => {
+        userSettingsStore.updateSettings({
+          chartStyle: {
+            ...userSettingsStore.settings.chartStyle,
+            showAreaGradient: true,
+          },
+        });
+        useUiStore().setCommandPaletteVisible(false);
+      },
+      active: computed(
+        () => userSettingsStore.settings.chartStyle.showAreaGradient,
+      ),
+    },
+    {
+      label: "disabled",
+      action: () => {
+        userSettingsStore.updateSettings({
+          chartStyle: {
+            ...userSettingsStore.settings.chartStyle,
+            showAreaGradient: false,
+          },
+        });
+        useUiStore().setCommandPaletteVisible(false);
+      },
+      active: computed(
+        () => !userSettingsStore.settings.chartStyle.showAreaGradient,
+      ),
+    },
+  ];
+  return options;
 }
 
 function getDistanceUnitOptions() {

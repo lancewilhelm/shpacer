@@ -85,6 +85,11 @@ const emit = defineEmits<{
 }>();
 
 const userSettingsStore = useUserSettingsStore();
+const showAreaGradient = computed<boolean>(() => {
+    const s = userSettingsStore?.settings;
+    const v = s?.chartStyle?.showAreaGradient;
+    return typeof v === "boolean" ? v : true;
+});
 const chartContainer = ref<HTMLElement>();
 const paceChartContainer = ref<HTMLElement>();
 const tooltip = ref<HTMLElement>();
@@ -205,6 +210,18 @@ watch(
         }
     },
     { deep: true },
+);
+// Reinitialize charts when gradient preference changes
+watch(
+    () => showAreaGradient.value,
+    () => {
+        if (chartContainer.value) {
+            initChart();
+        }
+        if (props.showPaceChart && paceChartContainer.value) {
+            initPaceChart();
+        }
+    },
 );
 
 // Computed properties
@@ -584,10 +601,12 @@ function initChart() {
         .y1((d) => yScale!(d.elevation))
         .curve(d3.curveCardinal);
 
-    g.append("path")
-        .datum(smoothedElevationPoints.value)
-        .attr("fill", "url(#elevation-gradient)")
-        .attr("d", area);
+    if (showAreaGradient.value) {
+        g.append("path")
+            .datum(smoothedElevationPoints.value)
+            .attr("fill", "url(#elevation-gradient)")
+            .attr("d", area);
+    }
 
     // Add elevation line
     g.append("path")
@@ -988,6 +1007,47 @@ function initPaceChart() {
         .scaleLinear()
         .domain([paceRange.value.min * 0.95, paceRange.value.max * 1.05])
         .range([innerHeight, 0]);
+
+    // Optional area gradient under the pace line
+    if (showAreaGradient.value && hasPaceData.value) {
+        // Define a vertical gradient for the pace chart
+        const pdefs = paceSvg!.append("defs");
+        const pgrad = pdefs
+            .append("linearGradient")
+            .attr("id", "pace-gradient")
+            .attr("gradientUnits", "userSpaceOnUse")
+            .attr("x1", 0)
+            .attr("y1", 0)
+            .attr("x2", 0)
+            .attr("y2", innerHeight);
+
+        pgrad
+            .append("stop")
+            .attr("offset", "0%")
+            .attr("stop-color", "var(--main-color)")
+            .attr("stop-opacity", 0.3);
+
+        pgrad
+            .append("stop")
+            .attr("offset", "100%")
+            .attr("stop-color", "var(--main-color)")
+            .attr("stop-opacity", 0.05);
+
+        // Area generator for actual pace
+        const paceArea = d3
+            .area<{ distance: number; actualPace: number }>()
+            .x((d) => paceXScale!(d.distance))
+            .y0(innerHeight)
+            .y1((d) => paceYScale!(d.actualPace))
+            .curve(d3.curveCardinal);
+
+        // Draw the filled area under the actual pace line
+        const pg = paceSvg!.select("g");
+        pg.append("path")
+            .datum(actualPaceData.value)
+            .attr("fill", "url(#pace-gradient)")
+            .attr("d", paceArea);
+    }
 
     // Highlight selected pace segment (if provided)
     if (props.highlightSegment && paceXScale) {
