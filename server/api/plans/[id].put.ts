@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { plans } from "~/utils/db/schema";
+import { plans, courses } from "~/utils/db/schema";
 import { auth } from "~/utils/auth";
 import { cloudDb } from "~~/server/utils/db/cloud";
 
@@ -138,14 +138,19 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    if (
-      body.pace != null &&
-      (typeof body.pace !== "number" || body.pace < 0)
-    ) {
+    if (body.pace != null && (typeof body.pace !== "number" || body.pace < 0)) {
       throw createError({
         statusCode: 400,
         statusMessage: "Invalid pace",
       });
+    }
+
+    // Auto-enable course share when enabling plan share
+    if (body.shareEnabled === true) {
+      await cloudDb
+        .update(courses)
+        .set({ shareEnabled: true, updatedAt: new Date() })
+        .where(eq(courses.id, existing.courseId));
     }
 
     // Build update object (only set provided fields)

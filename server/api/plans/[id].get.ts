@@ -21,7 +21,7 @@ import { eq, and } from "drizzle-orm";
  *      full waypoint notes & stoppage times (same shapes as existing member endpoints).
  *
  *  - Authenticated (non-owner) or Unauthenticated request:
- *      * If plan.shareEnabled = true:
+ * If plan.shareEnabled = true and the parent course's shareEnabled = true:
  *          mode = "public"
  *          Returns sanitized public projection (no userId, no internal IDs beyond waypoint/plan/course IDs,
  *          no provenance, no raw course file fields, notes & stoppage times stripped of userId/planId).
@@ -124,6 +124,14 @@ export default defineEventHandler(async (event) => {
       throw createError({
         statusCode: 404,
         statusMessage: "Parent course not found",
+      });
+    }
+
+    // If not owner and course share is not enabled => 404 (enforce course sharing for public plan access)
+    if (!isOwner && !courseRow.shareEnabled) {
+      throw createError({
+        statusCode: 404,
+        statusMessage: "Plan not found",
       });
     }
 

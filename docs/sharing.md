@@ -1,5 +1,7 @@
 # Sharing (MVP): Unified Course Sharing (Read‑Only)
 
+Note: Plan share links depend on course sharing. If you enable sharing for a plan, the course's shareable link will be enabled as well (after a confirmation). If you disable course sharing while any plans have sharing enabled, you will see a warning that those plan share links will no longer be viewable until course sharing is re-enabled.
+
 This document describes the initial (MVP) implementation of **read‑only sharing** for Courses (and structure prepared for Plans). It is distinct from the existing `public` (discoverable) visibility flag.
 
 ---

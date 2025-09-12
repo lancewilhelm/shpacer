@@ -347,6 +347,21 @@ async function toggleCourseShare() {
     const originalShare = !!course.value.shareEnabled;
     const nextShare = !originalShare;
 
+    // If disabling and any plans are currently shared, warn the user
+    if (!nextShare) {
+        const sharedPlans = (plansData.value?.plans || []).filter(
+            (p) => p.shareEnabled,
+        );
+        if (sharedPlans.length > 0) {
+            const proceed = confirm(
+                "Disabling course sharing will make any plan share links unviewable. Continue?",
+            );
+            if (!proceed) {
+                return;
+            }
+        }
+    }
+
     // Optimistic update
     // Preserve existing waypoints during optimistic share toggle
     const existingWaypointsShare = (() => {
@@ -480,7 +495,111 @@ async function toggleCurrentPlanShare() {
     const targetPlanId = currentPlan.value.id;
     const original = !!currentPlan.value.shareEnabled;
     const next = !original;
-    // Optimistic update
+
+    // If enabling plan share and course share is disabled, warn and enable course share first
+    if (next && course.value && !course.value.shareEnabled) {
+        const proceed = confirm(
+            "Enabling plan sharing will also enable course sharing so the plan can be viewed. Continue?",
+        );
+        if (!proceed) {
+            return;
+        }
+
+        // Optimistically enable course sharing
+        const existingWaypointsShare = (() => {
+            const c = course.value as unknown;
+            if (
+                c &&
+                typeof c === "object" &&
+                "waypoints" in (c as Record<string, unknown>)
+            ) {
+                const w = (c as { waypoints?: unknown }).waypoints;
+                return Array.isArray(w) ? (w as Waypoint[]) : [];
+            }
+            return [] as Waypoint[];
+        })();
+        courseData.value = {
+            mode: courseData.value?.mode || mode.value,
+            capabilities: courseData.value?.capabilities || capabilities.value,
+            course: {
+                ...(course.value as SelectCourse),
+                shareEnabled: true,
+                ...(existingWaypointsShare
+                    ? { waypoints: existingWaypointsShare }
+                    : {}),
+            },
+        };
+        try {
+            const response = await $fetch<{ course: SelectCourse }>(
+                `/api/courses/${course.value.id}`,
+                {
+                    method: "PUT",
+                    body: { shareEnabled: true },
+                },
+            );
+            // Merge waypoints back after server response
+            courseData.value = {
+                mode: courseData.value?.mode || mode.value,
+                capabilities:
+                    courseData.value?.capabilities || capabilities.value,
+                course: {
+                    ...response.course,
+                    ...((() => {
+                        const c = course.value as unknown;
+                        if (
+                            c &&
+                            typeof c === "object" &&
+                            "waypoints" in (c as Record<string, unknown>)
+                        ) {
+                            const w = (c as { waypoints?: unknown }).waypoints;
+                            return Array.isArray(w) && w.length > 0 ? w : null;
+                        }
+                        return null;
+                    })()
+                        ? {
+                              waypoints: (() => {
+                                  const c = course.value as unknown;
+                                  if (
+                                      c &&
+                                      typeof c === "object" &&
+                                      "waypoints" in
+                                          (c as Record<string, unknown>)
+                                  ) {
+                                      const w = (c as { waypoints?: unknown })
+                                          .waypoints;
+                                      return Array.isArray(w)
+                                          ? (w as Waypoint[])
+                                          : [];
+                                  }
+                                  return [];
+                              })(),
+                          }
+                        : {}),
+                },
+            };
+        } catch (e) {
+            // Revert on failure
+            courseData.value = {
+                mode: courseData.value?.mode || mode.value,
+                capabilities:
+                    courseData.value?.capabilities || capabilities.value,
+                course: {
+                    ...(course.value as SelectCourse),
+                    shareEnabled: false,
+                },
+            };
+            console.error(
+                "Failed to enable course share before enabling plan share",
+                e,
+            );
+            alert(
+                "Failed to enable course sharing required to share a plan. Please try again.",
+            );
+            return;
+        }
+    }
+
+    // Optimistic update for plan share toggle
     if (plansData.value?.plans) {
         const idx = plansData.value.plans.findIndex(
             (p) => p.id === targetPlanId,
