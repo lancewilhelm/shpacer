@@ -555,9 +555,13 @@ function getSegmentGradeDisplay(waypointId: string): string {
                                             currentPlanId &&
                                             getWaypointNote?.(waypoint.id)
                                         "
-                                        class="text-xs text-(--main-color) py-2"
+                                        class="text-xs text-(--main-color) py-2 course-description"
                                     >
-                                        {{ getWaypointNote(waypoint.id) }}
+                                        <MDC
+                                            :value="
+                                                getWaypointNote(waypoint.id)
+                                            "
+                                        />
                                     </div>
                                 </div>
                             </div>

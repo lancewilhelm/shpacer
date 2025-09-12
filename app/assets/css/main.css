@@ -304,3 +304,7 @@ input[type="radio"]:disabled {
     cursor: not-allowed;
     border-color: var(--sub-color);
 }
+
+.course-description a {
+    text-decoration: underline;
+}

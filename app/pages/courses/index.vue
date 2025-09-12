@@ -300,12 +300,12 @@ async function addPublicCourse(id: string) {
                                 class="h-3 w-3 text-(--sub-color) flex-shrink-0"
                             />
                         </h3>
-                        <p
+                        <div
                             v-if="course.description"
-                            class="text-xs text-(--sub-color) line-clamp-2 mb-2"
+                            class="text-xs text-(--sub-color) line-clamp-2 mb-2 course-description"
                         >
-                            {{ course.description }}
-                        </p>
+                            <MDC :value="course.description" />
+                        </div>
                         <div class="flex items-center gap-3 mb-2 text-[11px]">
                             <div
                                 v-if="course.totalDistance"
@@ -418,12 +418,12 @@ async function addPublicCourse(id: string) {
                                     class="h-3 w-3 text-(--sub-color) flex-shrink-0"
                                 />
                             </h3>
-                            <p
+                            <div
                                 v-if="course.description"
-                                class="text-xs text-(--sub-color) line-clamp-2 mb-2"
+                                class="text-xs text-(--sub-color) line-clamp-2 mb-2 course-description"
                             >
-                                {{ course.description }}
-                            </p>
+                                <MDC :value="course.description" />
+                            </div>
                             <div
                                 class="flex items-center gap-3 mb-2 text-[11px]"
                             >
@@ -611,12 +611,12 @@ async function addPublicCourse(id: string) {
                                 >
                                     {{ pc.name }}
                                 </h3>
-                                <p
+                                <div
                                     v-if="pc.description"
-                                    class="text-xs text-(--sub-color) line-clamp-2"
+                                    class="text-xs text-(--sub-color) line-clamp-2 course-description"
                                 >
-                                    {{ pc.description }}
-                                </p>
+                                    <MDC :value="pc.description" />
+                                </div>
                             </div>
                             <button
                                 class="px-2 py-1 text-xs rounded bg-(--main-color) text-(--bg-color) hover:opacity-80 disabled:opacity-40 flex items-center justify-center"

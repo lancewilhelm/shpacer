@@ -1492,10 +1492,15 @@ onUnmounted(() => {
                             >
                                 {{ publicViewLabel }}
                             </div>
-                            <div v-if="course.description" class="mt-2">
-                                <p class="text-(--sub-color)">
-                                    {{ course.description }}
-                                </p>
+                            <div
+                                v-if="course.description"
+                                class="mt-2 course-description"
+                            >
+                                <div
+                                    class="text-(--sub-color) course-description"
+                                >
+                                    <MDC :value="course.description" />
+                                </div>
                             </div>
                         </div>
                         <div

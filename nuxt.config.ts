@@ -16,6 +16,13 @@ export default defineNuxtConfig({
     "@nuxtjs/mdc",
     "pinia-plugin-persistedstate/nuxt",
   ],
+  mdc: {
+    remarkPlugins: {
+      "remark-gfm": {
+        src: "remark-gfm",
+      },
+    },
+  },
   app: {
     head: {
       htmlAttrs: {

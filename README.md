@@ -16,6 +16,7 @@ A self-hosted web application for race course planning and analysis.
 - Calculate comprehensive course metrics including total distance, elevation gain, and elevation loss
 - Store original file content and metadata for future reference
 - Set race dates and times for event planning
+- Markdown support for course descriptions (GitHub-Flavored Markdown)
 
 ### Interactive Visualization
 
