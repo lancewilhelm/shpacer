@@ -1,5 +1,27 @@
 @import "tailwindcss";
 
+/* Safelist critical responsive display utilities for Tailwind v4 */
+@layer utilities {
+    .tw-sf-hidden {
+        @apply hidden;
+    }
+    .tw-sf-block {
+        @apply block;
+    }
+    .tw-sf-flex {
+        @apply flex;
+    }
+    .tw-sf-md-hidden {
+        @apply md:hidden;
+    }
+    .tw-sf-md-block {
+        @apply md:block;
+    }
+    .tw-sf-md-flex {
+        @apply md:flex;
+    }
+}
+
 :root {
     --border-radius: 8px;
     --yes-color: #008800;
