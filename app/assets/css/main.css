@@ -1,7 +1,8 @@
 @import "tailwindcss";
 
-/* Fallback responsive display utilities to ensure md: variants exist even if Tailwind misses them */
+/* Robust responsive overrides independent of Tailwind scanning */
 @media (min-width: 48rem) {
+    /* Display */
     .md\:flex {
         display: flex !important;
     }
@@ -10,6 +11,70 @@
     }
     .md\:hidden {
         display: none !important;
+    }
+
+    /* Layout/position */
+    .md\:flex-1 {
+        flex: 1 1 0% !important;
+    }
+    .md\:overflow-hidden {
+        overflow: hidden !important;
+    }
+    .md\:justify-end {
+        justify-content: flex-end !important;
+    }
+    .md\:justify-between {
+        justify-content: space-between !important;
+    }
+    .md\:mt-0 {
+        margin-top: 0 !important;
+    }
+    .md\:w-auto {
+        width: auto !important;
+    }
+    .md\:right-0 {
+        right: 0 !important;
+    }
+    .md\:left-auto {
+        left: auto !important;
+    }
+    .md\:min-w-64 {
+        min-width: calc(var(--spacing) * 64) !important;
+    }
+
+    /* Spacing */
+    .md\:p-2 {
+        padding: calc(var(--spacing) * 2) !important;
+    }
+    .md\:px-3 {
+        padding-left: calc(var(--spacing) * 3) !important;
+        padding-right: calc(var(--spacing) * 3) !important;
+    }
+    .md\:px-4 {
+        padding-left: calc(var(--spacing) * 4) !important;
+        padding-right: calc(var(--spacing) * 4) !important;
+    }
+    .md\:py-2 {
+        padding-top: calc(var(--spacing) * 2) !important;
+        padding-bottom: calc(var(--spacing) * 2) !important;
+    }
+
+    /* Sizing */
+    .md\:h-4 {
+        height: calc(var(--spacing) * 4) !important;
+    }
+    .md\:w-4 {
+        width: calc(var(--spacing) * 4) !important;
+    }
+
+    /* Typography */
+    .md\:text-4xl {
+        font-size: 2.25rem !important;
+        line-height: 2.5rem !important;
+    }
+    .md\:text-sm {
+        font-size: var(--text-sm) !important;
+        line-height: var(--text-sm--line-height) !important;
     }
 }
 
