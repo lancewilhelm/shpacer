@@ -228,7 +228,13 @@ const distanceUnit = computed<DistanceUnit>(() =>
 
 // Set the page title dynamically; always discourage SEO indexing for any public (shared) view
 useHead({
-    title: computed(() => course.value?.name || "Course"),
+    title: computed(() => {
+        const base = course.value?.name || "Course";
+        if (mode.value === "public" && currentPlan.value) {
+            return `${base} — Plan: ${currentPlan.value.name}`;
+        }
+        return base;
+    }),
     meta: computed(() => {
         // Always add noindex,nofollow for shared (public mode) pages
         const tags: { name: string; content: string }[] = [];
@@ -780,7 +786,7 @@ function formatRaceDate(date: Date | string | number | null) {
 
     const dateStr = new Date(year, month, day).toLocaleDateString("en-US", {
         year: "numeric",
-        month: "long",
+        month: "short",
         day: "numeric",
     });
 
@@ -1087,7 +1093,14 @@ function handleMapLeave() {
 // Waypoint interaction state
 const selectedWaypoint = ref<Waypoint | null>(null);
 const waypointPanelTab = ref<"waypoints" | "splits">("waypoints");
-const mobilePanelTab = ref<"map" | "charts" | "waypoints" | "splits">("map");
+const mobilePanelTab = ref<"info" | "map" | "charts" | "waypoints" | "splits">(
+    "map",
+);
+
+const publicViewLabel = computed(() => {
+    if (mode.value !== "public") return null;
+    return currentPlan.value ? `Plan — ${currentPlan.value.name}` : "Course";
+});
 
 // Handle waypoint events
 function handleWaypointSelect(waypoint: Waypoint) {
@@ -1473,6 +1486,12 @@ onUnmounted(() => {
                                     />
                                 </span>
                             </div>
+                            <div
+                                v-if="mode === 'public'"
+                                class="mt-1 text-xs text-(--sub-color)"
+                            >
+                                {{ publicViewLabel }}
+                            </div>
                             <div v-if="course.description" class="mt-2">
                                 <p class="text-(--sub-color)">
                                     {{ course.description }}
@@ -1480,6 +1499,7 @@ onUnmounted(() => {
                             </div>
                         </div>
                         <div
+                            v-if="mode === 'member'"
                             class="flex items-center gap-2 flex-wrap justify-start md:justify-end mt-1 md:mt-0 w-full md:w-auto"
                         >
                             <PlanSelector
@@ -1514,9 +1534,9 @@ onUnmounted(() => {
                         </div>
                     </div>
 
-                    <div class="flex flex-col gap-4">
+                    <div class="hidden md:flex flex-col gap-4">
                         <!-- Course Metrics -->
-                        <div class="flex items-center gap-6 text-sm">
+                        <div class="flex items-center gap-2 text-sm">
                             <div
                                 v-if="course.totalDistance != null"
                                 class="flex items-center gap-2 text-(--main-color)"
@@ -1625,7 +1645,7 @@ onUnmounted(() => {
                                     (capabilities.canViewPlans ||
                                         (mode === 'public' && publicSharedPlan))
                                 "
-                                class="flex items-center gap-6 text-sm"
+                                class="flex items-center gap-2 text-sm"
                             >
                                 <div
                                     class="flex items-center gap-2 text-(--main-color)"
@@ -1679,30 +1699,6 @@ onUnmounted(() => {
                                 </div>
                             </div>
                         </div>
-
-                        <!-- File Info -->
-                        <!-- <div
-                            class="flex items-center gap-4 text-sm text-(--sub-color)"
-                        >
-                            <span class="flex items-center gap-1">
-                                <Icon
-                                    name="lucide:file"
-                                    class="h-4 w-4"
-                                />
-                                {{ course.originalFileName }}
-                            </span>
-                            <span class="flex items-center gap-1">
-                                <Icon
-                                    name="lucide:calendar"
-                                    class="h-4 w-4"
-                                />
-                                {{ formatDate(course.createdAt || new Date()) }}
-                            </span>
-                            <span class="flex items-center gap-1 uppercase">
-                                <Icon name="lucide:tag" class="h-4 w-4" />
-                                {{ course.fileType }}
-                            </span>
-                        </div> -->
                     </div>
                 </div>
 
@@ -1712,6 +1708,19 @@ onUnmounted(() => {
                     class="md:hidden flex flex-col gap-2 border-b border-(--sub-color)"
                 >
                     <div class="flex items-center">
+                        <button
+                            class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
+                            :class="{
+                                'bg-(--main-color) text-(--bg-color)':
+                                    mobilePanelTab === 'info',
+                                'text-(--sub-color) hover:text-(--main-color)':
+                                    mobilePanelTab !== 'info',
+                            }"
+                            @click="mobilePanelTab = 'info'"
+                        >
+                            Info
+                        </button>
+
                         <button
                             class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
                             :class="{
@@ -1766,7 +1775,199 @@ onUnmounted(() => {
                 <!-- Mobile panels -->
                 <div class="md:hidden flex-1 flex flex-col overflow-hidden">
                     <div
-                        v-if="mobilePanelTab === 'map'"
+                        v-if="mobilePanelTab === 'info'"
+                        class="flex-1 flex flex-col overflow-y-auto p-4"
+                    >
+                        <div class="space-y-4">
+                            <div
+                                v-if="mode === 'public'"
+                                class="text-xs text-(--sub-color)"
+                            >
+                                {{ publicViewLabel }}
+                            </div>
+                            <div
+                                class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-(--main-color)"
+                            >
+                                <div
+                                    v-if="course.totalDistance != null"
+                                    class="flex items-center gap-2"
+                                >
+                                    <Icon
+                                        name="lucide:map-pin"
+                                        class="h-5 w-5"
+                                    />
+                                    <div class="flex flex-col">
+                                        <span class="font-medium">
+                                            {{
+                                                formatDistance(
+                                                    course.totalDistance,
+                                                    userSettingsStore.getDistanceUnitForCourse
+                                                        ? userSettingsStore.getDistanceUnitForCourse(
+                                                              course ||
+                                                                  undefined,
+                                                          )
+                                                        : (course?.defaultDistanceUnit ??
+                                                              "miles"),
+                                                )
+                                            }}
+                                        </span>
+                                        <span class="text-xs text-(--sub-color)"
+                                            >Distance</span
+                                        >
+                                    </div>
+                                </div>
+
+                                <div
+                                    v-if="course.elevationGain != null"
+                                    class="flex items-center gap-2"
+                                >
+                                    <Icon
+                                        name="lucide:arrow-up"
+                                        class="h-5 w-5"
+                                    />
+                                    <div class="flex flex-col">
+                                        <span class="font-medium">
+                                            {{
+                                                formatElevation(
+                                                    course.elevationGain,
+                                                    userSettingsStore.getElevationUnitForCourse
+                                                        ? userSettingsStore.getElevationUnitForCourse(
+                                                              course ||
+                                                                  undefined,
+                                                          )
+                                                        : (course?.defaultElevationUnit ??
+                                                              "feet"),
+                                                )
+                                            }}
+                                        </span>
+                                        <span class="text-xs text-(--sub-color)"
+                                            >Elevation Gain</span
+                                        >
+                                    </div>
+                                </div>
+
+                                <div
+                                    v-if="course.elevationLoss != null"
+                                    class="flex items-center gap-2"
+                                >
+                                    <Icon
+                                        name="lucide:arrow-down"
+                                        class="h-5 w-5"
+                                    />
+                                    <div class="flex flex-col">
+                                        <span class="font-medium">
+                                            {{
+                                                formatElevation(
+                                                    course.elevationLoss,
+                                                    userSettingsStore.getElevationUnitForCourse
+                                                        ? userSettingsStore.getElevationUnitForCourse(
+                                                              course ||
+                                                                  undefined,
+                                                          )
+                                                        : (course?.defaultElevationUnit ??
+                                                              "feet"),
+                                                )
+                                            }}
+                                        </span>
+                                        <span class="text-xs text-(--sub-color)"
+                                            >Elevation Loss</span
+                                        >
+                                    </div>
+                                </div>
+
+                                <div
+                                    v-if="formatRaceDate(course.raceDate)"
+                                    class="flex items-center gap-2"
+                                >
+                                    <Icon
+                                        name="lucide:calendar-clock"
+                                        class="h-5 w-5"
+                                    />
+                                    <div class="flex flex-col">
+                                        <span class="font-medium">{{
+                                            formatRaceDate(course.raceDate)
+                                        }}</span>
+                                        <span class="text-xs text-(--sub-color)"
+                                            >Race Date</span
+                                        >
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center gap-2">
+                                    <Icon
+                                        :name="
+                                            course.public
+                                                ? 'lucide:globe'
+                                                : 'lucide:lock'
+                                        "
+                                        class="h-5 w-5"
+                                    />
+                                    <div class="flex flex-col">
+                                        <span class="font-medium">{{
+                                            course.public ? "Public" : "Private"
+                                        }}</span>
+                                        <span class="text-xs text-(--sub-color)"
+                                            >Visibility</span
+                                        >
+                                    </div>
+                                </div>
+
+                                <div
+                                    v-if="currentPlan"
+                                    class="flex items-center gap-2"
+                                >
+                                    <Icon name="lucide:timer" class="h-5 w-5" />
+                                    <div class="flex flex-col">
+                                        <span class="font-medium">{{
+                                            planPaceDisplay
+                                        }}</span>
+                                        <span class="text-xs text-(--sub-color)"
+                                            >Target Pace</span
+                                        >
+                                    </div>
+                                </div>
+
+                                <div
+                                    v-if="currentPlan"
+                                    class="flex items-center gap-2"
+                                >
+                                    <Icon
+                                        name="lucide:clock-3"
+                                        class="h-5 w-5"
+                                    />
+                                    <div class="flex flex-col">
+                                        <span class="font-medium">{{
+                                            planEstimatedElapsedDisplay
+                                        }}</span>
+                                        <span class="text-xs text-(--sub-color)"
+                                            >Est. Elapsed</span
+                                        >
+                                    </div>
+                                </div>
+
+                                <div
+                                    v-if="currentPlan"
+                                    class="flex items-center gap-2"
+                                >
+                                    <Icon
+                                        name="lucide:sliders"
+                                        class="h-5 w-5"
+                                    />
+                                    <div class="flex flex-col">
+                                        <span class="font-medium">{{
+                                            planStrategyDisplay
+                                        }}</span>
+                                        <span class="text-xs text-(--sub-color)"
+                                            >Strategy</span
+                                        >
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div
+                        v-else-if="mobilePanelTab === 'map'"
                         class="flex-1 flex flex-col overflow-hidden"
                     >
                         <div class="flex-1 p-4">
