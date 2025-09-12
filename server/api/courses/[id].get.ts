@@ -8,7 +8,7 @@ import { auth } from "~/utils/auth";
  *
  * Behaviors:
  * - Authenticated (member) request:
- *    * Returns full member course (including originalFileName/content) + role + embedded waypoints.
+ *    * Returns full member course (including originalFileName; original file content is not returned) + role + embedded waypoints.
  *    * mode = "member"
  * - Unauthenticated (guest) request:
  *    * If course.shareEnabled = true => returns sanitized public projection (no userId, no original file fields, no provenance).
@@ -84,7 +84,6 @@ export default defineEventHandler(async (event) => {
           name: courses.name,
           description: courses.description,
           originalFileName: courses.originalFileName,
-          originalFileContent: courses.originalFileContent,
           fileType: courses.fileType,
           geoJsonData: courses.geoJsonData,
           totalDistance: courses.totalDistance,

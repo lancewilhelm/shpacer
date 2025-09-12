@@ -40,49 +40,49 @@ const userSettingsStore = useUserSettingsStore();
 const uiStore = useUiStore();
 
 // Fetch course data
-const {
-    data: courseData,
-    pending,
-    error,
-    refresh,
-} = await useFetch<{
-    mode: "member" | "public";
-    capabilities: {
-        canEditCourse: boolean;
-        canDeleteCourse: boolean;
-        canTogglePublic: boolean;
-        canToggleShare: boolean;
-        canManagePlans: boolean;
-        canViewPlans: boolean;
-        canEditWaypoints: boolean;
-        canMutateNotes: boolean;
-        canClone: boolean;
-        canDownloadOriginal: boolean;
-        canSeeRawFileName: boolean;
-    };
-    course: (SelectCourse & { role?: string }) | null;
-}>(`/api/courses/${courseId}`);
+// Fetch course and plans in parallel (avoid SSR waterfall)
+const [courseResp, plansResp] = await Promise.all([
+    useFetch<{
+        mode: "member" | "public";
+        capabilities: {
+            canEditCourse: boolean;
+            canDeleteCourse: boolean;
+            canTogglePublic: boolean;
+            canToggleShare: boolean;
+            canManagePlans: boolean;
+            canViewPlans: boolean;
+            canEditWaypoints: boolean;
+            canMutateNotes: boolean;
+            canClone: boolean;
+            canDownloadOriginal: boolean;
+            canSeeRawFileName: boolean;
+        };
+        course: (SelectCourse & { role?: string }) | null;
+    }>(`/api/courses/${courseId}`),
+    useFetch<{ plans: SelectPlan[] }>(`/api/courses/${courseId}/plans`, {
+        default: () => ({ plans: [] }),
+        onResponseError(ctx) {
+            // Public (unauthenticated) mode will 401 here; swallow & leave plans empty.
+            if (ctx.response.status === 401) {
+                ctx.error = null as unknown as never;
+            }
+        },
+    }),
+]);
+
+const { data: courseData, pending, error, refresh } = courseResp;
 
 // Waypoints are now embedded in the course response (server/api/courses/[id].get.ts)
 // Legacy waypoint fetch removed. Use `course.waypoints` directly.
 // Provide a no-op refreshWaypoints for existing handlers; call `refresh()` to refetch.
 const refreshWaypoints = () => {};
 
-// Fetch plans data
 const {
     data: plansData,
     pending: _plansPending,
     error: _plansError,
     refresh: refreshPlans,
-} = await useFetch<{ plans: SelectPlan[] }>(`/api/courses/${courseId}/plans`, {
-    default: () => ({ plans: [] }),
-    onResponseError(ctx) {
-        // Public (unauthenticated) mode will 401 here; swallow & leave plans empty.
-        if (ctx.response.status === 401) {
-            ctx.error = null as unknown as never;
-        }
-    },
-});
+} = plansResp;
 
 // Plans state
 const plans = computed(() => plansData.value?.plans || []);
