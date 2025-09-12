@@ -1764,7 +1764,7 @@ onUnmounted(() => {
                             <div class="h-full p-2">
                                 <ElevationPaceChart
                                     :geo-json-data="geoJsonData"
-                                    :height="200"
+                                    :height="Math.max(0, chartPanelHeight - 16)"
                                     :map-hover-distance="mapHoverDistance"
                                     :selected-waypoint-distance="
                                         waypointPanelTab === 'waypoints'
