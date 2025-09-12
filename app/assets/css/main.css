@@ -1,24 +1,15 @@
 @import "tailwindcss";
 
-/* Safelist critical responsive display utilities for Tailwind v4 */
-@layer utilities {
-    .tw-sf-hidden {
-        @apply hidden;
+/* Fallback responsive display utilities to ensure md: variants exist even if Tailwind misses them */
+@media (min-width: 48rem) {
+    .md\:flex {
+        display: flex !important;
     }
-    .tw-sf-block {
-        @apply block;
+    .md\:block {
+        display: block !important;
     }
-    .tw-sf-flex {
-        @apply flex;
-    }
-    .tw-sf-md-hidden {
-        @apply md:hidden;
-    }
-    .tw-sf-md-block {
-        @apply md:block;
-    }
-    .tw-sf-md-flex {
-        @apply md:flex;
+    .md\:hidden {
+        display: none !important;
     }
 }
 
