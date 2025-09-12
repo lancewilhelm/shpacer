@@ -217,7 +217,7 @@ onBeforeUnmount(() => {
 <template>
     <div ref="popupRef" class="relative">
         <button
-            class="flex items-center gap-2 px-3 py-2 border border-(--main-color) text-(--main-color) rounded-sm hover:bg-(--main-color) hover:text-(--bg-color) transition-colors text-sm font-medium focus-outline"
+            class="flex items-center gap-2 px-2 py-1 md:px-3 md:py-2 border border-(--main-color) text-(--main-color) rounded-sm hover:bg-(--main-color) hover:text-(--bg-color) transition-colors text-xs md:text-sm font-medium focus-outline"
             @click.stop.prevent="popupVisible = !popupVisible"
             @keydown.enter.prevent="popupVisible = !popupVisible"
             @keydown.esc.stop.prevent="popupVisible = false"
@@ -227,7 +227,7 @@ onBeforeUnmount(() => {
             <Icon
                 name="lucide:chevron-up"
                 :class="[
-                    'h-4 w-4 scale-150 transition-transform',
+                    'h-3 w-3 md:h-4 md:w-4 transition-transform',
                     popupVisible ? 'rotate-0' : 'rotate-180',
                 ]"
             />
@@ -236,7 +236,7 @@ onBeforeUnmount(() => {
         <!-- Dropdown -->
         <div
             v-if="popupVisible"
-            class="absolute top-full mb-2 mt-2 right-0 bg-(--bg-color) border border-(--sub-color) rounded-lg shadow-lg min-w-max max-h-80 z-50 overflow-y-auto"
+            class="absolute top-full mb-2 mt-2 left-0 md:left-auto md:right-0 bg-(--bg-color) border border-(--sub-color) rounded-lg shadow-lg min-w-max max-w-[90vw] max-h-80 z-50 overflow-y-auto"
         >
             <div class="p-2">
                 <div

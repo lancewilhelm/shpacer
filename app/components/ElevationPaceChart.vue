@@ -107,7 +107,7 @@ const AXIS_MARGIN_LEFT = 60;
 const AXIS_MARGIN_RIGHT = 20;
 
 // Elevation chart margins
-const ELEVATION_MARGIN_TOP = 30;
+const ELEVATION_MARGIN_TOP = 20;
 const ELEVATION_MARGIN_BOTTOM = 20;
 
 // Pace chart margins
@@ -500,7 +500,9 @@ function initChart() {
     // Reduce bottom margin when pace chart is actually shown
     const margin = ELEVATION_CHART_MARGIN; // Increased top margin for waypoint circles
     const innerWidth = width - margin.left - margin.right;
-    const innerHeight = height - margin.top - margin.bottom;
+    const mobileFactor =
+        window.innerWidth < 768 && !props.showPaceChart ? 35 : 0;
+    const innerHeight = height - margin.top - margin.bottom - mobileFactor;
 
     // Create SVG
     svg = d3
@@ -612,12 +614,26 @@ function initChart() {
 
     // Show x-axis when pace chart is not actually displayed
     if (!(props.showPaceChart && hasPaceData.value)) {
-        g.append("g")
+        const xAxisG = g
+            .append("g")
+            .attr("class", "x-axis")
             .attr("transform", `translate(0,${innerHeight})`)
-            .call(xAxis)
+            .call(xAxis);
+
+        xAxisG
             .selectAll("text")
             .style("fill", "var(--sub-color)")
             .style("font-size", "12px");
+
+        if (
+            typeof window !== "undefined" &&
+            window.matchMedia("(max-width: 767px)").matches
+        ) {
+            xAxisG
+                .selectAll("text")
+                .attr("transform", "rotate(-45)")
+                .style("text-anchor", "end");
+        }
     }
 
     g.append("g")
@@ -903,7 +919,9 @@ function initPaceChart() {
 
     const margin = PACE_CHART_MARGIN;
     const innerWidth = width - margin.left - margin.right;
-    const innerHeight = height - margin.top - margin.bottom;
+    const mobileFactor =
+        window.innerWidth < 768 && props.showPaceChart ? 25 : 0;
+    const innerHeight = height - margin.top - margin.bottom - mobileFactor;
 
     // Create SVG
     paceSvg = d3
@@ -988,30 +1006,40 @@ function initPaceChart() {
         .style("pointer-events", "none");
 
     // Create axes
-    const xAxis = d3
-        .axisBottom(paceXScale)
-        .tickFormat((d) =>
-            formatDistance(
-                d as number,
-                typeof (
-                    userSettingsStore as unknown as {
-                        getDistanceUnitForCourse?: unknown;
-                    }
-                )?.getDistanceUnitForCourse === "function"
-                    ? userSettingsStore.getDistanceUnitForCourse()
-                    : "miles",
-            ),
-        );
+    const xAxis = d3.axisBottom(paceXScale).tickFormat((d) =>
+        formatDistance(
+            d as number,
+            typeof (
+                userSettingsStore as unknown as {
+                    getDistanceUnitForCourse?: unknown;
+                }
+            )?.getDistanceUnitForCourse === "function"
+                ? userSettingsStore.getDistanceUnitForCourse()
+                : "miles",
+        ),
+    );
 
     const yAxis = d3
         .axisLeft(paceYScale)
         .tickFormat((d) => formatPace(d as number));
 
-    g.append("g")
+    const paceXAxisG = g
+        .append("g")
+        .attr("class", "x-axis")
         .attr("transform", `translate(0,${innerHeight})`)
-        .call(xAxis)
-        .selectAll("text")
-        .style("fill", "var(--sub-color)");
+        .call(xAxis);
+
+    paceXAxisG.selectAll("text").style("fill", "var(--sub-color)");
+
+    if (
+        typeof window !== "undefined" &&
+        window.matchMedia("(max-width: 767px)").matches
+    ) {
+        paceXAxisG
+            .selectAll("text")
+            .attr("transform", "rotate(-45)")
+            .style("text-anchor", "end");
+    }
 
     g.append("g")
         .call(yAxis)

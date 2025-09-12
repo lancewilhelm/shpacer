@@ -647,22 +647,44 @@ function clampChartHeight(h: number) {
 }
 
 // Start resizing the chart panel
-function startChartResize(event: MouseEvent) {
+function startChartResize(event: MouseEvent | TouchEvent) {
     chartIsResizing.value = true;
-    chartResizeStartY.value = event.clientY;
+
+    const clientY =
+        (event as TouchEvent)?.touches && (event as TouchEvent).touches.length
+            ? (event as TouchEvent).touches[0]!.clientY
+            : (event as MouseEvent).clientY;
+
+    chartResizeStartY.value = clientY;
     chartResizeStartHeight.value = chartPanelHeight.value;
 
-    document.addEventListener("mousemove", handleChartResize);
-    document.addEventListener("mouseup", stopChartResize);
+    document.addEventListener("mousemove", handleChartResize as EventListener);
+    document.addEventListener("mouseup", stopChartResize as EventListener);
+    document.addEventListener("touchmove", handleChartResize as EventListener, {
+        passive: false,
+    });
+    document.addEventListener("touchend", stopChartResize as EventListener, {
+        passive: false,
+    });
+
     document.body.style.cursor = "row-resize";
     document.body.style.userSelect = "none";
 }
 
 // Handle chart panel resize
-function handleChartResize(event: MouseEvent) {
+function handleChartResize(event: MouseEvent | TouchEvent) {
     if (!chartIsResizing.value) return;
 
-    const deltaY = event.clientY - chartResizeStartY.value; // dragging down increases height
+    if ("preventDefault" in event) {
+        event.preventDefault();
+    }
+
+    const clientY =
+        (event as TouchEvent)?.touches && (event as TouchEvent).touches.length
+            ? (event as TouchEvent).touches[0]!.clientY
+            : (event as MouseEvent).clientY;
+
+    const deltaY = clientY - chartResizeStartY.value; // dragging down increases height
     const next = clampChartHeight(chartResizeStartHeight.value + deltaY);
     chartPanelHeight.value = next;
 }
@@ -670,8 +692,16 @@ function handleChartResize(event: MouseEvent) {
 // Stop resizing the chart panel
 function stopChartResize() {
     chartIsResizing.value = false;
-    document.removeEventListener("mousemove", handleChartResize);
-    document.removeEventListener("mouseup", stopChartResize);
+    document.removeEventListener(
+        "mousemove",
+        handleChartResize as EventListener,
+    );
+    document.removeEventListener("mouseup", stopChartResize as EventListener);
+    document.removeEventListener(
+        "touchmove",
+        handleChartResize as EventListener,
+    );
+    document.removeEventListener("touchend", stopChartResize as EventListener);
     document.body.style.cursor = "";
     document.body.style.userSelect = "";
 }
@@ -1057,6 +1087,7 @@ function handleMapLeave() {
 // Waypoint interaction state
 const selectedWaypoint = ref<Waypoint | null>(null);
 const waypointPanelTab = ref<"waypoints" | "splits">("waypoints");
+const mobilePanelTab = ref<"course" | "waypoints" | "splits">("course");
 
 // Handle waypoint events
 function handleWaypointSelect(waypoint: Waypoint) {
@@ -1415,19 +1446,16 @@ onUnmounted(() => {
 
             <div v-else-if="course" class="flex flex-col h-full">
                 <!-- Header Section -->
-                <div class="p-4 border-b border-(--sub-color) bg-(--bg-color)">
-                    <NuxtLink
-                        to="/courses"
-                        class="text-(--sub-color) hover:text-(--main-color) transition-colors rounded flex items-center w-min mb-4"
+                <div
+                    class="pb-2 pt-0 px-2 md:px-4 md:p-2 border-b border-(--sub-color) bg-(--bg-color)"
+                >
+                    <div
+                        class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-1"
                     >
-                        <Icon
-                            name="lucide:arrow-left"
-                            class="h-5 w-5 scale-150"
-                        />
-                    </NuxtLink>
-                    <div class="flex items-center justify-between gap-4 mb-4">
                         <div class="flex-1">
-                            <h1 class="text-2xl font-bold text-(--main-color)">
+                            <div
+                                class="text-2xl md:text-4xl font-bold text-(--main-color)"
+                            >
                                 <span class="inline-flex items-center gap-2">
                                     <span>{{ course.name }}</span>
                                     <Icon
@@ -1441,17 +1469,19 @@ onUnmounted(() => {
                                                 ? 'lucide:globe'
                                                 : 'lucide:lock'
                                         "
-                                        class="h-4 w-4 scale-90 text-(--sub-color)"
+                                        class="h-4 w-4 scale-70 text-(--sub-color)"
                                     />
                                 </span>
-                            </h1>
+                            </div>
                             <div v-if="course.description" class="mt-2">
                                 <p class="text-(--sub-color)">
                                     {{ course.description }}
                                 </p>
                             </div>
                         </div>
-                        <div class="flex items-center gap-2">
+                        <div
+                            class="flex items-center gap-2 flex-wrap justify-start md:justify-end mt-1 md:mt-0 w-full md:w-auto"
+                        >
                             <PlanSelector
                                 v-if="
                                     mode === 'member' &&
@@ -1677,7 +1707,199 @@ onUnmounted(() => {
                 </div>
 
                 <!-- Content Section -->
-                <div class="flex-1 flex overflow-hidden">
+                <!-- Mobile tabs -->
+                <div
+                    class="md:hidden flex flex-col gap-2 border-b border-(--sub-color)"
+                >
+                    <div class="flex items-center">
+                        <button
+                            class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
+                            :class="{
+                                'bg-(--main-color) text-(--bg-color)':
+                                    mobilePanelTab === 'course',
+                                'text-(--sub-color) hover:text-(--main-color)':
+                                    mobilePanelTab !== 'course',
+                            }"
+                            @click="mobilePanelTab = 'course'"
+                        >
+                            Course
+                        </button>
+                        <button
+                            class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
+                            :class="{
+                                'bg-(--main-color) text-(--bg-color)':
+                                    mobilePanelTab === 'waypoints',
+                                'text-(--sub-color) hover:text-(--main-color)':
+                                    mobilePanelTab !== 'waypoints',
+                            }"
+                            @click="mobilePanelTab = 'waypoints'"
+                        >
+                            Waypoints
+                        </button>
+                        <button
+                            class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
+                            :class="{
+                                'bg-(--main-color) text-(--bg-color)':
+                                    mobilePanelTab === 'splits',
+                                'text-(--sub-color) hover:text-(--main-color)':
+                                    mobilePanelTab !== 'splits',
+                            }"
+                            @click="mobilePanelTab = 'splits'"
+                        >
+                            Splits
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Mobile panels -->
+                <div class="md:hidden flex-1 flex flex-col overflow-hidden">
+                    <div
+                        v-if="mobilePanelTab === 'course'"
+                        class="flex-1 flex flex-col overflow-hidden"
+                    >
+                        <div
+                            class="border-b border-(--sub-color) relative overflow-hidden"
+                            :style="{ height: `${chartPanelHeight}px` }"
+                        >
+                            <div class="h-full p-2">
+                                <ElevationPaceChart
+                                    :geo-json-data="geoJsonData"
+                                    :height="200"
+                                    :map-hover-distance="mapHoverDistance"
+                                    :selected-waypoint-distance="
+                                        waypointPanelTab === 'waypoints'
+                                            ? selectedWaypoint?.distance || null
+                                            : null
+                                    "
+                                    :waypoints="displayWaypoints"
+                                    :plan="currentPlan"
+                                    :show-pace-chart="!!currentPlan"
+                                    @elevation-hover="handleElevationHover"
+                                    @elevation-leave="handleElevationLeave"
+                                    @pace-hover="handlePaceHover"
+                                    @pace-leave="handlePaceLeave"
+                                    @waypoint-click="
+                                        handleElevationWaypointClick
+                                    "
+                                />
+                                <div
+                                    class="absolute left-0 bottom-0 w-full h-1 cursor-row-resize transition-all duration-200 z-10 hover:h-[3px] hover:bg-(--main-color)"
+                                    :class="{
+                                        'h-2 bg-(--main-color)':
+                                            chartIsResizing,
+                                        'bg-transparent hover:bg-(--main-color)':
+                                            !chartIsResizing,
+                                    }"
+                                    @mousedown="startChartResize"
+                                    @touchstart.stop.prevent="startChartResize"
+                                />
+                            </div>
+                        </div>
+                        <div class="flex-1 p-4">
+                            <div class="h-full rounded-lg overflow-hidden">
+                                <ClientOnly>
+                                    <LeafletMap
+                                        :key="mapResetKey"
+                                        :geo-json-data="geoJsonData"
+                                        :waypoints="displayWaypoints"
+                                        :display-markers-as-splits="
+                                            waypointPanelTab === 'splits'
+                                        "
+                                        :selected-waypoint="selectedWaypoint"
+                                        :elevation-hover-point="
+                                            elevationHoverPoint
+                                        "
+                                        :highlight-segment="
+                                            stableHighlightSegment
+                                        "
+                                        highlight-color="#ff0000"
+                                        :fit-highlight="
+                                            waypointPanelTab === 'splits' &&
+                                            !!splitHighlight
+                                        "
+                                        @map-hover="handleMapHover"
+                                        @map-leave="handleMapLeave"
+                                        @waypoint-click="handleWaypointClick"
+                                    />
+                                    <template #fallback>
+                                        <div
+                                            class="w-full h-full bg-(--sub-alt-color) rounded-lg flex items-center justify-center"
+                                        >
+                                            <div class="text-center">
+                                                <Icon
+                                                    name="svg-spinners:6-dots-scale"
+                                                    class="text-(--main-color) scale-200 mb-2"
+                                                />
+                                                <p class="text-(--sub-color)">
+                                                    Loading map...
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </ClientOnly>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div
+                        v-else-if="mobilePanelTab === 'waypoints'"
+                        class="flex-1 overflow-hidden"
+                    >
+                        <WaypointList
+                            :read-only="
+                                mode === 'public' ||
+                                !capabilities.canEditWaypoints
+                            "
+                            :waypoints="waypoints"
+                            :selected-waypoint="selectedWaypoint"
+                            :current-plan-id="currentPlanId"
+                            :current-plan="currentPlan"
+                            :waypoint-stoppage-times="waypointStoppageTimes"
+                            :get-waypoint-note="getWaypointNote"
+                            :get-waypoint-stoppage-time="
+                                getWaypointStoppageTime
+                            "
+                            :get-default-stoppage-time="getDefaultStoppageTime"
+                            :geo-json-data="geoJsonData"
+                            @waypoint-select="handleWaypointSelect"
+                            @waypoint-hover="handleWaypointHover"
+                            @waypoint-leave="handleWaypointLeave"
+                            @save-waypoint-note="saveWaypointNote"
+                            @delete-waypoint-note="deleteWaypointNote"
+                            @save-waypoint-stoppage-time="
+                                saveWaypointStoppageTime
+                            "
+                            @delete-waypoint-stoppage-time="
+                                deleteWaypointStoppageTime
+                            "
+                        />
+                    </div>
+
+                    <div v-else class="flex-1 overflow-hidden">
+                        <SplitsTable
+                            :read-only="mode === 'public'"
+                            :geo-json-data="geoJsonData"
+                            :current-plan="currentPlan"
+                            :waypoints="
+                                waypoints.map((w) => ({
+                                    id: w.id,
+                                    distance: w.distance,
+                                    order: w.order,
+                                }))
+                            "
+                            :waypoint-stoppage-times="waypointStoppageTimes"
+                            :get-default-stoppage-time="getDefaultStoppageTime"
+                            :selected-split-index="selectedSplitIndex"
+                            :selected-split-range="selectedSplitRange"
+                            @split-click="handleSplitClick"
+                            @split-range-click="handleSplitRangeClick"
+                            @split-cancel="handleSplitCancel"
+                        />
+                    </div>
+                </div>
+
+                <!-- Desktop layout -->
+                <div class="hidden md:flex md:flex-1 md:overflow-hidden">
                     <!-- Left Panel: Charts and Map -->
                     <div class="flex-1 flex flex-col overflow-hidden">
                         <!-- Combined Charts Section -->
@@ -1715,6 +1937,7 @@ onUnmounted(() => {
                                             !chartIsResizing,
                                     }"
                                     @mousedown="startChartResize"
+                                    @touchstart.stop.prevent="startChartResize"
                                 />
                             </div>
                         </div>
@@ -1782,7 +2005,9 @@ onUnmounted(() => {
                             @mousedown="startResize"
                         />
 
-                        <div class="border-b border-(--sub-color)">
+                        <div
+                            class="hidden md:block border-b border-(--sub-color)"
+                        >
                             <div class="flex items-center">
                                 <button
                                     class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"

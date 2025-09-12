@@ -101,17 +101,20 @@ onBeforeUnmount(() => {
         <!-- Plan Selector Dropdown -->
         <div ref="dropdownRef" class="relative">
             <button
-                class="flex items-center gap-2 px-3 py-2 border border-(--main-color) text-(--main-color) rounded-sm hover:bg-(--main-color) hover:text-(--bg-color) transition-colors text-sm font-medium"
+                class="flex items-center gap-2 px-2 py-1 md:px-3 md:py-2 border border-(--main-color) text-(--main-color) rounded-sm hover:bg-(--main-color) hover:text-(--bg-color) transition-colors text-xs md:text-sm font-medium"
                 @click="dropdownOpen = !dropdownOpen"
             >
-                <Icon name="lucide:clipboard-list" class="h-4 w-4 scale-125" />
+                <Icon
+                    name="lucide:clipboard-list"
+                    class="h-3 w-3 md:h-4 md:w-4"
+                />
                 <span class="font-medium">
                     {{ currentPlan ? currentPlan.name : "Select Plan" }}
                 </span>
                 <Icon
                     name="lucide:chevron-down"
                     :class="[
-                        'h-4 w-4 transition-transform scale-150',
+                        'h-3 w-3 md:h-4 md:w-4 transition-transform',
                         dropdownOpen ? 'rotate-180' : 'rotate-0',
                     ]"
                 />
@@ -120,7 +123,7 @@ onBeforeUnmount(() => {
             <!-- Dropdown Menu -->
             <div
                 v-if="dropdownOpen"
-                class="absolute top-full mt-1 right-0 bg-(--bg-color) border border-(--sub-color) rounded-lg shadow-lg min-w-64 max-h-80 z-50 overflow-y-auto"
+                class="absolute top-full mt-1 left-0 md:left-auto md:right-0 bg-(--bg-color) border border-(--sub-color) rounded-lg shadow-lg min-w-56 md:min-w-64 max-w-[90vw] max-h-80 z-50 overflow-y-auto"
             >
                 <div class="p-2 space-y-1">
                     <!-- No Plan Option -->
