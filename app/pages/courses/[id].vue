@@ -1685,7 +1685,7 @@ onUnmounted(() => {
                                     class="flex items-center gap-2 text-(--main-color)"
                                 >
                                     <Icon
-                                        name="lucide:sliders"
+                                        name="lucide:notebook-pen"
                                         class="h-5 w-5 scale-150 -translate-y-0.5"
                                     />
                                     <div class="flex flex-col">
@@ -1950,7 +1950,7 @@ onUnmounted(() => {
                                     class="flex items-center gap-2"
                                 >
                                     <Icon
-                                        name="lucide:sliders"
+                                        name="lucide:notebook-pen"
                                         class="h-5 w-5"
                                     />
                                     <div class="flex flex-col">
