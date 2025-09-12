@@ -28,6 +28,8 @@ interface Props {
     creationMode?: boolean;
     plan?: SelectPlan | null;
     showPaceChart?: boolean;
+    highlightSegment?: { start: number; end: number } | null;
+    highlightColor?: string;
 }
 
 interface ElevationHoverEvent {
@@ -54,6 +56,8 @@ const props = withDefaults(defineProps<Props>(), {
     creationMode: false,
     plan: null,
     showPaceChart: true,
+    highlightSegment: null,
+    highlightColor: "#ff0000",
 });
 
 const emit = defineEmits<{
@@ -188,6 +192,20 @@ let paceSyncCrosshair: d3.Selection<
     null,
     undefined
 > | null = null;
+
+watch(
+    () => [props.highlightSegment, props.highlightColor],
+    () => {
+        // Reinitialize charts to reflect new highlight segment/color
+        if (chartContainer.value) {
+            initChart();
+        }
+        if (props.showPaceChart && paceChartContainer.value) {
+            initPaceChart();
+        }
+    },
+    { deep: true },
+);
 
 // Computed properties
 const hasElevationData = computed(() => {
@@ -674,6 +692,31 @@ function initChart() {
         .style("stroke-width", 0.5)
         .style("opacity", 0.1);
 
+    // Highlight selected elevation segment (if provided)
+    if (props.highlightSegment && xScale) {
+        const segStart = Math.max(
+            0,
+            Math.min(stats.totalDistance, props.highlightSegment.start),
+        );
+        const segEnd = Math.max(
+            segStart,
+            Math.min(stats.totalDistance, props.highlightSegment.end),
+        );
+        const x1 = xScale(segStart);
+        const x2 = xScale(segEnd);
+        if (x2 > x1) {
+            g.append("rect")
+                .attr("class", "elevation-highlight-segment")
+                .attr("x", x1)
+                .attr("y", 0)
+                .attr("width", x2 - x1)
+                .attr("height", innerHeight)
+                .style("fill", props.highlightColor || "#ff0000")
+                .style("opacity", 0.15)
+                .style("pointer-events", "none");
+        }
+    }
+
     // Add crosshair line (initially hidden)
     crosshair = g
         .append("line")
@@ -945,6 +988,33 @@ function initPaceChart() {
         .scaleLinear()
         .domain([paceRange.value.min * 0.95, paceRange.value.max * 1.05])
         .range([innerHeight, 0]);
+
+    // Highlight selected pace segment (if provided)
+    if (props.highlightSegment && paceXScale) {
+        const segStart = Math.max(
+            0,
+            Math.min(totalDistance.value, props.highlightSegment.start),
+        );
+        const segEnd = Math.max(
+            segStart,
+            Math.min(totalDistance.value, props.highlightSegment.end),
+        );
+        const px1 = paceXScale(segStart);
+        const px2 = paceXScale(segEnd);
+        if (px2 > px1) {
+            // Assume the primary pace chart group is the last appended group
+            const pg = paceSvg!.select("g");
+            pg.append("rect")
+                .attr("class", "pace-highlight-segment")
+                .attr("x", px1)
+                .attr("y", 0)
+                .attr("width", px2 - px1)
+                .attr("height", innerHeight)
+                .style("fill", props.highlightColor || "#ff0000")
+                .style("opacity", 0.15)
+                .style("pointer-events", "none");
+        }
+    }
 
     // Create line generator for actual pace
     const actualPaceLine = d3
