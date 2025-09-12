@@ -827,7 +827,7 @@ const splitWaypoints = computed<Waypoint[]>(() => {
     const total = totalCourseDistanceMeters.value;
     if (!pts.length || total <= 0) return [];
 
-    const isMiles = userSettingsStore.settings.units.distance === "miles";
+    const isMiles = distanceUnit.value === "miles";
     const unitMeters = isMiles ? 1609.344 : 1000;
 
     const result: Waypoint[] = [];
@@ -2099,6 +2099,7 @@ onUnmounted(() => {
                             :read-only="mode === 'public'"
                             :geo-json-data="geoJsonData"
                             :current-plan="currentPlan"
+                            :course-defaults="course || null"
                             :waypoints="
                                 waypoints.map((w) => ({
                                     id: w.id,
@@ -2297,6 +2298,7 @@ onUnmounted(() => {
                                     :read-only="mode === 'public'"
                                     :geo-json-data="geoJsonData"
                                     :current-plan="currentPlan"
+                                    :course-defaults="course || null"
                                     :waypoints="
                                         waypoints.map((w) => ({
                                             id: w.id,

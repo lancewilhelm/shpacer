@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { getDistanceUnitSSR, getElevationUnitSSR } from "~/utils/units";
+import type { CourseUnitDefaults } from "~/utils/units";
 import { computed, toRefs, ref } from "vue";
 import { useUserSettingsStore } from "~/stores/userSettings";
 import type { SelectPlan } from "~/utils/db/schema";
@@ -23,6 +24,7 @@ interface Props {
     selectedSplitIndex?: number | null;
     selectedSplitRange?: { startIndex: number; endIndex: number } | null;
     readOnly?: boolean;
+    courseDefaults?: Partial<CourseUnitDefaults> | null;
 }
 
 const _props = withDefaults(defineProps<Props>(), {
@@ -34,6 +36,7 @@ const _props = withDefaults(defineProps<Props>(), {
     selectedSplitIndex: null,
     selectedSplitRange: null,
     readOnly: false,
+    courseDefaults: null,
 });
 const {
     geoJsonData,
@@ -43,6 +46,7 @@ const {
     getDefaultStoppageTime,
     selectedSplitIndex,
     selectedSplitRange,
+    courseDefaults,
 } = toRefs(_props);
 
 const emit = defineEmits<{
@@ -59,7 +63,10 @@ const emit = defineEmits<{
 }>();
 const userSettingsStore = useUserSettingsStore();
 const distanceUnit = computed<DistanceUnit>(
-    () => getDistanceUnitSSR() as DistanceUnit,
+    () =>
+        getDistanceUnitSSR(
+            (courseDefaults?.value || undefined) as Partial<CourseUnitDefaults>,
+        ) as DistanceUnit,
 );
 
 // Per-course smoothing (defaults when courseId unknown)
@@ -583,16 +590,6 @@ function onRowClick(row: SplitRow, e: MouseEvent) {
 
 <template>
     <div class="h-full w-full overflow-hidden flex flex-col">
-        <div class="px-3 py-2 border-b border-(--sub-color)">
-            <div class="text-(--main-color) font-semibold">
-                {{
-                    distanceUnit === "miles"
-                        ? "Mile Splits"
-                        : "Kilometer Splits"
-                }}
-            </div>
-        </div>
-
         <div class="flex-1 overflow-auto">
             <table class="min-w-full text-sm whitespace-nowrap">
                 <thead
