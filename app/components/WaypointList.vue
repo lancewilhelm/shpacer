@@ -677,7 +677,7 @@ function getSegmentGradeDisplay(waypointId: string): string {
                                                 class="flex items-center gap-1"
                                             >
                                                 <Icon
-                                                    name="lucide:activity"
+                                                    name="lucide:timer"
                                                     class="w-3 h-3 -translate-y-0.25"
                                                 />
                                                 <span>{{

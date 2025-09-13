@@ -124,7 +124,7 @@ const PACE_MARGIN_TOP = 10;
 const PACE_MARGIN_BOTTOM = 20;
 
 // Tooltip padding relative to chart
-const TOOLTIP_MARGIN_TOP = 20;
+const TOOLTIP_MARGIN_TOP = 10;
 
 // Consolidated margin objects
 const ELEVATION_CHART_MARGIN = {
@@ -364,6 +364,7 @@ const paceRange = computed(() => {
 });
 
 // Format pace for display (converts seconds per mile/km to MM:SS format)
+
 function formatPace(paceInSeconds: number): string {
     const totalSeconds = Math.round(paceInSeconds);
     const minutes = Math.floor(totalSeconds / 60);
@@ -1888,6 +1889,171 @@ onUnmounted(() => {
         paceResizeObserver = null;
     }
 });
+// Local formatter for HH:MM:SS
+function formatElapsedTimeLocal(totalSeconds: number): string {
+    const secs = Math.max(0, Math.round(totalSeconds));
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s
+        .toString()
+        .padStart(2, "0")}`;
+}
+
+// Precompute elapsed travel and stoppage for tooltip (fast lookup on hover)
+const elapsedPrecompute = computed(() => {
+    if (
+        !hasPaceData.value ||
+        actualPaceData.value.length === 0 ||
+        !props.plan
+    ) {
+        return null;
+    }
+
+    const n = actualPaceData.value.length;
+    if (n === 0) return null;
+
+    // Distances and pace-per-meter
+    const dist: number[] = actualPaceData.value.map((d) => d.distance);
+    const unitMeters =
+        (props.plan.paceUnit || "min_per_km") === "min_per_mi"
+            ? 1609.344
+            : 1000;
+    const ppm: number[] = actualPaceData.value.map(
+        (d) => d.actualPace / unitMeters,
+    );
+
+    // Cumulative travel (trapezoidal integration in distance-space)
+    const cumTravel: number[] = new Array(n).fill(0);
+    for (let i = 1; i < n; i++) {
+        const dL = Math.max(0, dist[i]! - dist[i - 1]!);
+        const f0 = ppm[i - 1]!;
+        const f1 = ppm[i]!;
+        cumTravel[i] = cumTravel[i - 1]! + dL * 0.5 * (f0 + f1);
+    }
+
+    // Default stoppage at intermediate waypoints (start/finish excluded)
+    const wps = (props.waypoints || [])
+        .slice()
+        .sort((a, b) => a.order - b.order);
+    const maxOrder = wps.length ? Math.max(...wps.map((w) => w.order)) : 0;
+    const defaultStop =
+        typeof props.plan.defaultStoppageTime === "number"
+            ? props.plan.defaultStoppageTime
+            : 0;
+
+    const stopDistances: number[] = [];
+    const stopCum: number[] = [];
+    let accum = 0;
+    if (defaultStop > 0 && wps.length > 0) {
+        for (const wp of wps) {
+            if (!wp) continue;
+            if (wp.order === 0) continue; // start
+            if (wp.order === maxOrder && wp.order > 0) continue; // finish
+            accum += defaultStop;
+            stopDistances.push(wp.distance);
+            stopCum.push(accum);
+        }
+    }
+
+    // In plan mode "time", scale travel to match target after stoppage
+    if (
+        (props.plan.paceMode || "pace") === "time" &&
+        typeof props.plan.targetTimeSeconds === "number"
+    ) {
+        const totalStop = stopCum.length ? stopCum[stopCum.length - 1]! : 0;
+        const baseTravel = cumTravel[n - 1] || 0;
+        const desiredTravel = Math.max(
+            0,
+            props.plan.targetTimeSeconds - totalStop,
+        );
+        const scale = baseTravel > 0 ? desiredTravel / baseTravel : 1.0;
+        if (isFinite(scale) && scale > 0) {
+            for (let i = 0; i < n; i++) cumTravel[i] = cumTravel[i]! * scale;
+        }
+    }
+
+    return { dist, cumTravel, stopDistances, stopCum };
+});
+
+// Helper to get elapsed seconds at a given distance
+function getElapsedAtDistance(distance: number): number | null {
+    const pre = elapsedPrecompute.value;
+    if (!pre) return null;
+    const { dist, cumTravel, stopDistances, stopCum } = pre;
+    const n = dist.length;
+
+    // Stoppage up to distance (binary search)
+    const stoppage = (() => {
+        if (!stopDistances.length) return 0;
+        let idx = -1;
+        let lo = 0;
+        let hi = stopDistances.length - 1;
+        while (lo <= hi) {
+            const m = (lo + hi) >> 1;
+            if (stopDistances[m]! <= distance) {
+                idx = m;
+                lo = m + 1;
+            } else {
+                hi = m - 1;
+            }
+        }
+        return idx >= 0 ? stopCum[idx]! : 0;
+    })();
+
+    if (n === 0) return stoppage;
+
+    if (distance <= dist[0]!) {
+        return (cumTravel[0] || 0) + stoppage;
+    }
+    if (distance >= dist[n - 1]!) {
+        return (cumTravel[n - 1] || 0) + stoppage;
+    }
+
+    // Lower bound to bracket distance
+    let lo = 0,
+        hi = n - 1;
+    while (lo + 1 < hi) {
+        const mid = (lo + hi) >> 1;
+        if (dist[mid]! <= distance) lo = mid;
+        else hi = mid;
+    }
+    const d0 = dist[lo]!;
+    const d1 = dist[hi]!;
+    const t0 = cumTravel[lo]!;
+    const t1 = cumTravel[hi]!;
+    const travel =
+        d1 > d0 ? t0 + ((distance - d0) / (d1 - d0)) * (t1 - t0) : t0;
+
+    return travel + stoppage;
+}
+
+// Distance source for tooltip (map hover, waypoint, or chart hover)
+const currentTooltipDistance = computed<number | null>(() => {
+    if (tooltipFromMap.value) {
+        if (
+            props.mapHoverDistance !== null &&
+            props.mapHoverDistance !== undefined
+        ) {
+            return props.mapHoverDistance;
+        }
+        if (
+            props.selectedWaypointDistance !== null &&
+            props.selectedWaypointDistance !== undefined
+        ) {
+            return props.selectedWaypointDistance;
+        }
+    }
+    return chartHoverDistance.value;
+});
+
+// Final formatted elapsed string (no label)
+const tooltipElapsed = computed<string>(() => {
+    const d = currentTooltipDistance.value;
+    if (d === null || d === undefined) return "";
+    const secs = getElapsedAtDistance(d);
+    return secs != null ? formatElapsedTimeLocal(secs) : "";
+});
 </script>
 
 <template>
@@ -1915,11 +2081,45 @@ onUnmounted(() => {
                     'tooltip-from-map': tooltipFromMap,
                 }"
             >
-                <div class="tooltip-distance">{{ tooltipData.distance }}</div>
-                <div class="tooltip-elevation">{{ tooltipData.elevation }}</div>
-                <div class="tooltip-grade">{{ tooltipData.grade }}</div>
+                <div class="tooltip-distance">
+                    <Icon
+                        name="lucide:map-pin"
+                        class="inline h-3 w-3 translate-y-0.5"
+                    />
+                    {{ tooltipData.distance }}
+                </div>
+                <div class="tooltip-elevation">
+                    <Icon
+                        name="lucide:arrow-up"
+                        class="inline h-3 w-3 translate-y-0.5"
+                    />
+                    {{ tooltipData.elevation }}
+                </div>
+                <div class="tooltip-grade">
+                    <Icon
+                        name="lucide:triangle-right"
+                        class="inline h-3 w-3 translate-y-0.5"
+                        :class="
+                            tooltipData.grade.slice(0, 1) === '-'
+                                ? '-scale-x-100'
+                                : ''
+                        "
+                    />
+                    {{ tooltipData.grade }}
+                </div>
                 <div v-if="tooltipData.actualPace" class="tooltip-pace">
+                    <Icon
+                        name="lucide:timer"
+                        class="inline h-3 w-3 translate-y-0.5"
+                    />
                     {{ tooltipData.actualPace }}
+                </div>
+                <div v-if="tooltipElapsed" class="tooltip-elapsed">
+                    <Icon
+                        name="lucide:clock"
+                        class="inline h-3 w-3 translate-y-0.5"
+                    />
+                    {{ tooltipElapsed }}
                 </div>
             </div>
 
@@ -2011,7 +2211,7 @@ onUnmounted(() => {
     background: var(--bg-color);
     border: 1px solid var(--main-color);
     border-radius: 6px;
-    padding: 4px 8px;
+    padding: 2px 4px;
     font-size: 0.75rem;
     pointer-events: none;
     opacity: 0;
@@ -2037,12 +2237,12 @@ onUnmounted(() => {
 }
 
 .tooltip-elevation {
-    color: var(--sub-color);
+    color: var(--main-color);
     font-size: 0.7rem;
 }
 
 .tooltip-grade {
-    color: var(--sub-color);
+    color: var(--main-color);
     font-size: 11px;
     font-weight: 500;
 }
@@ -2053,28 +2253,10 @@ onUnmounted(() => {
     font-weight: 500;
 }
 
-.pace-tooltip {
-    position: absolute;
-    background: var(--bg-color);
-    border: 1px solid var(--main-color);
-    border-radius: 6px;
-    padding: 4px 8px;
-    font-size: 0.75rem;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.2s ease;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    z-index: 10;
-    min-width: 120px;
-}
-
-.pace-tooltip.tooltip-visible {
-    opacity: 0.9;
-}
-
-.pace-tooltip.tooltip-from-map {
-    opacity: 0.8;
-    border-style: dashed;
+.tooltip-elapsed {
+    color: var(--main-color);
+    font-size: 11px;
+    font-weight: 600;
 }
 
 .tooltip-actual-pace {
