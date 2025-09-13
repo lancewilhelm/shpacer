@@ -301,7 +301,6 @@ const globalSettingsStore = useGlobalSettingsStore();
                                                     });
                                                 }
                                             "
-                                            title="Edit user"
                                         >
                                             <Icon
                                                 name="lucide:user-pen"
@@ -326,11 +325,6 @@ const globalSettingsStore = useGlobalSettingsStore();
                                                     }
                                                 }
                                             "
-                                            :title="
-                                                u.banned
-                                                    ? 'Unban user'
-                                                    : 'Ban user'
-                                            "
                                         >
                                             <Icon
                                                 v-if="!u.banned"
@@ -348,7 +342,6 @@ const globalSettingsStore = useGlobalSettingsStore();
                                             @click="
                                                 resetUserPassword(u.id, u.email)
                                             "
-                                            title='Reset password to "password"'
                                         >
                                             <Icon
                                                 name="lucide:key-round"
@@ -367,7 +360,6 @@ const globalSettingsStore = useGlobalSettingsStore();
                                                     });
                                                 }
                                             "
-                                            title="Delete user"
                                         >
                                             <Icon
                                                 name="lucide:trash-2"
