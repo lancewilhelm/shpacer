@@ -90,7 +90,22 @@ const elevationProfile = computed<ElevationPoint[]>(() => {
         type: "FeatureCollection",
         features: geoJsonData.value.flatMap((fc) => fc.features),
     };
-    return extractElevationProfile(combined);
+    const __isDev = import.meta.dev;
+    const __start =
+        __isDev && typeof performance !== "undefined" ? performance.now() : 0;
+    if (__isDev) console.time("SplitsTable: extractElevationProfile");
+    const result = extractElevationProfile(combined);
+    if (__isDev) {
+        console.timeEnd("SplitsTable: extractElevationProfile");
+        console.log("[SplitsTable] elevationProfile computed", {
+            points: result.length,
+            ms:
+                typeof performance !== "undefined"
+                    ? performance.now() - __start
+                    : 0,
+        });
+    }
+    return result;
 });
 
 const totalDistanceMeters = computed<number>(() => {
@@ -270,8 +285,28 @@ const normalizationScale = computed<number>(() => {
               })()
             : totalDist;
 
+    const __isDev = import.meta.dev;
+    const __isClient = typeof window !== "undefined";
+    const __t =
+        __isClient && typeof performance !== "undefined"
+            ? performance.now()
+            : 0;
+    if (__isClient && __isDev) {
+        console.time("SplitsTable: normalizationScale");
+        console.log("[SplitsTable] normalizationScale start", {
+            totalDist,
+            sampleStep,
+            gradeWindow,
+            courseEnd,
+            useGradeAdjustment: useGradeAdjustment.value,
+            strategy: currentPlan.value?.pacingStrategy ?? "flat",
+            linearPercent: currentPlan.value?.pacingLinearPercent ?? 0,
+        });
+    }
+
     let equivalentDistanceSum = 0;
     let pos = 0;
+    let iters = 0;
     while (pos < totalDist) {
         const next = Math.min(pos + sampleStep, totalDist);
         const mid = (pos + next) / 2;
@@ -295,11 +330,39 @@ const normalizationScale = computed<number>(() => {
         const dL = next - pos;
         equivalentDistanceSum += gradeFactor * pacingFactor * dL;
         pos = next;
+        iters++;
     }
 
-    if (equivalentDistanceSum <= 0) return 1.0;
-    return totalDist / equivalentDistanceSum;
+    if (equivalentDistanceSum <= 0) {
+        if (__isClient && __isDev) {
+            console.timeEnd("SplitsTable: normalizationScale");
+            console.log("[SplitsTable] normalizationScale result", {
+                ms:
+                    typeof performance !== "undefined"
+                        ? performance.now() - __t
+                        : 0,
+                scale: 1.0,
+                iterations: iters,
+            });
+        }
+        return 1.0;
+    }
+    const scale = totalDist / equivalentDistanceSum;
+
+    if (__isClient && __isDev) {
+        console.timeEnd("SplitsTable: normalizationScale");
+        console.log("[SplitsTable] normalizationScale result", {
+            ms:
+                typeof performance !== "undefined"
+                    ? performance.now() - __t
+                    : 0,
+            scale,
+            iterations: iters,
+        });
+    }
+    return scale;
 });
+// normalizationScale: removed duplicate leftover block
 
 type SplitRow = {
     index: number; // 1-based
@@ -314,11 +377,29 @@ type SplitRow = {
 };
 
 const splits = computed<SplitRow[]>(() => {
+    const __isClient = typeof window !== "undefined";
+    const __isDev = import.meta.dev;
+    const __tAll =
+        __isClient && typeof performance !== "undefined"
+            ? performance.now()
+            : 0;
+    if (__isClient && __isDev) {
+        console.time("SplitsTable: splits compute");
+    }
+
     const points = elevationProfile.value;
     const total = totalDistanceMeters.value;
     const plan = currentPlan.value;
 
-    if (total <= 0) return [];
+    if (__isClient && __isDev) {
+        console.log("[SplitsTable] splits compute start", { total });
+    }
+
+    if (total <= 0) {
+        if (__isClient && __isDev)
+            console.timeEnd("SplitsTable: splits compute");
+        return [];
+    }
 
     const length = splitLengthMeters.value;
     const boundaries: number[] = [0];
@@ -329,6 +410,12 @@ const splits = computed<SplitRow[]>(() => {
     }
     if (boundaries[boundaries.length - 1] !== total) {
         boundaries.push(total);
+    }
+    if (__isClient && __isDev) {
+        console.log("[SplitsTable] boundaries built", {
+            lengthMeters: length,
+            count: boundaries.length,
+        });
     }
 
     const useGA = !!plan?.pace && points.length >= 2;
@@ -359,8 +446,16 @@ const splits = computed<SplitRow[]>(() => {
     let timeScale = 1;
     if (plan?.pace && basePacePerMeter && courseEnd > 0) {
         if ((plan.paceMode || "pace") === "time" && plan.targetTimeSeconds) {
+            const __tTS =
+                __isClient && typeof performance !== "undefined"
+                    ? performance.now()
+                    : 0;
+            if (__isClient && __isDev) {
+                console.time("SplitsTable: timeScale integrate");
+            }
             let travelBase = 0;
             let tp = 0;
+            let iters = 0;
             while (tp < courseEnd) {
                 const tn = Math.min(tp + sampleStep, courseEnd);
                 const tm = (tp + tn) / 2;
@@ -389,6 +484,7 @@ const splits = computed<SplitRow[]>(() => {
                     basePacePerMeter * gradeFactor * pacingFactor * normScale;
                 travelBase += (tn - tp) * adjPpm;
                 tp = tn;
+                iters++;
             }
             const stoppageTotal = getCumulativeStoppageUntil(courseEnd);
             const desiredTravel = Math.max(
@@ -398,11 +494,31 @@ const splits = computed<SplitRow[]>(() => {
             if (travelBase > 0) {
                 timeScale = desiredTravel / travelBase;
             }
+            if (__isClient && __isDev) {
+                console.timeEnd("SplitsTable: timeScale integrate");
+                console.log("[SplitsTable] timeScale computed", {
+                    ms:
+                        typeof performance !== "undefined"
+                            ? performance.now() - __tTS
+                            : 0,
+                    travelBase,
+                    stoppageTotal,
+                    desiredTravel,
+                    timeScale,
+                    sampleStep,
+                    gradeWindow,
+                    iterations: iters,
+                });
+            }
         }
     }
 
     let cumulativeTravel = 0;
     const rows: SplitRow[] = [];
+    const __tRows =
+        __isClient && typeof performance !== "undefined"
+            ? performance.now()
+            : 0;
     for (let i = 0; i < boundaries.length - 1; i++) {
         const start = boundaries[i]!;
         const end = boundaries[i + 1]!;
@@ -488,6 +604,16 @@ const splits = computed<SplitRow[]>(() => {
                 : null,
         });
     }
+    if (__isClient && __isDev) {
+        console.log("[SplitsTable] rows built", {
+            ms:
+                typeof performance !== "undefined"
+                    ? performance.now() - __tRows
+                    : 0,
+            rows: rows.length,
+            cumulativeTravel,
+        });
+    }
 
     // Back-calculate elapsed times to ensure the last split matches the target total exactly
     if (plan?.pace && rows.length > 0) {
@@ -523,6 +649,32 @@ const splits = computed<SplitRow[]>(() => {
             // Enforce exact last value to avoid tiny floating point drift
             rows[lastIdx]!.elapsedSec = desiredLast;
         }
+
+        if (__isClient && __isDev) {
+            console.log("[SplitsTable] elapsed back-calc", {
+                lastBoundary,
+                stoppageLast,
+                rawLast,
+                desiredLast,
+                extraScale,
+            });
+        }
+    }
+
+    if (__isClient && __isDev) {
+        console.timeEnd("SplitsTable: splits compute");
+        console.log("[SplitsTable] splits compute summary", {
+            total,
+            lengthMeters: length,
+            boundaries: boundaries.length,
+            rows: rows.length,
+            sampleStep,
+            gradeWindow,
+            normScale,
+            useGradeAdjustment: useGradeAdjustment.value,
+            strategy: currentPlan.value?.pacingStrategy ?? "flat",
+            linearPercent: currentPlan.value?.pacingLinearPercent ?? 0,
+        });
     }
 
     return rows;

@@ -8,6 +8,7 @@ import {
 import { auth } from "~/utils/auth";
 import { cloudDb } from "~~/server/utils/db/cloud";
 import { eq, and } from "drizzle-orm";
+import { logger } from "~/utils/logger";
 
 /**
  * Unified Plan Endpoint
@@ -96,6 +97,7 @@ export default defineEventHandler(async (event) => {
     }
 
     // Fetch minimal course context (always needed for display)
+    let startTime = performance.now();
     const [courseRow] = await cloudDb
       .select({
         id: courses.id,
@@ -118,6 +120,9 @@ export default defineEventHandler(async (event) => {
       .from(courses)
       .where(eq(courses.id, rawPlan.courseId))
       .limit(1);
+    logger.debug(
+      `GET /api/plans: Course retrieved from database in ${performance.now() - startTime}ms`,
+    );
 
     if (!courseRow) {
       // If underlying course disappeared
@@ -136,11 +141,15 @@ export default defineEventHandler(async (event) => {
     }
 
     // Fetch waypoints for the course
+    startTime = performance.now();
     const courseWaypoints = await cloudDb
       .select()
       .from(waypoints)
       .where(eq(waypoints.courseId, rawPlan.courseId))
       .orderBy(waypoints.order);
+    logger.debug(
+      `GET /api/plans: Waypoints retrieved from database in ${performance.now() - startTime}ms`,
+    );
 
     const formattedWaypoints = courseWaypoints.map((w) => ({
       id: w.id,
@@ -155,28 +164,10 @@ export default defineEventHandler(async (event) => {
       icon: w.icon,
     }));
 
-    // Helper: derive capabilities
-    function deriveCapabilities(mode: "member" | "public") {
-      if (mode === "public") {
-        return {
-          canEditPlan: false,
-          canDeletePlan: false,
-          canTogglePlanShare: false,
-          canMutateNotes: false,
-          canViewCourse: true,
-        };
-      }
-      return {
-        canEditPlan: true,
-        canDeletePlan: true,
-        canTogglePlanShare: true,
-        canMutateNotes: true,
-        canViewCourse: true,
-      };
-    }
-
     // MEMBER MODE
     if (isOwner) {
+      logger.debug(`GET /api/plans: isOwner`);
+      startTime = performance.now();
       const notes = await cloudDb
         .select()
         .from(waypointNotes)
@@ -186,11 +177,18 @@ export default defineEventHandler(async (event) => {
             eq(waypointNotes.userId, rawPlan.userId),
           ),
         );
+      logger.debug(
+        `GET /api/plans: Retrieved notes in ${performance.now() - startTime}ms`,
+      );
 
+      startTime = performance.now();
       const stoppageTimes = await cloudDb
         .select()
         .from(waypointStoppageTimes)
         .where(eq(waypointStoppageTimes.planId, planId));
+      logger.debug(
+        `GET /api/plans: Retrieved stoppage times in ${performance.now() - startTime}ms`,
+      );
 
       const capabilities = deriveCapabilities("member");
 
@@ -302,3 +300,23 @@ export default defineEventHandler(async (event) => {
     });
   }
 });
+
+// Helper: derive capabilities
+function deriveCapabilities(mode: "member" | "public") {
+  if (mode === "public") {
+    return {
+      canEditPlan: false,
+      canDeletePlan: false,
+      canTogglePlanShare: false,
+      canMutateNotes: false,
+      canViewCourse: true,
+    };
+  }
+  return {
+    canEditPlan: true,
+    canDeletePlan: true,
+    canTogglePlanShare: true,
+    canMutateNotes: true,
+    canViewCourse: true,
+  };
+}

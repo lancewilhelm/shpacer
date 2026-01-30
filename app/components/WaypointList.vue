@@ -572,6 +572,7 @@ function getSegmentGradeDisplay(waypointId: string): string {
                             v-if="index < waypoints.length - 1"
                             class="flex justify-center my-1 border-t border-b border-dotted text-(--sub-color)"
                         >
+                            {{ console.log(waypoints.length) }}
                             <div class="w-full">
                                 <div
                                     v-if="getSegmentForWaypoint(waypoint.id)"

@@ -35,6 +35,63 @@ const route = useRoute();
 const router = useRouter();
 const courseId = route.params.id as string;
 
+// Diagnostics helpers
+const isClient = typeof window !== "undefined";
+const isDev = import.meta.dev ?? false;
+function pageLog(...args: unknown[]) {
+    if (isClient && isDev) {
+        console.log("[CoursePage]", ...args);
+    }
+}
+const pageNow = () =>
+    isClient && typeof performance !== "undefined" ? performance.now() : 0;
+
+// Detailed PerformanceResourceTiming logger for network phase breakdowns
+function logResourceTiming(url: string, label: string) {
+    if (!isClient || !isDev || typeof performance === "undefined") return;
+    const entries = performance.getEntriesByType(
+        "resource",
+    ) as PerformanceResourceTiming[];
+    // Try to find the most recent matching entry (full absolute URL may be recorded)
+    const match = entries.filter((e) => e.name.includes(url)).slice(-1)[0];
+    if (match) {
+        const ssl =
+            match.secureConnectionStart && match.secureConnectionStart > 0
+                ? match.connectEnd - match.secureConnectionStart
+                : 0;
+        pageLog(`${label} resource timing`, {
+            name: match.name,
+            redirect: match.redirectEnd - match.redirectStart,
+            dns: match.domainLookupEnd - match.domainLookupStart,
+            connect: match.connectEnd - match.connectStart,
+            ssl,
+            request: match.responseStart - match.requestStart,
+            ttfb: match.responseStart - match.startTime,
+            response: match.responseEnd - match.responseStart,
+            duration: match.duration,
+            transferSize: (match as unknown as { transferSize?: number })
+                .transferSize,
+            encodedBodySize: (match as unknown as { encodedBodySize?: number })
+                .encodedBodySize,
+            decodedBodySize: (match as unknown as { decodedBodySize?: number })
+                .decodedBodySize,
+            nextHopProtocol: (match as unknown as { nextHopProtocol?: string })
+                .nextHopProtocol,
+            startTime: match.startTime,
+        });
+    } else {
+        pageLog(`${label} resource timing`, {
+            message: "No PerformanceResourceTiming entry found",
+            url,
+        });
+    }
+}
+
+// Start initial timing (ended after initial fetches resolve)
+if (isClient && isDev) {
+    console.time("CoursePage: initial fetches");
+}
+
 // Import necessary stores
 const userSettingsStore = useUserSettingsStore();
 const uiStore = useUiStore();
@@ -69,6 +126,14 @@ const [courseResp, plansResp] = await Promise.all([
         },
     }),
 ]);
+if (isClient && isDev) {
+    console.timeEnd("CoursePage: initial fetches");
+    pageLog("Initial course/plans fetch complete", {
+        courseId,
+        courseFetched: !!courseResp?.data?.value?.course,
+        plansCount: (plansResp?.data?.value?.plans || []).length,
+    });
+}
 
 const { data: courseData, pending, error, refresh } = courseResp;
 
@@ -89,10 +154,23 @@ const plans = computed(() => plansData.value?.plans || []);
 const currentPlanId = ref<string | null>(null);
 const publicSharedPlan = ref<SelectPlan | null>(null); // populated when viewing a publicly shared plan (logged-out)
 
+// Optional deferral for initial ancillary fetch to test perceived performance.
+// Enable deferral by default; disable with ?deferAncillary=0 or ?deferAncillary=false
+const deferAncillaryInitial = computed<boolean>(() => {
+    const q = route.query?.deferAncillary as string | undefined;
+    // default to true unless explicitly "0" or "false"
+    return !(q === "0" || q === "false");
+});
+
 // Initialize plan from URL query parameter
 watchEffect(async () => {
     const planIdFromUrl = route.query.plan as string | undefined;
+    if (isClient && isDev)
+        pageLog("Plan watchEffect: extracted planIdFromUrl", {
+            planIdFromUrl,
+        });
     if (!planIdFromUrl) {
+        if (isClient && isDev) pageLog("Plan watchEffect: no planId in URL");
         currentPlanId.value = null;
         publicSharedPlan.value = null;
         return;
@@ -100,8 +178,17 @@ watchEffect(async () => {
     // Member mode: use existing plans list
     const effectiveMode =
         courseData.value?.mode === "public" ? "public" : "member";
+    if (isClient && isDev)
+        pageLog("Plan watchEffect: effective mode", { effectiveMode });
     if (effectiveMode === "member") {
         if (plans.value.some((p) => p.id === planIdFromUrl)) {
+            if (isClient && isDev)
+                pageLog(
+                    "Plan watchEffect: matching plan found in member mode",
+                    {
+                        planIdFromUrl,
+                    },
+                );
             currentPlanId.value = planIdFromUrl;
             return;
         }
@@ -114,6 +201,8 @@ watchEffect(async () => {
     }
     // Public mode: fetch plan directly (shared plan)
     try {
+        const __pfStart = pageNow();
+        if (isClient && isDev) console.time("Public plan fetch");
         const resp = await $fetch<{
             mode: "member" | "public";
             plan: SelectPlan;
@@ -121,6 +210,13 @@ watchEffect(async () => {
             notes: { waypointId: string; notes: string }[];
             stoppageTimes: { waypointId: string; stoppageTime: number }[];
         }>(`/api/plans/${planIdFromUrl}`);
+        if (isClient && isDev) {
+            console.timeEnd("Public plan fetch");
+            pageLog("Public plan fetched", {
+                ms: pageNow() - __pfStart,
+                planId: resp.plan.id,
+            });
+        }
         publicSharedPlan.value = resp.plan;
         currentPlanId.value = resp.plan.id;
         // Populate notes / stoppage times with synthetic objects matching SelectWaypointNote/SelectWaypointStoppageTime
@@ -148,6 +244,7 @@ watchEffect(async () => {
                 }) as unknown as SelectWaypointStoppageTime,
         );
     } catch (e) {
+        if (isClient && isDev) pageLog("Public plan fetch failed", e);
         console.warn(
             "Failed to load public shared plan (maybe not shared):",
             e,
@@ -664,14 +761,58 @@ if (import.meta.client && mode.value === "member") {
             return;
         }
         try {
+            const __ancStart = pageNow();
+            if (isClient && isDev)
+                console.time("Ancillary (notes+stoppage) fetch");
+            const notesStart = pageNow();
+            if (isClient && isDev) console.time("Ancillary: notes fetch");
+            const notesUrl = `/api/courses/${courseId}/plans/${planId}/waypoint-notes`;
+            const notesPromise = $fetch<{ notes: SelectWaypointNote[] }>(
+                notesUrl,
+            ).then((res) => {
+                if (isClient && isDev) {
+                    console.timeEnd("Ancillary: notes fetch");
+                    pageLog("Ancillary notes response", {
+                        ms: pageNow() - notesStart,
+                        count: res.notes.length,
+                        planId,
+                    });
+                    // Log detailed network phase timings if available
+                    logResourceTiming(notesUrl, "Ancillary notes");
+                }
+                return res;
+            });
+            const stopStart = pageNow();
+            if (isClient && isDev) console.time("Ancillary: stoppages fetch");
+            const stoppagesUrl = `/api/courses/${courseId}/plans/${planId}/waypoint-stoppage-times`;
+            const stoppagePromise = $fetch<{
+                stoppageTimes: SelectWaypointStoppageTime[];
+            }>(stoppagesUrl).then((res) => {
+                if (isClient && isDev) {
+                    console.timeEnd("Ancillary: stoppages fetch");
+                    pageLog("Ancillary stoppages response", {
+                        ms: pageNow() - stopStart,
+                        count: res.stoppageTimes.length,
+                        planId,
+                    });
+                    // Log detailed network phase timings if available
+                    logResourceTiming(stoppagesUrl, "Ancillary stoppages");
+                }
+                return res;
+            });
             const [notesResponse, stoppageTimesResponse] = await Promise.all([
-                $fetch<{ notes: SelectWaypointNote[] }>(
-                    `/api/courses/${courseId}/plans/${planId}/waypoint-notes`,
-                ),
-                $fetch<{ stoppageTimes: SelectWaypointStoppageTime[] }>(
-                    `/api/courses/${courseId}/plans/${planId}/waypoint-stoppage-times`,
-                ),
+                notesPromise,
+                stoppagePromise,
             ]);
+            if (isClient && isDev) {
+                console.timeEnd("Ancillary (notes+stoppage) fetch");
+                pageLog("Ancillary data loaded", {
+                    ms: pageNow() - __ancStart,
+                    notes: notesResponse.notes.length,
+                    stoppageTimes: stoppageTimesResponse.stoppageTimes.length,
+                    planId,
+                });
+            }
             waypointNotes.value = notesResponse.notes;
             waypointStoppageTimes.value = stoppageTimesResponse.stoppageTimes;
         } catch (error) {
@@ -686,6 +827,7 @@ if (import.meta.client && mode.value === "member") {
                 )
             ) {
                 console.error("Error fetching waypoint ancillary data", error);
+                if (isClient && isDev) pageLog("Ancillary fetch error", error);
             }
             waypointNotes.value = [];
             waypointStoppageTimes.value = [];
@@ -693,11 +835,39 @@ if (import.meta.client && mode.value === "member") {
     };
     watch(
         () => currentPlanId.value,
-        (pid) => {
-            loadPlanAncillary(pid);
+        (pid, oldPid) => {
+            if (isClient && isDev)
+                pageLog("Ancillary watch: currentPlanId changed", {
+                    pid,
+                    oldPid,
+                });
+            // Only auto-load on actual changes after mount; initial load is handled separately
+            if (oldPid !== undefined) {
+                loadPlanAncillary(pid);
+            }
         },
-        { immediate: true },
     );
+
+    onMounted(() => {
+        const initialPlanId = currentPlanId.value;
+        if (isClient && isDev)
+            pageLog("Ancillary initial load scheduling", {
+                planId: initialPlanId,
+                defer: deferAncillaryInitial.value,
+            });
+
+        if (deferAncillaryInitial.value) {
+            // Defer to after first paint (double RAF) to improve perceived performance
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    loadPlanAncillary(initialPlanId);
+                });
+            });
+        } else {
+            // Eager load ancillary data immediately on mount
+            loadPlanAncillary(initialPlanId);
+        }
+    });
 }
 
 // Panel resizing state
@@ -921,7 +1091,18 @@ function formatRaceDate(date: Date | string | number | null) {
 // Compute GeoJSON data for the map. This is used to render the course on the map.
 const geoJsonData = computed(() => {
     if (!course.value?.geoJsonData) return [];
-    return [course.value.geoJsonData as GeoJSON.FeatureCollection];
+    const arr = [course.value.geoJsonData as GeoJSON.FeatureCollection];
+    if (isClient && isDev) {
+        const featureCount = arr.reduce(
+            (sum, fc) => sum + (fc.features?.length || 0),
+            0,
+        );
+        pageLog("geoJsonData ready", {
+            collections: arr.length,
+            features: featureCount,
+        });
+    }
+    return arr;
 });
 
 // Build elevation points and per-unit split waypoints for display switching
@@ -931,13 +1112,26 @@ const elevationPointsForDisplay = computed(() => {
         type: "FeatureCollection",
         features: geoJsonData.value.flatMap((fc) => fc.features),
     };
-    return extractElevationProfile(combined);
+    const __t = pageNow();
+    if (isClient && isDev) console.time("extractElevationProfile");
+    const result = extractElevationProfile(combined);
+    if (isClient && isDev) {
+        console.timeEnd("extractElevationProfile");
+        pageLog("elevationPointsForDisplay computed", {
+            points: result.length,
+            ms: pageNow() - __t,
+        });
+    }
+    return result;
 });
 
 const totalCourseDistanceMeters = computed(() => {
     const pts = elevationPointsForDisplay.value;
     if (!pts.length) return 0;
-    return Math.max(...pts.map((p) => p.distance));
+    const total = Math.max(...pts.map((p) => p.distance));
+    if (isClient && isDev)
+        pageLog("totalCourseDistanceMeters computed", { total });
+    return total;
 });
 
 // Generate synthetic per-mile/km "waypoints" for the splits tab
@@ -967,6 +1161,8 @@ const splitWaypoints = computed<Waypoint[]>(() => {
         });
     }
 
+    const __t = pageNow();
+    if (isClient && isDev) console.time("splitWaypoints interpolation/build");
     let i = 1;
     for (let d = unitMeters; d < total - 1e-6; d += unitMeters, i++) {
         const ip = interpolateAtDistance(pts, d);
@@ -981,6 +1177,13 @@ const splitWaypoints = computed<Waypoint[]>(() => {
             distance: d,
             tags: [],
             order: i,
+        });
+    }
+    if (isClient && isDev) {
+        console.timeEnd("splitWaypoints interpolation/build");
+        pageLog("splitWaypoints built", {
+            count: result.length,
+            ms: pageNow() - __t,
         });
     }
 
@@ -1019,6 +1222,49 @@ const selectedSplitRange = ref<{ startIndex: number; endIndex: number } | null>(
     null,
 );
 const mapResetKey = ref(0);
+
+onMounted(() => {
+    if (isClient && isDev) {
+        const t = pageNow();
+        pageLog("CoursePage mounted");
+        requestAnimationFrame(() => {
+            pageLog("CoursePage first RAF after mount", {
+                ms: pageNow() - t,
+            });
+        });
+    }
+});
+
+// Trace when pace chart inputs are ready and first render frame is reached
+watch(
+    () => ({
+        planId: currentPlan.value?.id || null,
+        pts: elevationPointsForDisplay.value.length,
+        waypointsCount: waypoints.value.length,
+    }),
+    async ({ planId, pts, waypointsCount }) => {
+        if (isClient && isDev && planId && pts > 0) {
+            pageLog("Pace chart inputs ready", {
+                planId,
+                elevationPoints: pts,
+                displayWaypoints: waypointsCount,
+            });
+            const start = pageNow();
+            await nextTick();
+            if (isClient && isDev) {
+                pageLog("Pace chart nextTick resolved", {
+                    ms: pageNow() - start,
+                });
+            }
+            requestAnimationFrame(() => {
+                pageLog("Pace chart initial render frame reached", {
+                    ms: pageNow() - start,
+                });
+            });
+        }
+    },
+    { immediate: true, deep: false },
+);
 
 const stableHighlightSegment = computed(() => {
     if (waypointPanelTab.value !== "splits" || !splitHighlight.value)

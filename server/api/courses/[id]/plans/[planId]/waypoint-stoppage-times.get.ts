@@ -2,12 +2,15 @@ import { eq, and } from "drizzle-orm";
 import { waypointStoppageTimes, plans } from "~/utils/db/schema";
 import { cloudDb } from "~~/server/utils/db/cloud";
 import { auth } from "~/utils/auth";
+import { setHeader } from "h3";
 
 export default defineEventHandler(async (event) => {
+  const t0 = Date.now();
   try {
     const session = await auth.api.getSession({
       headers: event.headers,
     });
+    const tAuth = Date.now() - t0;
 
     if (!session) {
       throw createError({
@@ -27,6 +30,7 @@ export default defineEventHandler(async (event) => {
     }
 
     // Verify the plan exists and belongs to the user
+    const tPlanStart = Date.now();
     const plan = await cloudDb
       .select()
       .from(plans)
@@ -38,6 +42,7 @@ export default defineEventHandler(async (event) => {
         ),
       )
       .limit(1);
+    const tPlan = Date.now() - tPlanStart;
 
     if (plan.length === 0) {
       throw createError({
@@ -47,10 +52,31 @@ export default defineEventHandler(async (event) => {
     }
 
     // Get all waypoint stoppage times for this plan
+    const tStopStart = Date.now();
     const stoppageTimes = await cloudDb
       .select()
       .from(waypointStoppageTimes)
       .where(eq(waypointStoppageTimes.planId, planId));
+    const tStop = Date.now() - tStopStart;
+    const total = Date.now() - t0;
+
+    const serverTiming = [
+      `auth;dur=${tAuth}`,
+      `plan;dur=${tPlan}`,
+      `stoppages;dur=${tStop}`,
+      `total;dur=${total}`,
+    ].join(", ");
+    try {
+      setHeader(event, "Server-Timing", serverTiming);
+    } catch {}
+
+    console.log("[api] waypoint-stoppage-times.get", {
+      userId: session.user.id,
+      courseId,
+      planId,
+      durations: { auth: tAuth, plan: tPlan, stoppages: tStop, total },
+      count: stoppageTimes.length,
+    });
 
     return {
       stoppageTimes,

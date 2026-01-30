@@ -1,6 +1,3 @@
--- Current sql file was generated after introspecting the database
--- If you want to run this migration please uncomment this code before executing migrations
-/*
 CREATE TABLE `accounts` (
 	`id` text PRIMARY KEY NOT NULL,
 	`account_id` text NOT NULL,
@@ -13,6 +10,29 @@ CREATE TABLE `accounts` (
 	`refresh_token_expires_at` integer,
 	`scope` text,
 	`password` text,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE TABLE `courses` (
+	`id` text PRIMARY KEY NOT NULL,
+	`name` text NOT NULL,
+	`description` text,
+	`user_id` text NOT NULL,
+	`original_file_name` text NOT NULL,
+	`original_file_content` text NOT NULL,
+	`file_type` text NOT NULL,
+	`geojson_data` text NOT NULL,
+	`total_distance` integer,
+	`elevation_gain` integer,
+	`elevation_loss` integer,
+	`race_date` integer,
+	`public` integer DEFAULT false NOT NULL,
+	`share_enabled` integer DEFAULT false NOT NULL,
+	`forked_from_course_id` text,
+	`default_distance_unit` text DEFAULT 'miles' NOT NULL,
+	`default_elevation_unit` text DEFAULT 'feet' NOT NULL,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL,
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
@@ -37,6 +57,26 @@ CREATE TABLE `knowledge` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `knowledge_name_unique` ON `knowledge` (`name`);--> statement-breakpoint
+CREATE TABLE `plans` (
+	`id` text PRIMARY KEY NOT NULL,
+	`course_id` text NOT NULL,
+	`user_id` text NOT NULL,
+	`name` text NOT NULL,
+	`pace` integer,
+	`pace_unit` text DEFAULT 'min_per_km' NOT NULL,
+	`pace_mode` text DEFAULT 'pace' NOT NULL,
+	`target_time_seconds` integer,
+	`default_stoppage_time` integer DEFAULT 0,
+	`use_grade_adjustment` integer DEFAULT true NOT NULL,
+	`pacing_strategy` text DEFAULT 'flat' NOT NULL,
+	`pacing_linear_percent` integer DEFAULT 0,
+	`share_enabled` integer DEFAULT false NOT NULL,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL,
+	FOREIGN KEY (`course_id`) REFERENCES `courses`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
 CREATE TABLE `sessions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`expires_at` integer NOT NULL,
@@ -51,6 +91,17 @@ CREATE TABLE `sessions` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `sessions_token_unique` ON `sessions` (`token`);--> statement-breakpoint
+CREATE TABLE `user_courses` (
+	`user_id` text NOT NULL,
+	`course_id` text NOT NULL,
+	`role` text DEFAULT 'starred' NOT NULL,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL,
+	PRIMARY KEY(`user_id`, `course_id`),
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`course_id`) REFERENCES `courses`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
 CREATE TABLE `user_settings` (
 	`user_id` text PRIMARY KEY NOT NULL,
 	`settings` text DEFAULT '{}' NOT NULL,
@@ -82,22 +133,28 @@ CREATE TABLE `verifications` (
 	`updated_at` integer
 );
 --> statement-breakpoint
-CREATE TABLE `courses` (
+CREATE TABLE `waypoint_notes` (
 	`id` text PRIMARY KEY NOT NULL,
-	`name` text NOT NULL,
-	`description` text,
+	`plan_id` text NOT NULL,
+	`waypoint_id` text NOT NULL,
 	`user_id` text NOT NULL,
-	`original_file_name` text NOT NULL,
-	`original_file_content` text NOT NULL,
-	`file_type` text NOT NULL,
-	`geojson_data` text NOT NULL,
+	`notes` text NOT NULL,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL,
-	`total_distance` integer,
-	`elevation_gain` integer,
-	`elevation_loss` integer,
-	`race_date` integer,
+	FOREIGN KEY (`plan_id`) REFERENCES `plans`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`waypoint_id`) REFERENCES `waypoints`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE TABLE `waypoint_stoppage_times` (
+	`id` text PRIMARY KEY NOT NULL,
+	`plan_id` text NOT NULL,
+	`waypoint_id` text NOT NULL,
+	`stoppage_time` integer NOT NULL,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL,
+	FOREIGN KEY (`plan_id`) REFERENCES `plans`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`waypoint_id`) REFERENCES `waypoints`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
 CREATE TABLE `waypoints` (
@@ -109,11 +166,10 @@ CREATE TABLE `waypoints` (
 	`lng` text NOT NULL,
 	`elevation` integer,
 	`distance` integer NOT NULL,
+	`tags` text DEFAULT '[]' NOT NULL,
+	`icon` text,
 	`order` integer NOT NULL,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL,
-	`tags` text DEFAULT '[]' NOT NULL,
 	FOREIGN KEY (`course_id`) REFERENCES `courses`(`id`) ON UPDATE no action ON DELETE cascade
 );
-
-*/

@@ -331,6 +331,13 @@ const smoothingConfig = computed(() => {
 // Calculate actual paces needed at each point to achieve target average pace
 const actualPaceData = computed(() => {
     if (!props.plan || !props.plan.pace || elevationPoints.length === 0) {
+        if (import.meta.dev && typeof window !== "undefined") {
+            console.log("[ElevationPaceChart] Skipping paces compute", {
+                hasPlan: !!props.plan,
+                hasPace: !!props.plan?.pace,
+                points: elevationPoints.length,
+            });
+        }
         return [];
     }
 
@@ -340,7 +347,15 @@ const actualPaceData = computed(() => {
     const mode = props.plan.paceMode || "pace";
     const maintainTargetAverage = mode !== "normalized";
 
-    return calculateActualPacesForTarget(
+    const __start =
+        typeof window !== "undefined" && typeof performance !== "undefined"
+            ? performance.now()
+            : 0;
+    if (import.meta.dev && typeof window !== "undefined") {
+        console.time("ElevationPaceChart: calculateActualPacesForTarget");
+    }
+
+    const res = calculateActualPacesForTarget(
         smoothedElevationPoints.value,
         props.plan.pace,
         smoothingConfig.value.gradeWindowMeters,
@@ -350,6 +365,27 @@ const actualPaceData = computed(() => {
         props.plan.pacingLinearPercent ?? 0,
         props.plan.useGradeAdjustment !== false,
     );
+
+    if (import.meta.dev && typeof window !== "undefined") {
+        console.timeEnd("ElevationPaceChart: calculateActualPacesForTarget");
+        console.log("[ElevationPaceChart] Paces computed", {
+            ms:
+                typeof performance !== "undefined"
+                    ? performance.now() - __start
+                    : 0,
+            count: res.length,
+            elevationPoints: elevationPoints.length,
+            planId: props.plan?.id ?? null,
+            gradeWindow: smoothingConfig.value.gradeWindowMeters,
+            paceSmoothing: smoothingConfig.value.paceSmoothingMeters,
+            maintainTargetAverage,
+            strategy: props.plan?.pacingStrategy ?? "flat",
+            linearPercent: props.plan?.pacingLinearPercent ?? 0,
+            useGradeAdjustment: props.plan?.useGradeAdjustment !== false,
+        });
+    }
+
+    return res;
 });
 
 const paceRange = computed(() => {
@@ -1677,15 +1713,76 @@ function handleResize() {
 watch(
     () => props.geoJsonData,
     () => {
+        const __watchStart =
+            typeof window !== "undefined" && typeof performance !== "undefined"
+                ? performance.now()
+                : 0;
+        const __isDev = import.meta.dev;
+        const __isClient = typeof window !== "undefined";
+        if (__isClient && __isDev) {
+            console.log("[ElevationPaceChart] geoJsonData changed");
+        }
+
         processGeoJsonData();
+
         if (hasElevationData.value) {
             nextTick(() => {
+                const __t =
+                    typeof window !== "undefined" &&
+                    typeof performance !== "undefined"
+                        ? performance.now()
+                        : 0;
+                if (__isClient && __isDev)
+                    console.time("ElevationPaceChart: initChart (nextTick)");
                 initChart();
+                if (__isClient && __isDev) {
+                    console.timeEnd("ElevationPaceChart: initChart (nextTick)");
+                    console.log("[ElevationPaceChart] initChart complete", {
+                        ms:
+                            typeof performance !== "undefined"
+                                ? performance.now() - __t
+                                : 0,
+                        elevationPoints: elevationPoints.length,
+                    });
+                }
             });
         }
+
         if (hasPaceData.value && props.showPaceChart) {
             nextTick(() => {
+                const __t =
+                    typeof window !== "undefined" &&
+                    typeof performance !== "undefined"
+                        ? performance.now()
+                        : 0;
+                if (__isClient && __isDev)
+                    console.time(
+                        "ElevationPaceChart: initPaceChart (nextTick)",
+                    );
                 initPaceChart();
+                if (__isClient && __isDev) {
+                    console.timeEnd(
+                        "ElevationPaceChart: initPaceChart (nextTick)",
+                    );
+                    console.log("[ElevationPaceChart] initPaceChart complete", {
+                        ms:
+                            typeof performance !== "undefined"
+                                ? performance.now() - __t
+                                : 0,
+                        pacePoints: actualPaceData.value.length,
+                    });
+                }
+            });
+        }
+
+        if (__isClient && __isDev) {
+            console.log("[ElevationPaceChart] geoJsonData processed", {
+                ms:
+                    typeof performance !== "undefined"
+                        ? performance.now() - __watchStart
+                        : 0,
+                hasElevation: hasElevationData.value,
+                hasPaceData: hasPaceData.value,
             });
         }
     },

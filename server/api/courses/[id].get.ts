@@ -2,6 +2,7 @@ import { courses, userCourses, waypoints } from "~/utils/db/schema";
 import { cloudDb } from "~~/server/utils/db/cloud";
 import { eq, and } from "drizzle-orm";
 import { auth } from "~/utils/auth";
+import { logger } from "~/utils/logger";
 
 /**
  * Unified Course Endpoint
@@ -78,6 +79,7 @@ export default defineEventHandler(async (event) => {
 
     // MEMBER MODE
     if (isMemberRequest) {
+      let startTime = performance.now();
       const [course] = await cloudDb
         .select({
           id: courses.id,
@@ -109,6 +111,10 @@ export default defineEventHandler(async (event) => {
           ),
         )
         .limit(1);
+      const endtime = performance.now();
+      logger.debug(
+        `GET /api/courses: Course loaded in ${endtime - startTime}ms`,
+      );
 
       if (!course) {
         throw createError({
@@ -117,11 +123,15 @@ export default defineEventHandler(async (event) => {
         });
       }
 
+      startTime = performance.now();
       const courseWaypoints = await cloudDb
         .select()
         .from(waypoints)
         .where(eq(waypoints.courseId, courseId))
         .orderBy(waypoints.order);
+      logger.debug(
+        `GET /api/courses: Waypoints loaded in ${performance.now() - startTime}ms`,
+      );
 
       const formattedWaypoints = courseWaypoints.map((w) => ({
         id: w.id,
@@ -140,6 +150,8 @@ export default defineEventHandler(async (event) => {
         mode: "member",
         role: course.role as "owner" | "starred" | undefined,
       });
+
+      logger.debug("GET /api/courses: returning course");
 
       return {
         mode: "member" as const,
