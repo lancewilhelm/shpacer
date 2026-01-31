@@ -15,6 +15,7 @@ interface Props {
     courseId: string;
     courseTotalDistance?: number | null;
     courseDefaultDistanceUnit?: "kilometers" | "miles";
+    intermediateWaypointCount?: number;
     existingPlan?: {
         id: string;
         name: string;
@@ -23,6 +24,7 @@ interface Props {
         defaultStoppageTime?: number;
         paceMode?: "pace" | "time" | "normalized";
         targetTimeSeconds?: number;
+        targetIncludesStoppages?: boolean;
         pacingStrategy?: "flat" | "linear";
         pacingLinearPercent?: number;
         useGradeAdjustment?: boolean;
@@ -60,6 +62,7 @@ interface PlanFormState {
     targetMinutes: string;
     targetSeconds: string;
     paceUnit: "min_per_km" | "min_per_mi";
+    targetIncludesStoppages: boolean;
     defaultStopMinutes: string;
     defaultStopSeconds: string;
     pacingStrategy: "flat" | "linear";
@@ -76,6 +79,7 @@ const formData = ref<PlanFormState>({
     targetMinutes: "",
     targetSeconds: "",
     paceUnit: "min_per_km",
+    targetIncludesStoppages: false,
     defaultStopMinutes: "",
     defaultStopSeconds: "",
     pacingStrategy: "flat",
@@ -191,6 +195,7 @@ function resetForm() {
     formData.value.targetMinutes = "";
     formData.value.targetSeconds = "";
     formData.value.paceUnit = getDefaultPaceUnit();
+    formData.value.targetIncludesStoppages = false;
     formData.value.defaultStopMinutes = "";
     formData.value.defaultStopSeconds = "";
     formData.value.pacingStrategy = "flat";
@@ -245,6 +250,11 @@ watch(
                 formData.value.targetMinutes = "";
                 formData.value.targetSeconds = "";
             }
+
+            formData.value.targetIncludesStoppages =
+                typeof p.targetIncludesStoppages === "boolean"
+                    ? p.targetIncludesStoppages
+                    : false;
 
             // Pace unit
             formData.value.paceUnit = p.paceUnit as "min_per_km" | "min_per_mi";
@@ -667,7 +677,19 @@ async function handleSubmit() {
             if (distanceUnits <= 0) {
                 throw new Error("Invalid course distance");
             }
-            paceInSeconds = targetTimeSeconds / distanceUnits;
+            const intermediateCount = Math.max(
+                0,
+                props.intermediateWaypointCount ?? 0,
+            );
+            const estimatedTotalStoppageSeconds = Math.max(
+                0,
+                (stopVal.seconds ?? 0) * intermediateCount,
+            );
+            const travelSeconds =
+                formData.value.targetIncludesStoppages === true
+                    ? Math.max(0, targetTimeSeconds - estimatedTotalStoppageSeconds)
+                    : targetTimeSeconds;
+            paceInSeconds = travelSeconds / distanceUnits;
         } else {
             paceInSeconds = paceVal.seconds;
         }
@@ -688,6 +710,7 @@ async function handleSubmit() {
             paceUnit: formData.value.paceUnit,
             defaultStoppageTime: stopVal.seconds,
             paceMode: formData.value.paceMode,
+            targetIncludesStoppages: formData.value.targetIncludesStoppages,
             useGradeAdjustment: formData.value.useGradeAdjustment,
             pacingStrategy,
             pacingLinearPercent: pacingLinearPercentValue,
@@ -1214,6 +1237,27 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                             ).toFixed(2)
                         }}
                         {{ formData.paceUnit === "min_per_km" ? "km" : "mi" }}
+                    </p>
+                </div>
+
+                <!-- Target interpretation -->
+                <div v-show="activeStep === 2" class="mt-3">
+                    <label
+                        class="flex items-center gap-2 cursor-pointer text-(--main-color) shrink-0"
+                    >
+                        <input
+                            v-model="formData.targetIncludesStoppages"
+                            type="checkbox"
+                            class="accent-(--main-color)"
+                            :disabled="isSubmitting"
+                        />
+                        <span>Include waypoint stoppages in target</span>
+                    </label>
+                    <p class="text-xs text-(--sub-color) mt-1">
+                        When enabled, your target time/pace is treated as total
+                        elapsed time (including planned waypoint stops). We'll
+                        subtract planned waypoint stoppage time when deriving
+                        moving paces and arrival times.
                     </p>
                 </div>
 

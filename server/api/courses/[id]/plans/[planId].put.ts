@@ -107,6 +107,16 @@ export default defineEventHandler(async (event) => {
       updateData.targetTimeSeconds = body.targetTimeSeconds;
     }
 
+    if (body.targetIncludesStoppages !== undefined) {
+      if (typeof body.targetIncludesStoppages !== "boolean") {
+        throw createError({
+          statusCode: 400,
+          statusMessage: "targetIncludesStoppages must be a boolean",
+        });
+      }
+      updateData.targetIncludesStoppages = body.targetIncludesStoppages;
+    }
+
     if (body.defaultStoppageTime !== undefined) {
       if (
         typeof body.defaultStoppageTime !== "number" ||

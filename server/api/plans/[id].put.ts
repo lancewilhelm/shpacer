@@ -14,6 +14,7 @@ import { cloudDb } from "~~/server/utils/db/cloud";
  *  - paceUnit ("min_per_km" | "min_per_mi")
  *  - paceMode ("pace" | "time" | "normalized")
  *  - targetTimeSeconds (number >= 0; only meaningful when paceMode === "time")
+ *  - targetIncludesStoppages (boolean) // Whether target time/pace includes waypoint stoppages
  *  - defaultStoppageTime (number >= 0)
  *  - useGradeAdjustment (boolean)
  *  - pacingStrategy ("flat" | "linear")
@@ -34,6 +35,7 @@ interface PlanUpdateRequest {
   paceUnit?: "min_per_km" | "min_per_mi";
   paceMode?: "pace" | "time" | "normalized";
   targetTimeSeconds?: number | null;
+  targetIncludesStoppages?: boolean;
   defaultStoppageTime?: number | null;
   useGradeAdjustment?: boolean;
   pacingStrategy?: "flat" | "linear";
@@ -138,6 +140,16 @@ export default defineEventHandler(async (event) => {
       });
     }
 
+    if (
+      body.targetIncludesStoppages != null &&
+      typeof body.targetIncludesStoppages !== "boolean"
+    ) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "Invalid targetIncludesStoppages",
+      });
+    }
+
     if (body.pace != null && (typeof body.pace !== "number" || body.pace < 0)) {
       throw createError({
         statusCode: 400,
@@ -164,6 +176,8 @@ export default defineEventHandler(async (event) => {
     if (body.paceMode !== undefined) updateData.paceMode = body.paceMode;
     if (body.targetTimeSeconds !== undefined)
       updateData.targetTimeSeconds = body.targetTimeSeconds ?? null;
+    if (body.targetIncludesStoppages !== undefined)
+      updateData.targetIncludesStoppages = body.targetIncludesStoppages;
     if (body.defaultStoppageTime !== undefined)
       updateData.defaultStoppageTime = body.defaultStoppageTime ?? 0;
     if (body.useGradeAdjustment !== undefined)

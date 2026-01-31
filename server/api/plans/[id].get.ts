@@ -232,6 +232,7 @@ export default defineEventHandler(async (event) => {
       paceUnit: rawPlan.paceUnit,
       paceMode: rawPlan.paceMode,
       targetTimeSeconds: rawPlan.targetTimeSeconds,
+      targetIncludesStoppages: rawPlan.targetIncludesStoppages,
       defaultStoppageTime: rawPlan.defaultStoppageTime,
       useGradeAdjustment: rawPlan.useGradeAdjustment,
       pacingStrategy: rawPlan.pacingStrategy,

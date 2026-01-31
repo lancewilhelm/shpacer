@@ -200,6 +200,13 @@ export const plans = sqliteTable("plans", {
   paceMode: text("pace_mode").notNull().default("pace"),
   // If paceMode is 'time', the target finish time for the course, in seconds
   targetTimeSeconds: integer("target_time_seconds"),
+  // If true, interpret the target (time/pace) as total elapsed including waypoint stoppages.
+  // When false, waypoint stoppages are added on top of the target to get elapsed time.
+  targetIncludesStoppages: integer("target_includes_stoppages", {
+    mode: "boolean",
+  })
+    .notNull()
+    .default(false),
   defaultStoppageTime: integer("default_stoppage_time").default(0), // default stoppage time in seconds
   // Enable grade-adjusted calculations for this plan
   useGradeAdjustment: integer("use_grade_adjustment", { mode: "boolean" })

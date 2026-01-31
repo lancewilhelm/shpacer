@@ -486,11 +486,13 @@ const splits = computed<SplitRow[]>(() => {
                 tp = tn;
                 iters++;
             }
-            const stoppageTotal = getCumulativeStoppageUntil(courseEnd);
-            const desiredTravel = Math.max(
-                0,
-                plan.targetTimeSeconds - stoppageTotal,
-            );
+            const includeStops = plan.targetIncludesStoppages === true;
+            const stoppageTotal = includeStops
+                ? getCumulativeStoppageUntil(courseEnd)
+                : 0;
+            const desiredTravel = includeStops
+                ? Math.max(0, plan.targetTimeSeconds - stoppageTotal)
+                : plan.targetTimeSeconds;
             if (travelBase > 0) {
                 timeScale = desiredTravel / travelBase;
             }
@@ -505,6 +507,7 @@ const splits = computed<SplitRow[]>(() => {
                     stoppageTotal,
                     desiredTravel,
                     timeScale,
+                    includeStops,
                     sampleStep,
                     gradeWindow,
                     iterations: iters,
@@ -625,8 +628,12 @@ const splits = computed<SplitRow[]>(() => {
         // Determine desired final elapsed time
         let desiredLast = rawLast;
         if ((plan.paceMode || "pace") === "time" && plan.targetTimeSeconds) {
-            // In target time mode, snap the last elapsed to the exact target time (seconds)
-            desiredLast = plan.targetTimeSeconds;
+            // In target time mode, interpret targetTimeSeconds as either:
+            // - total elapsed (includes stoppages), or
+            // - travel-only time (stoppages added on top)
+            desiredLast =
+                plan.targetTimeSeconds +
+                (plan.targetIncludesStoppages === true ? 0 : stoppageLast);
         } else {
             // In pace/normalized modes, use the computed total but snap to a whole second for display consistency
             desiredLast = Math.round(rawLast);

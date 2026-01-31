@@ -1,0 +1,1 @@
+ALTER TABLE `plans` ADD `target_includes_stoppages` integer DEFAULT false NOT NULL;

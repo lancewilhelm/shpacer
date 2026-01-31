@@ -32,6 +32,15 @@ export default defineEventHandler(async (event) => {
       statusMessage: "Plan name is required",
     });
   }
+  if (
+    body.targetIncludesStoppages !== undefined &&
+    typeof body.targetIncludesStoppages !== "boolean"
+  ) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "targetIncludesStoppages must be a boolean",
+    });
+  }
 
   try {
     // Verify ownership (only owners can create plans)
@@ -72,6 +81,7 @@ export default defineEventHandler(async (event) => {
         paceUnit: body.paceUnit || "min_per_km",
         paceMode: body.paceMode || "pace",
         targetTimeSeconds: body.targetTimeSeconds ?? null,
+        targetIncludesStoppages: body.targetIncludesStoppages ?? false,
         defaultStoppageTime: body.defaultStoppageTime || 0,
         useGradeAdjustment: body.useGradeAdjustment ?? true,
         pacingStrategy: body.pacingStrategy || "flat",
