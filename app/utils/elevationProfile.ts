@@ -48,6 +48,33 @@ function extractCoordinates(geometry: GeoJSON.Geometry): number[][] {
 }
 
 /**
+ * Check whether a GeoJSON FeatureCollection contains any finite elevation samples.
+ * @param geoJson GeoJSON FeatureCollection
+ * @returns True when at least one coordinate has a finite third elevation value
+ */
+export function hasElevationSamples(
+  geoJson: GeoJSON.FeatureCollection,
+): boolean {
+  for (const feature of geoJson.features) {
+    if (!feature.geometry) continue;
+
+    const coordinates = extractCoordinates(feature.geometry);
+    const containsElevation = coordinates.some(
+      (coord) =>
+        coord.length >= 3 &&
+        typeof coord[2] === "number" &&
+        Number.isFinite(coord[2]),
+    );
+
+    if (containsElevation) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Extract elevation profile from GeoJSON data
  * @param geoJson GeoJSON FeatureCollection
  * @returns Array of elevation points with distance, elevation, and coordinates
@@ -59,6 +86,8 @@ export function extractElevationProfile(
   const featureCoordinates: number[][][] = [];
 
   for (const feature of geoJson.features) {
+    if (!feature.geometry) continue;
+
     const coordinates = extractCoordinates(feature.geometry);
     if (coordinates.length > 0) {
       featureCoordinates.push(coordinates);

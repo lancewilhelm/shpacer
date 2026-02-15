@@ -59,6 +59,8 @@ export function calculateCourseMetrics(
 
   // Process each feature in the collection
   for (const feature of geoJson.features) {
+    if (!feature.geometry) continue;
+
     const coordinates = extractCoordinates(feature.geometry);
 
     if (coordinates.length < 2) continue;

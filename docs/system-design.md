@@ -41,15 +41,21 @@ User Access → Login/Register → Session Creation → Role Assignment → Dash
 ### 2. Course Creation Workflow
 
 ```
-File Upload → Validation → Processing → Metrics Calculation → Waypoint Extraction → Storage
+File Upload → Validation → Processing → Preview Rendering → Metrics Calculation → Waypoint Extraction → Storage
 ```
 
 1. **File Upload**: Users drag and drop or select GPX/TCX files
 2. **Validation**: File format and content validation
 3. **Processing**: Parse GPS data and convert to GeoJSON format
-4. **Metrics Calculation**: Compute distance, elevation gain/loss, and route statistics
-5. **Waypoint Extraction**: Automatically extract waypoints from file metadata
-6. **Storage**: Save course data, original file content, and computed metrics
+4. **Preview Rendering**: Show map preview, distance stats, and elevation gain/loss stats (when elevation samples exist), plus an elevation profile
+5. **Metrics Calculation**: Compute distance, elevation gain/loss, and route statistics
+6. **Waypoint Extraction**: Automatically extract waypoints from file metadata
+7. **Storage**: Save course data, original file content, and computed metrics
+
+Notes:
+- Elevation preview is file-backed only (no server-side elevation derivation for missing samples).
+- Persisted course metrics remain server-authoritative and are recalculated during course creation.
+- Implementation details: `app/pages/courses/new.vue`, `app/components/ElevationProfilePreview.vue`, and `app/utils/elevationProfile.ts`.
 
 ### 3. Course Interaction Workflow
 

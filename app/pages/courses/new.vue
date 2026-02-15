@@ -1,5 +1,11 @@
 <script setup lang="ts">
 import type { SelectCourse } from "~/utils/db/schema";
+import {
+    calculateCourseMetrics,
+    formatDistance,
+    formatElevation,
+} from "~/utils/courseMetrics";
+import { hasElevationSamples } from "~/utils/elevationProfile";
 
 definePageMeta({
     auth: {
@@ -17,6 +23,13 @@ interface ProcessedFile {
     originalContent: string;
     fileType: "gpx" | "tcx";
     geoJson: GeoJSON.FeatureCollection;
+}
+
+interface PreviewStats {
+    distance: string;
+    elevationGain: string;
+    elevationLoss: string;
+    hasElevation: boolean;
 }
 
 const processedFile = ref<ProcessedFile | null>(null);
@@ -127,6 +140,26 @@ async function createCourse() {
 const canCreate = computed(() => {
     return processedFile.value && courseName.value.trim() && !isCreating.value;
 });
+
+const previewStats = computed<PreviewStats | null>(() => {
+    if (!processedFile.value) {
+        return null;
+    }
+
+    const metrics = calculateCourseMetrics(processedFile.value.geoJson);
+    const hasElevation = hasElevationSamples(processedFile.value.geoJson);
+
+    return {
+        distance: formatDistance(metrics.totalDistance, "miles"),
+        elevationGain: hasElevation
+            ? formatElevation(metrics.elevationGain, "feet")
+            : "N/A",
+        elevationLoss: hasElevation
+            ? formatElevation(metrics.elevationLoss, "feet")
+            : "N/A",
+        hasElevation,
+    };
+});
 </script>
 
 <template>
@@ -151,7 +184,12 @@ const canCreate = computed(() => {
                 </div>
             </div>
 
-            <div class="max-w-2xl mx-auto w-full space-y-6">
+            <div
+                :class="[
+                    'mx-auto w-full space-y-6',
+                    processedFile ? 'max-w-6xl' : 'max-w-2xl',
+                ]"
+            >
                 <!-- File Upload Section -->
                 <div>
                     <h2 class="text-xl font-semibold text-(--main-color) mb-4">
@@ -163,158 +201,230 @@ const canCreate = computed(() => {
                     />
                 </div>
 
-                <!-- Course Details Section -->
-                <div v-if="processedFile" class="space-y-4">
-                    <h2 class="text-xl font-semibold text-(--main-color)">
-                        Course Details
-                    </h2>
+                <div
+                    v-if="processedFile"
+                    class="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 lg:items-start"
+                >
+                    <!-- Course Details Section -->
+                    <div class="space-y-4 order-1 lg:order-2">
+                        <h2 class="text-xl font-semibold text-(--main-color)">
+                            Course Details
+                        </h2>
 
-                    <div>
-                        <label
-                            class="block text-sm font-medium text-(--main-color) mb-2"
-                        >
-                            Course Name *
-                        </label>
-                        <input
-                            v-model="courseName"
-                            type="text"
-                            required
-                            placeholder="Enter course name"
-                            class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) placeholder-(--sub-color) focus:outline-none focus:border-(--main-color)"
-                        />
-                    </div>
-
-                    <div>
-                        <label
-                            class="block text-sm font-medium text-(--main-color) mb-2"
-                        >
-                            Description
-                        </label>
-                        <textarea
-                            v-model="courseDescription"
-                            placeholder="Enter course description (optional)"
-                            rows="3"
-                            class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) placeholder-(--sub-color) focus:outline-none focus:border-(--main-color)"
-                        />
-                    </div>
-
-                    <div>
-                        <label
-                            class="block text-sm font-medium text-(--main-color) mb-2"
-                        >
-                            Race Date
-                        </label>
-                        <input
-                            v-model="raceDate"
-                            type="date"
-                            class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:outline-none focus:border-(--main-color)"
-                        />
-                    </div>
-
-                    <div>
-                        <label
-                            class="block text-sm font-medium text-(--main-color) mb-2"
-                        >
-                            Start Time
-                        </label>
-                        <input
-                            v-model="startTime"
-                            v-time-mask="'hhmmss'"
-                            type="text"
-                            inputmode="numeric"
-                            placeholder="HH:MM:SS"
-                            pattern="\d{1,2}:\d{2}:\d{2}"
-                            class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:outline-none focus:border-(--main-color)"
-                        />
-                        <p class="text-xs text-(--sub-color) mt-1">
-                            Optional: Set a start time if this course is for a
-                            specific race
-                        </p>
-                    </div>
-
-                    <div
-                        v-if="createError"
-                        class="p-4 bg-(--error-color) bg-opacity-10 border border-(--error-color) rounded-lg"
-                    >
-                        <p class="text-(--error-color) text-sm">
-                            {{ createError }}
-                        </p>
-                    </div>
-
-                    <div class="flex items-center gap-4 pt-4">
-                        <button
-                            class="px-6 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                            :disabled="!canCreate"
-                            @click="createCourse"
-                        >
-                            <Icon
-                                v-if="isCreating"
-                                name="svg-spinners:6-dots-scale"
-                                class="h-4 w-4"
-                            />
-                            <Icon
-                                v-else
-                                name="lucide:plus"
-                                class="h-4 w-4 scale-125 -translate-y-0.25"
-                            />
-                            {{ isCreating ? "Creating..." : "Create Course" }}
-                        </button>
-
-                        <NuxtLink
-                            to="/courses"
-                            class="px-6 py-2 border border-(--sub-color) text-(--main-color) rounded-lg hover:bg-(--sub-alt-color) transition-colors"
-                        >
-                            Cancel
-                        </NuxtLink>
-                    </div>
-                </div>
-
-                <!-- File Preview Section -->
-                <div v-if="processedFile" class="mt-8">
-                    <h2 class="text-xl font-semibold text-(--main-color) mb-4">
-                        Preview
-                    </h2>
-                    <div
-                        class="bg-(--sub-alt-color) border border-(--sub-color) rounded-lg p-4"
-                    >
-                        <div class="flex items-center gap-3 mb-4">
-                            <Icon
-                                name="lucide:file-chart-line"
-                                class="h-5 w-5 text-(--main-color)"
-                            />
-                            <span class="text-(--main-color) font-medium">{{
-                                processedFile.name
-                            }}</span>
-                            <span
-                                class="text-xs text-(--sub-color) uppercase bg-(--bg-color) px-2 py-1 rounded"
+                        <div>
+                            <label
+                                class="block text-sm font-medium text-(--main-color) mb-2"
                             >
-                                {{ processedFile.fileType }}
-                            </span>
+                                Course Name *
+                            </label>
+                            <input
+                                v-model="courseName"
+                                type="text"
+                                required
+                                placeholder="Enter course name"
+                                class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) placeholder-(--sub-color) focus:outline-none focus:border-(--main-color)"
+                            />
                         </div>
 
-                        <div class="h-64 rounded-lg overflow-hidden">
-                            <ClientOnly>
-                                <LeafletMap
-                                    :geo-json-data="[processedFile.geoJson]"
-                                    :center="[0, 0]"
-                                    :zoom="10"
+                        <div>
+                            <label
+                                class="block text-sm font-medium text-(--main-color) mb-2"
+                            >
+                                Description
+                            </label>
+                            <textarea
+                                v-model="courseDescription"
+                                placeholder="Enter course description (optional)"
+                                rows="3"
+                                class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) placeholder-(--sub-color) focus:outline-none focus:border-(--main-color)"
+                            />
+                        </div>
+
+                        <div>
+                            <label
+                                class="block text-sm font-medium text-(--main-color) mb-2"
+                            >
+                                Race Date
+                            </label>
+                            <input
+                                v-model="raceDate"
+                                type="date"
+                                class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:outline-none focus:border-(--main-color)"
+                            />
+                        </div>
+
+                        <div>
+                            <label
+                                class="block text-sm font-medium text-(--main-color) mb-2"
+                            >
+                                Start Time
+                            </label>
+                            <input
+                                v-model="startTime"
+                                v-time-mask="'hhmmss'"
+                                type="text"
+                                inputmode="numeric"
+                                placeholder="HH:MM:SS"
+                                pattern="\d{1,2}:\d{2}:\d{2}"
+                                class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:outline-none focus:border-(--main-color)"
+                            />
+                            <p class="text-xs text-(--sub-color) mt-1">
+                                Optional: Set a start time if this course is
+                                for a specific race
+                            </p>
+                        </div>
+
+                        <div
+                            v-if="createError"
+                            class="p-4 bg-(--error-color) bg-opacity-10 border border-(--error-color) rounded-lg"
+                        >
+                            <p class="text-(--error-color) text-sm">
+                                {{ createError }}
+                            </p>
+                        </div>
+
+                        <div class="flex items-center gap-4 pt-4">
+                            <button
+                                class="px-6 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                :disabled="!canCreate"
+                                @click="createCourse"
+                            >
+                                <Icon
+                                    v-if="isCreating"
+                                    name="svg-spinners:6-dots-scale"
+                                    class="h-4 w-4"
                                 />
-                                <template #fallback>
-                                    <div
-                                        class="w-full h-full bg-(--sub-alt-color) rounded-lg flex items-center justify-center"
-                                    >
-                                        <div class="text-center">
-                                            <Icon
-                                                name="svg-spinners:6-dots-scale"
-                                                class="text-(--main-color) scale-200 mb-2"
-                                            />
-                                            <p class="text-(--sub-color)">
-                                                Loading map...
-                                            </p>
+                                <Icon
+                                    v-else
+                                    name="lucide:plus"
+                                    class="h-4 w-4 scale-125 -translate-y-0.25"
+                                />
+                                {{
+                                    isCreating
+                                        ? "Creating..."
+                                        : "Create Course"
+                                }}
+                            </button>
+
+                            <NuxtLink
+                                to="/courses"
+                                class="px-6 py-2 border border-(--sub-color) text-(--main-color) rounded-lg hover:bg-(--sub-alt-color) transition-colors"
+                            >
+                                Cancel
+                            </NuxtLink>
+                        </div>
+                    </div>
+
+                    <!-- File Preview Section -->
+                    <div class="order-2 lg:order-1">
+                        <h2 class="text-xl font-semibold text-(--main-color) mb-4">
+                            Preview
+                        </h2>
+                        <div
+                            class="bg-(--sub-alt-color) border border-(--sub-color) rounded-lg p-4"
+                        >
+                            <div class="flex items-center gap-3 mb-4">
+                                <Icon
+                                    name="lucide:file-chart-line"
+                                    class="h-5 w-5 text-(--main-color)"
+                                />
+                                <span class="text-(--main-color) font-medium">{{
+                                    processedFile.name
+                                }}</span>
+                                <span
+                                    class="text-xs text-(--sub-color) uppercase bg-(--bg-color) px-2 py-1 rounded"
+                                >
+                                    {{ processedFile.fileType }}
+                                </span>
+                            </div>
+
+                            <div class="h-64 rounded-lg overflow-hidden">
+                                <ClientOnly>
+                                    <LeafletMap
+                                        :geo-json-data="[processedFile.geoJson]"
+                                        :center="[0, 0]"
+                                        :zoom="10"
+                                    />
+                                    <template #fallback>
+                                        <div
+                                            class="w-full h-full bg-(--sub-alt-color) rounded-lg flex items-center justify-center"
+                                        >
+                                            <div class="text-center">
+                                                <Icon
+                                                    name="svg-spinners:6-dots-scale"
+                                                    class="text-(--main-color) scale-200 mb-2"
+                                                />
+                                                <p class="text-(--sub-color)">
+                                                    Loading map...
+                                                </p>
+                                            </div>
                                         </div>
+                                    </template>
+                                </ClientOnly>
+                            </div>
+
+                            <div v-if="previewStats" class="mt-4">
+                                <div
+                                    class="grid grid-cols-1 sm:grid-cols-3 gap-3"
+                                >
+                                    <div
+                                        class="bg-(--bg-color) border border-(--sub-color) rounded-lg p-3"
+                                    >
+                                        <p
+                                            class="text-xs uppercase tracking-wide text-(--sub-color)"
+                                        >
+                                            Distance
+                                        </p>
+                                        <p
+                                            class="text-lg font-semibold text-(--main-color) mt-1"
+                                        >
+                                            {{ previewStats.distance }}
+                                        </p>
                                     </div>
-                                </template>
-                            </ClientOnly>
+
+                                    <div
+                                        class="bg-(--bg-color) border border-(--sub-color) rounded-lg p-3"
+                                    >
+                                        <p
+                                            class="text-xs uppercase tracking-wide text-(--sub-color)"
+                                        >
+                                            Elevation Gain
+                                        </p>
+                                        <p
+                                            class="text-lg font-semibold text-(--main-color) mt-1"
+                                        >
+                                            {{ previewStats.elevationGain }}
+                                        </p>
+                                    </div>
+
+                                    <div
+                                        class="bg-(--bg-color) border border-(--sub-color) rounded-lg p-3"
+                                    >
+                                        <p
+                                            class="text-xs uppercase tracking-wide text-(--sub-color)"
+                                        >
+                                            Elevation Loss
+                                        </p>
+                                        <p
+                                            class="text-lg font-semibold text-(--main-color) mt-1"
+                                        >
+                                            {{ previewStats.elevationLoss }}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <p
+                                    v-if="!previewStats.hasElevation"
+                                    class="mt-2 text-xs text-(--sub-color)"
+                                >
+                                    No elevation samples found in file;
+                                    gain/loss unavailable.
+                                </p>
+                            </div>
+
+                            <ElevationProfilePreview
+                                :geo-json="processedFile.geoJson"
+                            />
                         </div>
                     </div>
                 </div>
