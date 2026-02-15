@@ -17,6 +17,7 @@ interface Props {
     geoJsonData: GeoJSON.FeatureCollection[];
     height?: number;
     mapHoverDistance?: number | null;
+    mapHoverDistances?: number[] | null;
     selectedWaypointDistance?: number | null;
     waypoints?: Array<{
         id: string;
@@ -51,6 +52,7 @@ interface PaceHoverEvent {
 const props = withDefaults(defineProps<Props>(), {
     height: 200,
     mapHoverDistance: null,
+    mapHoverDistances: null,
     selectedWaypointDistance: null,
     waypoints: () => [],
     creationMode: false,
@@ -93,16 +95,43 @@ const showAreaGradient = computed<boolean>(() => {
 const chartContainer = ref<HTMLElement>();
 const paceChartContainer = ref<HTMLElement>();
 const tooltip = ref<HTMLElement>();
+const secondaryTooltip = ref<HTMLElement>();
 
 // Tooltip state
+type TooltipModel = {
+    distance: string;
+    elevation: string;
+    grade: string;
+    actualPace: string;
+};
+
 const tooltipVisible = ref(false);
 const tooltipFromMap = ref(false); // Track if tooltip is from map hover
-const tooltipData = ref({
+const tooltipData = ref<TooltipModel>({
     distance: "",
     elevation: "",
     grade: "",
     actualPace: "",
 });
+const secondaryTooltipVisible = ref(false);
+const secondaryTooltipData = ref<TooltipModel>({
+    distance: "",
+    elevation: "",
+    grade: "",
+    actualPace: "",
+});
+const secondaryTooltipElapsed = ref("");
+
+function clearSecondaryMapTooltipState() {
+    secondaryTooltipVisible.value = false;
+    secondaryTooltipElapsed.value = "";
+    secondaryTooltipData.value = {
+        distance: "",
+        elevation: "",
+        grade: "",
+        actualPace: "",
+    };
+}
 
 // Shared hover sync state for chart-to-chart hover
 const chartHoverDistance = ref<number | null>(null);
@@ -153,12 +182,9 @@ let yScale: d3.ScaleLinear<number, number> | null = null;
 let elevationPoints: ElevationPoint[] = [];
 let crosshair: d3.Selection<SVGLineElement, unknown, null, undefined> | null =
     null;
-let mapHoverCrosshair: d3.Selection<
-    SVGLineElement,
-    unknown,
-    null,
-    undefined
-> | null = null;
+let mapHoverCrosshairs: Array<
+    d3.Selection<SVGLineElement, unknown, null, undefined>
+> = [];
 let waypointCrosshair: d3.Selection<
     SVGLineElement,
     unknown,
@@ -177,12 +203,9 @@ let paceCrosshair: d3.Selection<
     null,
     undefined
 > | null = null;
-let paceMapHoverCrosshair: d3.Selection<
-    SVGLineElement,
-    unknown,
-    null,
-    undefined
-> | null = null;
+let paceMapHoverCrosshairs: Array<
+    d3.Selection<SVGLineElement, unknown, null, undefined>
+> = [];
 
 // Sync crosshairs
 let elevationSyncCrosshair: d3.Selection<
@@ -308,6 +331,27 @@ const hasPaceData = computed(() => {
 const totalDistance = computed(() => {
     if (elevationPoints.length === 0) return 0;
     return Math.max(...elevationPoints.map((p) => p.distance));
+});
+
+const MAX_MAP_HOVER_CROSSHAIRS = 2;
+const MAP_HOVER_CROSSHAIR_OPACITY = 0.8;
+
+const activeMapHoverDistances = computed<number[]>(() => {
+    if (props.mapHoverDistances && props.mapHoverDistances.length > 0) {
+        return props.mapHoverDistances
+            .filter((distance) => Number.isFinite(distance))
+            .slice(0, MAX_MAP_HOVER_CROSSHAIRS);
+    }
+
+    if (
+        props.mapHoverDistance !== null &&
+        props.mapHoverDistance !== undefined &&
+        Number.isFinite(props.mapHoverDistance)
+    ) {
+        return [props.mapHoverDistance];
+    }
+
+    return [];
 });
 
 // Per-course smoothing configuration (grade window and pace smoothing)
@@ -786,18 +830,22 @@ function initChart() {
         .style("opacity", 0)
         .style("pointer-events", "none");
 
-    // Add map hover crosshair line (initially hidden)
-    mapHoverCrosshair = g
-        .append("line")
-        .attr("class", "map-hover-crosshair")
-        .attr("x1", 0)
-        .attr("x2", 0)
-        .attr("y1", 0)
-        .attr("y2", innerHeight)
-        .style("stroke", "var(--main-color)")
-        .style("stroke-width", 1)
-        .style("opacity", 0)
-        .style("pointer-events", "none");
+    // Add map hover crosshair lines (primary + secondary)
+    mapHoverCrosshairs = [];
+    for (let i = 0; i < MAX_MAP_HOVER_CROSSHAIRS; i++) {
+        const line = g
+            .append("line")
+            .attr("class", `map-hover-crosshair map-hover-crosshair-${i + 1}`)
+            .attr("x1", 0)
+            .attr("x2", 0)
+            .attr("y1", 0)
+            .attr("y2", innerHeight)
+            .style("stroke", "var(--main-color)")
+            .style("stroke-width", 1)
+            .style("opacity", 0)
+            .style("pointer-events", "none");
+        mapHoverCrosshairs.push(line);
+    }
 
     // Add sync crosshair for hover sync from pace chart
     elevationSyncCrosshair = g
@@ -968,6 +1016,7 @@ function showElevationChartHover(distance: number) {
 
         tooltipVisible.value = true;
         tooltipFromMap.value = false;
+        clearSecondaryMapTooltipState();
     }
 }
 
@@ -992,7 +1041,7 @@ function hideChartHoverSync() {
     }
 
     // Only hide elevation tooltip if not from map hover and not from direct chart hover
-    if (!props.mapHoverDistance) {
+    if (activeMapHoverDistances.value.length === 0) {
         // Check if elevation tooltip should be hidden
         if (!crosshair || crosshair.style("opacity") === "0") {
             tooltipVisible.value = false;
@@ -1151,15 +1200,20 @@ function initPaceChart() {
         .style("opacity", 0)
         .style("pointer-events", "none");
 
-    // Create map hover crosshair
-    paceMapHoverCrosshair = g
-        .append("line")
-        .attr("y1", 0)
-        .attr("y2", innerHeight)
-        .style("stroke", "var(--main-color)")
-        .style("stroke-width", 1)
-        .style("opacity", 0)
-        .style("pointer-events", "none");
+    // Create map hover crosshairs (primary + secondary)
+    paceMapHoverCrosshairs = [];
+    for (let i = 0; i < MAX_MAP_HOVER_CROSSHAIRS; i++) {
+        const line = g
+            .append("line")
+            .attr("class", `pace-map-hover-crosshair pace-map-hover-crosshair-${i + 1}`)
+            .attr("y1", 0)
+            .attr("y2", innerHeight)
+            .style("stroke", "var(--main-color)")
+            .style("stroke-width", 1)
+            .style("opacity", 0)
+            .style("pointer-events", "none");
+        paceMapHoverCrosshairs.push(line);
+    }
 
     // Add sync crosshair for hover sync from elevation chart
     paceSyncCrosshair = g
@@ -1343,6 +1397,8 @@ function handleMouseMove(event: MouseEvent) {
         // Show tooltip
         tooltipVisible.value = true;
         tooltipFromMap.value = false; // This is from chart hover
+        secondaryTooltipVisible.value = false;
+        secondaryTooltipElapsed.value = "";
 
         emit("elevation-hover", {
             lat: interpolatedPoint.lat,
@@ -1368,16 +1424,14 @@ function handleMouseLeave() {
     }
 
     // Only hide tooltip if map crosshair is not visible and we're not syncing from pace chart
-    if (
-        (!mapHoverCrosshair || mapHoverCrosshair.style("opacity") === "0") &&
-        chartHoverSource.value !== "pace"
-    ) {
+    const hasVisibleMapHoverCrosshair = mapHoverCrosshairs.some(
+        (line) => line.style("opacity") !== "0",
+    );
+    if (!hasVisibleMapHoverCrosshair && chartHoverSource.value !== "pace") {
         tooltipVisible.value = false;
         tooltipFromMap.value = false;
-    } else if (
-        mapHoverCrosshair &&
-        mapHoverCrosshair.style("opacity") !== "0"
-    ) {
+        clearSecondaryMapTooltipState();
+    } else if (hasVisibleMapHoverCrosshair) {
         // If map crosshair is still visible, mark tooltip as from map
         tooltipFromMap.value = true;
     }
@@ -1405,120 +1459,169 @@ function handleChartClick(event: MouseEvent) {
     }
 }
 
+function buildTooltipModelAtDistance(distance: number): TooltipModel | null {
+    const interpolatedPoint = interpolateAtDistance(
+        smoothedElevationPoints.value,
+        distance,
+    );
+    if (!interpolatedPoint) return null;
+
+    const grade = calculateGradeAtDistance(
+        smoothedElevationPoints.value,
+        interpolatedPoint.distance,
+        smoothingConfig.value.gradeWindowMeters,
+    );
+    const gradeFormatted =
+        grade >= 0 ? `+${grade.toFixed(1)}%` : `${grade.toFixed(1)}%`;
+
+    let actualPace = "";
+    if (hasPaceData.value && actualPaceData.value.length > 0) {
+        const closestPacePoint = actualPaceData.value.reduce((prev, curr) =>
+            Math.abs(curr.distance - distance) < Math.abs(prev.distance - distance)
+                ? curr
+                : prev,
+        );
+        if (closestPacePoint) {
+            const isMiles =
+                (typeof (
+                    userSettingsStore as unknown as {
+                        getDistanceUnitForCourse?: unknown;
+                    }
+                )?.getDistanceUnitForCourse === "function"
+                    ? userSettingsStore.getDistanceUnitForCourse()
+                    : "miles") === "miles";
+            actualPace =
+                formatPace(closestPacePoint.actualPace) + (isMiles ? "/mi" : "/km");
+        }
+    }
+
+    return {
+        distance: formatDistance(
+            interpolatedPoint.distance,
+            typeof (
+                userSettingsStore as unknown as {
+                    getDistanceUnitForCourse?: unknown;
+                }
+            )?.getDistanceUnitForCourse === "function"
+                ? userSettingsStore.getDistanceUnitForCourse()
+                : "miles",
+        ),
+        elevation: formatElevation(
+            interpolatedPoint.elevation,
+            typeof (
+                userSettingsStore as unknown as {
+                    getElevationUnitForCourse?: unknown;
+                }
+            )?.getElevationUnitForCourse === "function"
+                ? userSettingsStore.getElevationUnitForCourse()
+                : "feet",
+        ),
+        grade: gradeFormatted,
+        actualPace,
+    };
+}
+
+function getElapsedForDistance(distance: number): string {
+    const secs = getElapsedAtDistance(distance);
+    return secs != null ? formatElapsedTimeLocal(secs) : "";
+}
+
+function clampTooltipX(
+    tooltipEl: HTMLElement,
+    desiredX: number,
+    containerWidth: number,
+): number {
+    return Math.min(desiredX, containerWidth - tooltipEl.offsetWidth - 10);
+}
+
 // Update map hover crosshair position
 function updateMapHoverCrosshair() {
-    if (!mapHoverCrosshair || !xScale || !tooltip.value) return;
+    if (!xScale || !tooltip.value) return;
 
-    if (
-        props.mapHoverDistance !== null &&
-        props.mapHoverDistance !== undefined
-    ) {
-        const x = xScale(props.mapHoverDistance);
-        mapHoverCrosshair.attr("x1", x).attr("x2", x).style("opacity", 0.8);
+    const distances = activeMapHoverDistances.value;
 
-        // Show tooltip for map hover as well
-        const interpolatedPoint = interpolateAtDistance(
-            smoothedElevationPoints.value,
-            props.mapHoverDistance,
-        );
-
-        if (interpolatedPoint) {
-            // Calculate grade at this distance
-            const grade = calculateGradeAtDistance(
-                smoothedElevationPoints.value,
-                interpolatedPoint.distance,
-                smoothingConfig.value.gradeWindowMeters,
-            );
-            const gradeFormatted =
-                grade >= 0 ? `+${grade.toFixed(1)}%` : `${grade.toFixed(1)}%`;
-
-            // Update tooltip data
-            tooltipData.value = {
-                distance: formatDistance(
-                    interpolatedPoint.distance,
-                    typeof (
-                        userSettingsStore as unknown as {
-                            getDistanceUnitForCourse?: unknown;
-                        }
-                    )?.getDistanceUnitForCourse === "function"
-                        ? userSettingsStore.getDistanceUnitForCourse()
-                        : "miles",
-                ),
-                elevation: formatElevation(
-                    interpolatedPoint.elevation,
-                    typeof (
-                        userSettingsStore as unknown as {
-                            getElevationUnitForCourse?: unknown;
-                        }
-                    )?.getElevationUnitForCourse === "function"
-                        ? userSettingsStore.getElevationUnitForCourse()
-                        : "feet",
-                ),
-                grade: gradeFormatted,
-                actualPace: "",
-            };
-
-            // Find closest pace data point if available
-            let actualPace = "";
-            if (hasPaceData.value && actualPaceData.value.length > 0) {
-                const closestPacePoint = actualPaceData.value.reduce(
-                    (prev, curr) =>
-                        Math.abs(curr.distance - props.mapHoverDistance!) <
-                        Math.abs(prev.distance - props.mapHoverDistance!)
-                            ? curr
-                            : prev,
-                );
-                if (closestPacePoint) {
-                    const isMiles =
-                        (typeof (
-                            userSettingsStore as unknown as {
-                                getDistanceUnitForCourse?: unknown;
-                            }
-                        )?.getDistanceUnitForCourse === "function"
-                            ? userSettingsStore.getDistanceUnitForCourse()
-                            : "miles") === "miles";
-                    const paceWithUnits =
-                        formatPace(closestPacePoint.actualPace) +
-                        (isMiles ? "/mi" : "/km");
-                    actualPace = paceWithUnits;
-                }
-            }
-
-            tooltipData.value.actualPace = actualPace;
-
-            // Position tooltip
-            const containerRect = chartContainer.value!.getBoundingClientRect();
-            const tooltipEl = tooltip.value;
-            const margin = TOOLTIP_MARGIN;
-
-            // Calculate position relative to chart area
-            const chartX = x + margin.left;
-            const chartY = margin.top + 10; // Fixed position near the top
-
-            // Ensure tooltip doesn't go off-screen
-            const tooltipWidth = tooltipEl.offsetWidth;
-            const finalX = Math.min(
-                chartX,
-                containerRect.width - tooltipWidth - 10,
-            );
-
-            tooltipEl.style.left = `${finalX}px`;
-            tooltipEl.style.top = `${chartY}px`;
-
-            // Show tooltip
-            tooltipVisible.value = true;
-            tooltipFromMap.value = true; // This is from map hover
+    mapHoverCrosshairs.forEach((line, index) => {
+        const distance = distances[index];
+        if (distance === undefined) {
+            line.style("opacity", 0);
+            return;
         }
-    } else {
-        mapHoverCrosshair.style("opacity", 0);
 
+        const x = xScale(distance);
+        line.attr("x1", x)
+            .attr("x2", x)
+            .style("opacity", MAP_HOVER_CROSSHAIR_OPACITY);
+    });
+
+    const primaryDistance = distances[0];
+    if (primaryDistance === undefined) {
+        clearSecondaryMapTooltipState();
         // Hide tooltip when not hovering over map
         // Only hide if we're not currently hovering over the chart itself
         if (!crosshair || crosshair.style("opacity") === "0") {
             tooltipVisible.value = false;
             tooltipFromMap.value = false;
         }
+        return;
     }
+
+    const primaryX = xScale(primaryDistance);
+    const primaryModel = buildTooltipModelAtDistance(primaryDistance);
+    if (!primaryModel) return;
+    tooltipData.value = primaryModel;
+
+    // Position tooltip
+    const containerRect = chartContainer.value!.getBoundingClientRect();
+    const tooltipEl = tooltip.value;
+    const secondaryTooltipEl = secondaryTooltip.value;
+    const margin = TOOLTIP_MARGIN;
+
+    // Calculate position relative to chart area
+    const chartX = primaryX + margin.left;
+    const chartY = margin.top + 10; // Fixed position near the top
+
+    const primaryFinalX = clampTooltipX(tooltipEl, chartX, containerRect.width);
+    tooltipEl.style.left = `${primaryFinalX}px`;
+    tooltipEl.style.top = `${chartY}px`;
+
+    const secondaryDistance = distances[1];
+    if (
+        secondaryDistance !== undefined &&
+        secondaryTooltipEl &&
+        Number.isFinite(secondaryDistance)
+    ) {
+        const secondaryModel = buildTooltipModelAtDistance(secondaryDistance);
+        if (secondaryModel) {
+            secondaryTooltipData.value = secondaryModel;
+            secondaryTooltipElapsed.value = getElapsedForDistance(secondaryDistance);
+            secondaryTooltipVisible.value = true;
+
+            const secondaryX = xScale(secondaryDistance) + margin.left;
+            const secondaryFinalX = clampTooltipX(
+                secondaryTooltipEl,
+                secondaryX,
+                containerRect.width,
+            );
+            let secondaryFinalY = chartY;
+
+            const minHorizontalSeparation =
+                Math.max(tooltipEl.offsetWidth, secondaryTooltipEl.offsetWidth) * 0.65;
+            if (Math.abs(primaryFinalX - secondaryFinalX) < minHorizontalSeparation) {
+                secondaryFinalY = chartY + secondaryTooltipEl.offsetHeight + 8;
+            }
+
+            secondaryTooltipEl.style.left = `${secondaryFinalX}px`;
+            secondaryTooltipEl.style.top = `${secondaryFinalY}px`;
+        } else {
+            clearSecondaryMapTooltipState();
+        }
+    } else {
+        clearSecondaryMapTooltipState();
+    }
+
+    // Show tooltip
+    tooltipVisible.value = true;
+    tooltipFromMap.value = true; // This is from map hover
 }
 
 // Handle mouse movement over the pace chart
@@ -1576,16 +1679,22 @@ function handlePaceMouseLeave() {
 
 // Update pace chart map hover crosshair
 function updatePaceMapHoverCrosshair() {
-    if (!paceMapHoverCrosshair || !paceXScale || !hasPaceData.value) return;
+    if (!paceXScale || !hasPaceData.value) return;
 
-    if (props.mapHoverDistance !== null) {
-        const x = paceXScale(props.mapHoverDistance);
-        // Show crosshair at hover position
-        paceMapHoverCrosshair.attr("x1", x).attr("x2", x).style("opacity", 0.8);
-    } else {
-        // Hide crosshair when not hovering
-        paceMapHoverCrosshair.style("opacity", 0);
-    }
+    const distances = activeMapHoverDistances.value;
+
+    paceMapHoverCrosshairs.forEach((line, index) => {
+        const distance = distances[index];
+        if (distance === undefined) {
+            line.style("opacity", 0);
+            return;
+        }
+
+        const x = paceXScale(distance);
+        line.attr("x1", x)
+            .attr("x2", x)
+            .style("opacity", MAP_HOVER_CROSSHAIR_OPACITY);
+    });
 }
 
 // Update waypoint crosshair position
@@ -1693,9 +1802,11 @@ function updateWaypointCrosshair() {
             // Show tooltip for selected waypoint
             tooltipVisible.value = true;
             tooltipFromMap.value = true;
+            clearSecondaryMapTooltipState();
         }
     } else {
         waypointCrosshair.style("opacity", 0);
+        clearSecondaryMapTooltipState();
     }
 }
 
@@ -1880,13 +1991,14 @@ watch([chartHoverDistance, chartHoverSource], ([distance, source]) => {
     }
 });
 
-// Watch for map hover distance changes
+// Watch for map hover distance changes (single or multi-candidate)
 watch(
-    () => props.mapHoverDistance,
+    activeMapHoverDistances,
     () => {
         updateMapHoverCrosshair();
         updatePaceMapHoverCrosshair();
     },
+    { deep: true },
 );
 
 // Watch for selected waypoint distance changes
@@ -2128,11 +2240,9 @@ function getElapsedAtDistance(distance: number): number | null {
 // Distance source for tooltip (map hover, waypoint, or chart hover)
 const currentTooltipDistance = computed<number | null>(() => {
     if (tooltipFromMap.value) {
-        if (
-            props.mapHoverDistance !== null &&
-            props.mapHoverDistance !== undefined
-        ) {
-            return props.mapHoverDistance;
+        const primaryMapHoverDistance = activeMapHoverDistances.value[0];
+        if (primaryMapHoverDistance !== undefined) {
+            return primaryMapHoverDistance;
         }
         if (
             props.selectedWaypointDistance !== null &&
@@ -2217,6 +2327,61 @@ const tooltipElapsed = computed<string>(() => {
                         class="inline h-3 w-3 translate-y-0.5"
                     />
                     {{ tooltipElapsed }}
+                </div>
+            </div>
+            <div
+                ref="secondaryTooltip"
+                class="elevation-tooltip"
+                :class="{
+                    'tooltip-visible': secondaryTooltipVisible,
+                    'tooltip-from-map': secondaryTooltipVisible && tooltipFromMap,
+                }"
+            >
+                <div class="tooltip-distance">
+                    <Icon
+                        name="lucide:map-pin"
+                        class="inline h-3 w-3 translate-y-0.5"
+                    />
+                    {{ secondaryTooltipData.distance }}
+                </div>
+                <div class="tooltip-elevation">
+                    <Icon
+                        name="lucide:arrow-up"
+                        class="inline h-3 w-3 translate-y-0.5"
+                    />
+                    {{ secondaryTooltipData.elevation }}
+                </div>
+                <div class="tooltip-grade">
+                    <Icon
+                        name="lucide:triangle-right"
+                        class="inline h-3 w-3 translate-y-0.5"
+                        :class="
+                            secondaryTooltipData.grade.slice(0, 1) === '-'
+                                ? '-scale-x-100'
+                                : ''
+                        "
+                    />
+                    {{ secondaryTooltipData.grade }}
+                </div>
+                <div
+                    v-if="secondaryTooltipData.actualPace"
+                    class="tooltip-pace"
+                >
+                    <Icon
+                        name="lucide:timer"
+                        class="inline h-3 w-3 translate-y-0.5"
+                    />
+                    {{ secondaryTooltipData.actualPace }}
+                </div>
+                <div
+                    v-if="secondaryTooltipElapsed"
+                    class="tooltip-elapsed"
+                >
+                    <Icon
+                        name="lucide:clock"
+                        class="inline h-3 w-3 translate-y-0.5"
+                    />
+                    {{ secondaryTooltipElapsed }}
                 </div>
             </div>
 
@@ -2323,8 +2488,11 @@ const tooltipElapsed = computed<string>(() => {
 }
 
 .elevation-tooltip.tooltip-from-map {
-    opacity: 0.8;
     border-style: dashed;
+}
+
+.elevation-tooltip.tooltip-visible.tooltip-from-map {
+    opacity: 0.8;
 }
 
 .tooltip-distance {

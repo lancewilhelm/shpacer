@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { getWaypointColorFromOrder } from "~/utils/waypoints";
 import { calculateDistance } from "~/utils/distance";
+import {
+    buildOverlapIndexForGeoJsonTracks,
+    projectPointOnTrackSegment,
+    resolveSecondaryFromOverlap,
+    type OverlapIndex,
+} from "~/utils/routeOverlapIndex";
 
 // Define a waypoint type that matches what we get from the API
 type Waypoint = {
@@ -69,7 +75,14 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const emit = defineEmits<{
-    "map-hover": [event: { lat: number; lng: number; distance: number }];
+    "map-hover": [
+        event: {
+            lat: number;
+            lng: number;
+            distance: number;
+            distances: number[];
+        },
+    ];
     "map-leave": [];
     "waypoint-click": [waypoint: Waypoint];
     "line-click": [coords: { lat: number; lng: number }];
@@ -87,92 +100,98 @@ let highlightLayer: L.Polyline | null = null;
 let prevFitHighlight = false;
 let lastFittedSegmentKey: string | null = null;
 let hasDoneInitialFit = false;
+const MAX_HOVER_DISTANCES = 2;
+const OVERLAP_DISTANCE_SEPARATION_MIN_METERS = 25;
+let overlapIndex: OverlapIndex | null = null;
 
-// Function to handle track hover and calculate distance along route
-function handleTrackHover(
-    e: L.LeafletMouseEvent,
-    geoJson: GeoJSON.FeatureCollection,
-) {
+function rebuildOverlapIndex() {
+    overlapIndex = buildOverlapIndexForGeoJsonTracks(props.geoJsonData);
+}
+
+// Function to handle track hover and calculate one or two distances along route
+function handleTrackHover(e: L.LeafletMouseEvent) {
+    if (!overlapIndex || overlapIndex.segments.length === 0) return;
+
     const hoverLat = e.latlng.lat;
     const hoverLng = e.latlng.lng;
+    let primaryCandidate:
+        | {
+              segmentIndex: number;
+              t: number;
+              snappedLat: number;
+              snappedLng: number;
+              routeDistanceMeters: number;
+              pointerDistanceMeters: number;
+          }
+        | null = null;
 
-    // Find the closest point on the track and calculate cumulative distance
-    let closestDistance = Infinity;
-    let closestPointDistance = 0;
-    let cumulativeDistance = 0;
+    for (
+        let segmentIndex = 0;
+        segmentIndex < overlapIndex.segments.length;
+        segmentIndex++
+    ) {
+        const segment = overlapIndex.segments[segmentIndex];
+        if (!segment) continue;
 
-    // Extract coordinates from the GeoJSON
-    const extractCoordinates = (geometry: GeoJSON.Geometry): number[][] => {
-        const coords: number[][] = [];
+        const projected = projectPointOnTrackSegment(hoverLat, hoverLng, segment);
+        const pointerDistanceMeters = calculateDistance(
+            hoverLat,
+            hoverLng,
+            projected.snappedLat,
+            projected.snappedLng,
+        );
+        const routeDistanceMeters =
+            segment.cumulativeStartMeters + projected.t * segment.segmentLengthMeters;
 
-        if (geometry.type === "LineString") {
-            coords.push(...geometry.coordinates);
-        } else if (geometry.type === "MultiLineString") {
-            for (const line of geometry.coordinates) {
-                coords.push(...line);
-            }
-        } else if (geometry.type === "Point") {
-            coords.push(geometry.coordinates as number[]);
-        }
+        if (!Number.isFinite(pointerDistanceMeters)) continue;
 
-        return coords;
-    };
-
-    // Process all features in the GeoJSON
-    for (const feature of geoJson.features) {
-        const coordinates = extractCoordinates(feature.geometry);
-
-        for (let i = 0; i < coordinates.length; i++) {
-            const coord = coordinates[i];
-            if (!coord || coord.length < 2) continue;
-
-            const [lon, lat] = coord;
-            if (typeof lon !== "number" || typeof lat !== "number") continue;
-
-            // Calculate distance from hover point to this coordinate
-            const distance = Math.sqrt(
-                Math.pow(lat - hoverLat, 2) + Math.pow(lon - hoverLng, 2),
-            );
-
-            // If this is the closest point so far
-            if (distance < closestDistance) {
-                closestDistance = distance;
-                closestPointDistance = cumulativeDistance;
-            }
-
-            // Calculate cumulative distance for next iteration
-            if (i > 0) {
-                const prevCoord = coordinates[i - 1];
-                if (prevCoord && prevCoord.length >= 2) {
-                    const [prevLon, prevLat] = prevCoord;
-                    if (
-                        typeof prevLon === "number" &&
-                        typeof prevLat === "number"
-                    ) {
-                        // Use centralized distance calculation function
-                        cumulativeDistance += calculateDistance(
-                            prevLat,
-                            prevLon,
-                            lat,
-                            lon,
-                        );
-                    }
-                }
-            }
+        if (
+            !primaryCandidate ||
+            pointerDistanceMeters < primaryCandidate.pointerDistanceMeters
+        ) {
+            primaryCandidate = {
+                segmentIndex,
+                t: projected.t,
+                snappedLat: projected.snappedLat,
+                snappedLng: projected.snappedLng,
+                routeDistanceMeters,
+                pointerDistanceMeters,
+            };
         }
     }
 
-    // Emit the hover event with the calculated distance
+    if (!primaryCandidate) return;
+
+    const distances = [primaryCandidate.routeDistanceMeters];
+    const secondaryCandidate = resolveSecondaryFromOverlap(
+        overlapIndex,
+        primaryCandidate.segmentIndex,
+        primaryCandidate.t,
+        primaryCandidate.snappedLat,
+        primaryCandidate.snappedLng,
+    );
+    if (
+        secondaryCandidate &&
+        Math.abs(secondaryCandidate.distance - primaryCandidate.routeDistanceMeters) >=
+            OVERLAP_DISTANCE_SEPARATION_MIN_METERS &&
+        distances.length < MAX_HOVER_DISTANCES
+    ) {
+        distances.push(secondaryCandidate.distance);
+    }
+
     emit("map-hover", {
         lat: hoverLat,
         lng: hoverLng,
-        distance: closestPointDistance,
+        distance: primaryCandidate.routeDistanceMeters,
+        distances,
     });
 }
 
 // Function to add GeoJSON layers
 function addGeoJsonLayers() {
     if (!map || !L) return;
+
+    rebuildOverlapIndex();
 
     // Clear existing GeoJSON layers
     geoJsonLayers.forEach((layer) => {
@@ -218,10 +237,10 @@ function addGeoJsonLayers() {
                     feature.geometry.type === "MultiLineString"
                 );
             },
-            onEachFeature: (feature, layer) => {
+            onEachFeature: (_feature, layer) => {
                 // Add hover events for track interaction
                 layer.on("mousemove", (e: L.LeafletMouseEvent) => {
-                    handleTrackHover(e, geoJson);
+                    handleTrackHover(e);
                 });
 
                 layer.on("mouseout", () => {

@@ -67,6 +67,7 @@ Course Selection → Map Display → Interactive Exploration → Waypoint Manage
 2. **Map Display**: Interactive map with route visualization and controls
 3. **Interactive Exploration**: 
    - Hover over route for distance/elevation data
+   - For overlapping out-and-back sections, map hover uses a precomputed overlap index to resolve up to two route distances and renders dual chart cursors (primary + secondary); single-track sections stay single-cursor
    - Click to create waypoints
    - Drag waypoints to reposition
 4. **Waypoint Management**: Edit names, tags, and properties

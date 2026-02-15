@@ -1462,8 +1462,8 @@ const elevationHoverPoint = ref<{
   grade: number;
 } | null>(null);
 
-// Stores the distance for mouse hover on the map course
-const mapHoverDistance = ref<number | null>(null);
+// Stores one or two candidate distances for mouse hover on the map course
+const mapHoverDistances = ref<number[] | null>(null);
 
 // Handle elevation chart hover events
 function handleElevationHover(event: {
@@ -1498,12 +1498,21 @@ function handlePaceLeave() {
 }
 
 // Handle map hover events
-function handleMapHover(event: { lat: number; lng: number; distance: number }) {
-  mapHoverDistance.value = event.distance;
+function handleMapHover(event: {
+  lat: number;
+  lng: number;
+  distance: number;
+  distances?: number[];
+}) {
+  if (event.distances && event.distances.length > 0) {
+    mapHoverDistances.value = event.distances;
+    return;
+  }
+  mapHoverDistances.value = [event.distance];
 }
 
 function handleMapLeave() {
-  mapHoverDistance.value = null;
+  mapHoverDistances.value = null;
 }
 
 // Waypoint interaction state
@@ -2346,7 +2355,7 @@ onUnmounted(() => {
                 <ElevationPaceChart
                   :geo-json-data="geoJsonData"
                   :height="Math.max(0, chartPanelHeight - 16)"
-                  :map-hover-distance="mapHoverDistance"
+                  :map-hover-distances="mapHoverDistances"
                   :selected-waypoint-distance="
                     waypointPanelTab === 'waypoints'
                       ? selectedWaypoint?.distance || null
@@ -2436,7 +2445,7 @@ onUnmounted(() => {
                 <ElevationPaceChart
                   :geo-json-data="geoJsonData"
                   :height="Math.max(0, chartPanelHeight - 24)"
-                  :map-hover-distance="mapHoverDistance"
+                  :map-hover-distances="mapHoverDistances"
                   :selected-waypoint-distance="
                     waypointPanelTab === 'waypoints'
                       ? selectedWaypoint?.distance || null
