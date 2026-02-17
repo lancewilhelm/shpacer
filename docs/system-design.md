@@ -69,6 +69,7 @@ Course Selection → Map Display → Interactive Exploration → Waypoint Manage
    - Hover over route for distance/elevation data
    - For overlapping out-and-back sections, map hover uses a precomputed overlap index to resolve up to two route distances and renders dual chart cursors (primary + secondary); single-track sections stay single-cursor
    - Click to create waypoints
+   - On overlapping sections, click interactions prompt for which route distance to use (for waypoint creation and move actions)
    - Waypoint creation and waypoint repositioning reject duplicate route positions (same course distance as an existing waypoint)
    - Exiting manual waypoint creation resets the map to the same full-course fit used on initial waypoint-tab render
    - Drag waypoints to reposition

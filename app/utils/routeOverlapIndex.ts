@@ -416,11 +416,13 @@ export function resolveSecondaryFromOverlap(
   primaryT: number,
   primarySnappedLat: number,
   primarySnappedLng: number,
-): { distance: number } | null {
+): { distance: number; snappedLat: number; snappedLng: number } | null {
   const links = overlapIndex.linksBySegment[primarySegmentIndex];
   if (!links || links.length === 0) return null;
 
-  let best: { distance: number; lateral: number } | null = null;
+  let best:
+    | { distance: number; lateral: number; snappedLat: number; snappedLng: number }
+    | null = null;
   for (const link of links) {
     if (!isWithinRange(primaryT, link.thisTStart, link.thisTEnd)) continue;
 
@@ -451,9 +453,20 @@ export function resolveSecondaryFromOverlap(
       lateral < best.lateral ||
       (lateral === best.lateral && distance < best.distance)
     ) {
-      best = { distance, lateral };
+      best = {
+        distance,
+        lateral,
+        snappedLat: otherLat,
+        snappedLng: otherLng,
+      };
     }
   }
 
-  return best ? { distance: best.distance } : null;
+  return best
+    ? {
+        distance: best.distance,
+        snappedLat: best.snappedLat,
+        snappedLng: best.snappedLng,
+      }
+    : null;
 }

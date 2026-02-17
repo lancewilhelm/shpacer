@@ -21,6 +21,18 @@ type Waypoint = {
     order: number;
 };
 
+type TrackDistanceCandidate = {
+    lat: number;
+    lng: number;
+    distance: number;
+};
+
+type TrackProjectionCandidate = TrackDistanceCandidate & {
+    segmentIndex: number;
+    t: number;
+    pointerDistanceMeters: number;
+};
+
 // Only import Leaflet on client side to avoid SSR issues
 let L: typeof import("leaflet") | null = null;
 if (import.meta.client) {
@@ -88,7 +100,15 @@ const emit = defineEmits<{
     "map-leave": [];
     "waypoint-click": [waypoint: Waypoint];
     "line-click": [coords: { lat: number; lng: number }];
-    "track-click": [coords: { lat: number; lng: number }];
+    "track-click": [
+        event: {
+            lat: number;
+            lng: number;
+            distance: number;
+            distances: number[];
+            candidates: TrackDistanceCandidate[];
+        },
+    ];
 }>();
 
 // Generate unique map ID
@@ -110,22 +130,12 @@ function rebuildOverlapIndex() {
     overlapIndex = buildOverlapIndexForGeoJsonTracks(props.geoJsonData);
 }
 
-// Function to handle track hover and calculate one or two distances along route
-function handleTrackHover(e: L.LeafletMouseEvent) {
-    if (!overlapIndex || overlapIndex.segments.length === 0) return;
-
-    const hoverLat = e.latlng.lat;
-    const hoverLng = e.latlng.lng;
-    let primaryCandidate:
-        | {
-              segmentIndex: number;
-              t: number;
-              snappedLat: number;
-              snappedLng: number;
-              routeDistanceMeters: number;
-              pointerDistanceMeters: number;
-          }
-        | null = null;
+function getPrimaryTrackProjection(
+    targetLat: number,
+    targetLng: number,
+): TrackProjectionCandidate | null {
+    if (!overlapIndex || overlapIndex.segments.length === 0) return null;
+    let primaryCandidate: TrackProjectionCandidate | null = null;
 
     for (
         let segmentIndex = 0;
@@ -135,14 +145,14 @@ function handleTrackHover(e: L.LeafletMouseEvent) {
         const segment = overlapIndex.segments[segmentIndex];
         if (!segment) continue;
 
-        const projected = projectPointOnTrackSegment(hoverLat, hoverLng, segment);
+        const projected = projectPointOnTrackSegment(targetLat, targetLng, segment);
         const pointerDistanceMeters = calculateDistance(
-            hoverLat,
-            hoverLng,
+            targetLat,
+            targetLng,
             projected.snappedLat,
             projected.snappedLng,
         );
-        const routeDistanceMeters =
+        const routeDistance =
             segment.cumulativeStartMeters + projected.t * segment.segmentLengthMeters;
 
         if (!Number.isFinite(pointerDistanceMeters)) continue;
@@ -154,38 +164,82 @@ function handleTrackHover(e: L.LeafletMouseEvent) {
             primaryCandidate = {
                 segmentIndex,
                 t: projected.t,
-                snappedLat: projected.snappedLat,
-                snappedLng: projected.snappedLng,
-                routeDistanceMeters,
+                lat: projected.snappedLat,
+                lng: projected.snappedLng,
+                distance: routeDistance,
                 pointerDistanceMeters,
             };
         }
     }
 
-    if (!primaryCandidate) return;
+    return primaryCandidate;
+}
 
-    const distances = [primaryCandidate.routeDistanceMeters];
+function getTrackDistanceCandidates(
+    primaryCandidate: TrackProjectionCandidate,
+): TrackDistanceCandidate[] {
+    const candidates: TrackDistanceCandidate[] = [
+        {
+            lat: primaryCandidate.lat,
+            lng: primaryCandidate.lng,
+            distance: primaryCandidate.distance,
+        },
+    ];
+
+    if (!overlapIndex) return candidates;
+
     const secondaryCandidate = resolveSecondaryFromOverlap(
         overlapIndex,
         primaryCandidate.segmentIndex,
         primaryCandidate.t,
-        primaryCandidate.snappedLat,
-        primaryCandidate.snappedLng,
+        primaryCandidate.lat,
+        primaryCandidate.lng,
     );
     if (
         secondaryCandidate &&
-        Math.abs(secondaryCandidate.distance - primaryCandidate.routeDistanceMeters) >=
+        Math.abs(secondaryCandidate.distance - primaryCandidate.distance) >=
             OVERLAP_DISTANCE_SEPARATION_MIN_METERS &&
-        distances.length < MAX_HOVER_DISTANCES
+        candidates.length < MAX_HOVER_DISTANCES
     ) {
-        distances.push(secondaryCandidate.distance);
+        candidates.push({
+            lat: secondaryCandidate.snappedLat,
+            lng: secondaryCandidate.snappedLng,
+            distance: secondaryCandidate.distance,
+        });
     }
+
+    return candidates;
+}
+
+// Function to handle track hover and calculate one or two distances along route
+function handleTrackHover(e: L.LeafletMouseEvent) {
+    const hoverLat = e.latlng.lat;
+    const hoverLng = e.latlng.lng;
+    const primaryCandidate = getPrimaryTrackProjection(hoverLat, hoverLng);
+    if (!primaryCandidate) return;
+    const candidates = getTrackDistanceCandidates(primaryCandidate);
 
     emit("map-hover", {
         lat: hoverLat,
         lng: hoverLng,
-        distance: primaryCandidate.routeDistanceMeters,
-        distances,
+        distance: primaryCandidate.distance,
+        distances: candidates.map((candidate) => candidate.distance),
+    });
+}
+
+function handleTrackClick(e: L.LeafletMouseEvent) {
+    const clickLat = e.latlng.lat;
+    const clickLng = e.latlng.lng;
+    const primaryCandidate = getPrimaryTrackProjection(clickLat, clickLng);
+    if (!primaryCandidate) return;
+    const candidates = getTrackDistanceCandidates(primaryCandidate);
+
+    emit("track-click", {
+        lat: clickLat,
+        lng: clickLng,
+        distance: primaryCandidate.distance,
+        distances: candidates.map((candidate) => candidate.distance),
+        candidates,
     });
 }
 
@@ -251,10 +305,7 @@ function addGeoJsonLayers() {
 
                 // Add click event for track clicking (for waypoint creation)
                 layer.on("click", (e: L.LeafletMouseEvent) => {
-                    emit("track-click", {
-                        lat: e.latlng.lat,
-                        lng: e.latlng.lng,
-                    });
+                    handleTrackClick(e);
                 });
             },
         }).addTo(map!);

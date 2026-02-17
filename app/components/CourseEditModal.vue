@@ -187,11 +187,50 @@ async function updateWaypointTags(tags: string[]) {
 // Waypoint creation state
 const creatingWaypoint = ref(false);
 const newWaypointBeingCreated = ref<Partial<Waypoint> | null>(null);
-const mapClickLocation = ref<{
+
+type TrackClickCandidate = {
   lat: number;
   lng: number;
   distance: number;
+};
+
+type TrackClickEvent = {
+  lat: number;
+  lng: number;
+  distance: number;
+  distances?: number[];
+  candidates?: TrackClickCandidate[];
+};
+
+type MapClickAction = "create" | "move";
+type MapClickCandidateOption = TrackClickCandidate & { occupied: boolean };
+
+const mapClickLocation = ref<{
+  action: MapClickAction;
+  candidates: MapClickCandidateOption[];
+  selectedIndex: number | null;
 } | null>(null);
+
+const mapClickPreviewLocation = computed(() => {
+  const selected = getSelectedMapClickCandidate();
+  if (!selected) return null;
+  return {
+    lat: selected.lat,
+    lng: selected.lng,
+    distance: selected.distance,
+  };
+});
+
+const selectedMapClickCandidate = computed(() => getSelectedMapClickCandidate());
+
+function getSelectedMapClickCandidate(): MapClickCandidateOption | null {
+  if (!mapClickLocation.value) return null;
+  if (mapClickLocation.value.selectedIndex === null) return null;
+  return (
+    mapClickLocation.value.candidates[mapClickLocation.value.selectedIndex] ??
+    null
+  );
+}
 
 function getStatusMessageFromError(error: unknown): string | null {
   if (!error || typeof error !== "object") return null;
@@ -220,6 +259,27 @@ function hasWaypointAtDistance(
       WAYPOINT_DISTANCE_DUPLICATE_TOLERANCE_METERS
     );
   });
+}
+
+function getMapClickCandidates(
+  action: MapClickAction,
+  rawCandidates: TrackClickCandidate[],
+): MapClickCandidateOption[] {
+  const excludedWaypointId =
+    action === "move" ? selectedWaypointForEdit.value?.id : undefined;
+
+  return rawCandidates.map((candidate) => ({
+    ...candidate,
+    occupied: hasWaypointAtDistance(candidate.distance, excludedWaypointId),
+  }));
+}
+
+function getDefaultMapClickCandidateIndex(
+  candidates: MapClickCandidateOption[],
+): number | null {
+  const firstAvailableIndex = candidates.findIndex((candidate) => !candidate.occupied);
+  if (firstAvailableIndex !== -1) return firstAvailableIndex;
+  return null;
 }
 
 function findNearestAvailableWaypointDistance(
@@ -839,40 +899,79 @@ function startManualWaypointCreation() {
   );
 }
 
-function handleMapTrackClick(coords: { lat: number; lng: number }) {
-  // Only show the popup if we're not currently editing any waypoint
-  if (selectedWaypointForEdit.value) {
-    // If we're editing a waypoint, treat this as a line click to move the waypoint
-    handleMapLineClick(coords);
+function getTrackClickCandidates(event: TrackClickEvent): TrackClickCandidate[] {
+  if (event.candidates && event.candidates.length > 0) {
+    return event.candidates;
+  }
+
+  if (typeof event.distance === "number" && Number.isFinite(event.distance)) {
+    const snappedPosition = calculatePositionFromDistance(event.distance);
+    return [
+      {
+        lat: snappedPosition?.lat ?? event.lat,
+        lng: snappedPosition?.lng ?? event.lng,
+        distance: event.distance,
+      },
+    ];
+  }
+
+  const fallbackDistance = calculateDistanceFromPosition(event.lat, event.lng);
+  if (fallbackDistance === null) return [];
+
+  const fallbackPosition = calculatePositionFromDistance(fallbackDistance);
+  return [
+    {
+      lat: fallbackPosition?.lat ?? event.lat,
+      lng: fallbackPosition?.lng ?? event.lng,
+      distance: fallbackDistance,
+    },
+  ];
+}
+
+function handleMapTrackClick(event: TrackClickEvent) {
+  const action: MapClickAction = selectedWaypointForEdit.value ? "move" : "create";
+  const rawCandidates = getTrackClickCandidates(event);
+  if (rawCandidates.length === 0) return;
+
+  const candidates = getMapClickCandidates(action, rawCandidates);
+  const defaultIndex = getDefaultMapClickCandidateIndex(candidates);
+
+  if (action === "move" && candidates.length === 1) {
+    const candidate = candidates[0];
+    if (!candidate) return;
+    if (candidate.occupied) {
+      waypointUpdateError.value =
+        "A waypoint already exists at this course position. Choose a different position.";
+      return;
+    }
+    applyWaypointPositionFromMapCandidate(candidate);
     return;
   }
 
-  // Calculate distance for this position and show the creation popup
-  const distance = calculateDistanceFromPosition(coords.lat, coords.lng);
-  if (distance !== null) {
-    mapClickLocation.value = {
-      lat: coords.lat,
-      lng: coords.lng,
-      distance: distance,
-    };
-  }
+  mapClickLocation.value = {
+    action,
+    candidates,
+    selectedIndex: defaultIndex,
+  };
 }
 
-function createWaypointAtMapClick() {
+function confirmMapClickAction() {
   if (!mapClickLocation.value) return;
+  const selectedCandidate = getSelectedMapClickCandidate();
+  if (!selectedCandidate || selectedCandidate.occupied) return;
 
-  const elevation = calculateElevationAtDistance(
-    mapClickLocation.value.distance,
-  );
+  if (mapClickLocation.value.action === "move") {
+    applyWaypointPositionFromMapCandidate(selectedCandidate);
+  } else {
+    const elevation = calculateElevationAtDistance(selectedCandidate.distance);
+    createWaypoint({
+      lat: selectedCandidate.lat,
+      lng: selectedCandidate.lng,
+      distance: selectedCandidate.distance,
+      elevation: elevation,
+    });
+  }
 
-  createWaypoint({
-    lat: mapClickLocation.value.lat,
-    lng: mapClickLocation.value.lng,
-    distance: mapClickLocation.value.distance,
-    elevation: elevation,
-  });
-
-  // Clear the click location
   mapClickLocation.value = null;
 }
 
@@ -1010,15 +1109,14 @@ function clearWaypointSelection() {
   // Clear state
   selectedWaypointForEdit.value = null;
   originalWaypointState.value = null;
-  stableMapCenter.value = null;
-  preventMapCentering.value = false;
+  resetWaypointMapToInitialCourseView();
 }
 
 function handleMapWaypointClick(waypoint: Waypoint) {
   selectWaypointForEdit(waypoint);
 }
 
-function handleMapLineClick(coords: { lat: number; lng: number }) {
+function applyWaypointPositionFromMapCandidate(candidate: TrackClickCandidate) {
   if (!selectedWaypointForEdit.value) return;
 
   // Set stable map center if not already set
@@ -1032,55 +1130,62 @@ function handleMapLineClick(coords: { lat: number; lng: number }) {
   // Set flag to prevent map centering during line click placement
   preventMapCentering.value = true;
 
-  // Calculate the distance along the route for the clicked position
-  const distanceAtClick = calculateDistanceFromPosition(coords.lat, coords.lng);
-  if (distanceAtClick !== null) {
-    // Calculate elevation at the new distance
-    const elevationAtClick = calculateElevationAtDistance(distanceAtClick);
+  const elevationAtClick = calculateElevationAtDistance(candidate.distance);
 
-    // Update the waypoint to this position
-    selectedWaypointForEdit.value.lat = coords.lat;
-    selectedWaypointForEdit.value.lng = coords.lng;
-    selectedWaypointForEdit.value.distance = distanceAtClick;
-    selectedWaypointForEdit.value.order = Math.floor(distanceAtClick);
-    selectedWaypointForEdit.value.elevation = elevationAtClick;
+  // Update the waypoint to this position
+  selectedWaypointForEdit.value.lat = candidate.lat;
+  selectedWaypointForEdit.value.lng = candidate.lng;
+  selectedWaypointForEdit.value.distance = candidate.distance;
+  selectedWaypointForEdit.value.order = Math.floor(candidate.distance);
+  selectedWaypointForEdit.value.elevation = elevationAtClick;
 
-    // If we're creating a new waypoint, also update the creation object and the temporary waypoint in the list
-    if (
-      newWaypointBeingCreated.value &&
-      selectedWaypointForEdit.value.id === newWaypointBeingCreated.value.id
-    ) {
-      newWaypointBeingCreated.value.lat = coords.lat;
-      newWaypointBeingCreated.value.lng = coords.lng;
-      newWaypointBeingCreated.value.distance = distanceAtClick;
-      newWaypointBeingCreated.value.order = Math.floor(distanceAtClick);
-      newWaypointBeingCreated.value.elevation = elevationAtClick;
+  // If we're creating a new waypoint, also update the creation object and the temporary waypoint in the list
+  if (
+    newWaypointBeingCreated.value &&
+    selectedWaypointForEdit.value.id === newWaypointBeingCreated.value.id
+  ) {
+    newWaypointBeingCreated.value.lat = candidate.lat;
+    newWaypointBeingCreated.value.lng = candidate.lng;
+    newWaypointBeingCreated.value.distance = candidate.distance;
+    newWaypointBeingCreated.value.order = Math.floor(candidate.distance);
+    newWaypointBeingCreated.value.elevation = elevationAtClick;
 
-      // Update the temporary waypoint in the editable list and re-sort
-      const tempIndex = editableWaypoints.value.findIndex(
-        (w) => w.id === newWaypointBeingCreated.value?.id,
-      );
-      if (tempIndex !== -1) {
-        editableWaypoints.value[tempIndex] = {
-          ...(newWaypointBeingCreated.value as Waypoint),
-        };
-        editableWaypoints.value.sort((a, b) => a.distance - b.distance);
-      }
-    }
-
-    // Update the distance input field in user's preferred units
-    const distanceInUserUnits = distanceUnitIsMiles.value
-      ? distanceAtClick * 0.000621371 // Convert meters to miles
-      : distanceAtClick / 1000; // Convert meters to kilometers
-    editingWaypointDistance.value = distanceInUserUnits.toFixed(
-      distanceUnitIsMiles.value ? 3 : 1,
+    // Update the temporary waypoint in the editable list and re-sort
+    const tempIndex = editableWaypoints.value.findIndex(
+      (w) => w.id === newWaypointBeingCreated.value?.id,
     );
+    if (tempIndex !== -1) {
+      editableWaypoints.value[tempIndex] = {
+        ...(newWaypointBeingCreated.value as Waypoint),
+      };
+      editableWaypoints.value.sort((a, b) => a.distance - b.distance);
+    }
   }
+
+  // Update the distance input field in user's preferred units
+  const distanceInUserUnits = distanceUnitIsMiles.value
+    ? candidate.distance * 0.000621371 // Convert meters to miles
+    : candidate.distance / 1000; // Convert meters to kilometers
+  editingWaypointDistance.value = distanceInUserUnits.toFixed(
+    distanceUnitIsMiles.value ? 3 : 1,
+  );
 
   // Reset the flag after a short delay to allow normal centering again
   setTimeout(() => {
     preventMapCentering.value = false;
   }, 100);
+}
+
+function handleMapLineClick(coords: { lat: number; lng: number }) {
+  const distanceAtClick = calculateDistanceFromPosition(coords.lat, coords.lng);
+  if (distanceAtClick === null) return;
+
+  const snappedPosition = calculatePositionFromDistance(distanceAtClick);
+  applyWaypointPositionFromMapCandidate({
+    lat: snappedPosition?.lat ?? coords.lat,
+    lng: snappedPosition?.lng ?? coords.lng,
+    distance: distanceAtClick,
+  });
 }
 
 function calculateDistanceFromPosition(
@@ -1432,17 +1537,14 @@ function updateWaypointFromDistanceInput() {
 }
 
 function saveWaypointChanges() {
-  if (!selectedWaypointForEdit.value) return;
+  const waypointToSave = selectedWaypointForEdit.value;
+  if (!waypointToSave) return;
 
   // Clear original state since we're saving
   originalWaypointState.value = null;
 
-  updateWaypoint(selectedWaypointForEdit.value);
-
-  // Close the edit panel after saving
-  selectedWaypointForEdit.value = null;
-  stableMapCenter.value = null;
-  preventMapCentering.value = false;
+  updateWaypoint(waypointToSave);
+  clearWaypointSelection();
 }
 
 function canMoveForward(waypoint: Waypoint): boolean {
@@ -1719,7 +1821,7 @@ function canMoveBackward(waypoint: Waypoint): boolean {
               :waypoints="editableWaypoints"
               :selected-waypoint="selectedWaypointForEdit"
               :auto-zoom-to-waypoint="!preventMapCentering"
-              :map-click-location="mapClickLocation"
+              :map-click-location="mapClickPreviewLocation"
               :reset-to-course-bounds-key="resetWaypointMapToCourseBoundsKey"
               @waypoint-click="handleMapWaypointClick"
               @line-click="handleMapLineClick"
@@ -1751,25 +1853,70 @@ function canMoveBackward(waypoint: Waypoint): boolean {
             }"
           >
             <div class="text-sm text-(--main-color) mb-2">
-              Add waypoint at
               {{
-                formatDistance(
-                  mapClickLocation.distance,
-                  typeof (userSettingsStore as any)
-                    ?.getDistanceUnitForCourse === "function"
-                    ? userSettingsStore.getDistanceUnitForCourse(
-                        props.course || undefined,
-                      )
-                    : (props.course?.defaultDistanceUnit ?? "miles"),
-                )
-              }}?
+                mapClickLocation.action === "move"
+                  ? "Move waypoint to selected course position"
+                  : "Add waypoint at selected course position"
+              }}
             </div>
+            <div class="space-y-2 mb-3">
+              <label
+                v-for="(candidate, index) in mapClickLocation.candidates"
+                :key="`${candidate.distance}-${index}`"
+                class="flex items-center justify-between gap-3 text-sm border border-(--sub-color) rounded px-2 py-1"
+                :class="{ 'opacity-60': candidate.occupied }"
+              >
+                <div class="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="map-click-candidate"
+                    :disabled="candidate.occupied"
+                    :checked="mapClickLocation.selectedIndex === index"
+                    @change="
+                      mapClickLocation && (mapClickLocation.selectedIndex = index)
+                    "
+                  />
+                  <span class="text-(--main-color)">
+                    {{
+                      formatDistance(
+                        candidate.distance,
+                        typeof (userSettingsStore as any)
+                          ?.getDistanceUnitForCourse === "function"
+                          ? userSettingsStore.getDistanceUnitForCourse(
+                              props.course || undefined,
+                            )
+                          : (props.course?.defaultDistanceUnit ?? "miles"),
+                      )
+                    }}
+                  </span>
+                </div>
+                <span
+                  v-if="candidate.occupied"
+                  class="text-xs text-(--error-color)"
+                >
+                  Occupied
+                </span>
+              </label>
+            </div>
+            <p
+              v-if="mapClickLocation.selectedIndex === null"
+              class="text-xs text-(--error-color) mb-2"
+            >
+              No available distance at this click location.
+            </p>
             <div class="flex gap-2">
               <button
                 class="px-3 py-1 bg-(--main-color) text-(--bg-color) rounded text-sm hover:opacity-80 transition-opacity"
-                @click="createWaypointAtMapClick"
+                :disabled="
+                  !selectedMapClickCandidate || !!selectedMapClickCandidate.occupied
+                "
+                @click="confirmMapClickAction"
               >
-                Add Waypoint
+                {{
+                  mapClickLocation.action === "move"
+                    ? "Move Waypoint"
+                    : "Add Waypoint"
+                }}
               </button>
               <button
                 class="px-3 py-1 border border-(--sub-color) text-(--sub-color) rounded text-sm hover:text-(--main-color) hover:border-(--main-color) transition-colors"
