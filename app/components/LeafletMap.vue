@@ -56,6 +56,7 @@ interface Props {
     highlightSegment?: { start: number; end: number } | null;
     highlightColor?: string;
     fitHighlight?: boolean;
+    resetToCourseBoundsKey?: number;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -72,6 +73,7 @@ const props = withDefaults(defineProps<Props>(), {
     highlightSegment: null,
     highlightColor: "#ff0000",
     fitHighlight: false,
+    resetToCourseBoundsKey: 0,
 });
 
 const emit = defineEmits<{
@@ -263,10 +265,15 @@ function addGeoJsonLayers() {
 
     // Fit bounds to show all tracks on initial mount only
     if (!hasDoneInitialFit && geoJsonLayers.length > 0) {
-        const group = new L.FeatureGroup(geoJsonLayers);
-        map!.fitBounds(group.getBounds(), { padding: [20, 20] });
+        fitToCourseBounds();
         hasDoneInitialFit = true;
     }
+}
+
+function fitToCourseBounds() {
+    if (!map || !L || geoJsonLayers.length === 0) return;
+    const group = new L.FeatureGroup(geoJsonLayers);
+    map.fitBounds(group.getBounds(), { padding: [20, 20] });
 }
 
 // Function to generate different colors for tracks
@@ -781,6 +788,15 @@ watch(
         }
     },
     { deep: true },
+);
+
+watch(
+    () => props.resetToCourseBoundsKey,
+    (newKey, oldKey) => {
+        if (newKey !== oldKey) {
+            fitToCourseBounds();
+        }
+    },
 );
 
 // Watch for changes in elevation hover point

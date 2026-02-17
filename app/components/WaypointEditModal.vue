@@ -307,9 +307,12 @@ onBeforeUnmount(() => {
                 </div>
 
                 <!-- Error Message -->
-                <div v-if="error" class="text-(--error-color) text-sm">
-                    {{ error }}
-                </div>
+                <DismissibleAlert
+                    v-if="error"
+                    :message="error"
+                    tone="error"
+                    @dismiss="error = ''"
+                />
 
                 <!-- Action Buttons -->
                 <div class="flex gap-3 pt-2">

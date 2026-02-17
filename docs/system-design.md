@@ -69,9 +69,15 @@ Course Selection → Map Display → Interactive Exploration → Waypoint Manage
    - Hover over route for distance/elevation data
    - For overlapping out-and-back sections, map hover uses a precomputed overlap index to resolve up to two route distances and renders dual chart cursors (primary + secondary); single-track sections stay single-cursor
    - Click to create waypoints
+   - Waypoint creation and waypoint repositioning reject duplicate route positions (same course distance as an existing waypoint)
+   - Exiting manual waypoint creation resets the map to the same full-course fit used on initial waypoint-tab render
    - Drag waypoints to reposition
 4. **Waypoint Management**: Edit names, tags, and properties
 5. **Export/Share**: Download original files or share course data
+
+Implementation details: `app/components/CourseEditModal.vue` and `app/components/LeafletMap.vue`.
+
+Form validation/action errors in course, waypoint, and plan modals are shown as dismissible alerts.
 
 ### 4. Settings and Customization Flow
 

@@ -62,6 +62,11 @@ const isProcessing = ref(false);
 const uploadSuccess = ref(false);
 const uploadError = ref(false);
 
+function clearUploadError() {
+    uploadError.value = false;
+    errorMessage.value = "";
+}
+
 async function handleFiles(files: File[]) {
     // Reset states
     uploadSuccess.value = false;
@@ -292,9 +297,12 @@ defineExpose({
                     </p>
                 </div>
 
-                <div v-if="uploadError" class="text-(--error-color)">
-                    <p class="text-sm font-medium">{{ errorMessage }}</p>
-                </div>
+                <DismissibleAlert
+                    v-if="uploadError"
+                    :message="errorMessage"
+                    tone="error"
+                    @dismiss="clearUploadError"
+                />
             </div>
         </div>
 

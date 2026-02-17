@@ -1,6 +1,6 @@
 import { courses, waypoints } from "~/utils/db/schema";
 import { cloudDb } from "~~/server/utils/db/cloud";
-import { eq, and } from "drizzle-orm";
+import { eq, and, ne } from "drizzle-orm";
 import { auth } from "~/utils/auth";
 
 interface UpdateWaypointRequest {
@@ -80,15 +80,64 @@ export default defineEventHandler(async (event) => {
     }
 
     if (body.distance !== undefined) {
-      updateData.distance = body.distance;
-      updateData.order = Math.floor(body.distance); // Update order based on distance
+      if (!Number.isFinite(body.distance)) {
+        throw createError({
+          statusCode: 400,
+          statusMessage: "Distance must be a valid number",
+        });
+      }
+
+      const normalizedDistance = Math.round(body.distance);
+      if (normalizedDistance < 0) {
+        throw createError({
+          statusCode: 400,
+          statusMessage: "Distance must be greater than or equal to 0",
+        });
+      }
+
+      const existingWaypointAtDistance = await cloudDb
+        .select({
+          id: waypoints.id,
+        })
+        .from(waypoints)
+        .where(
+          and(
+            eq(waypoints.courseId, courseId),
+            ne(waypoints.id, body.id),
+            eq(waypoints.distance, normalizedDistance),
+          ),
+        )
+        .limit(1);
+
+      if (existingWaypointAtDistance.length > 0) {
+        throw createError({
+          statusCode: 409,
+          statusMessage:
+            "A waypoint already exists at this course position. Choose a different position.",
+        });
+      }
+
+      updateData.distance = normalizedDistance;
+      updateData.order = Math.floor(normalizedDistance); // Update order based on distance
     }
 
     if (body.lat !== undefined) {
+      if (!Number.isFinite(body.lat)) {
+        throw createError({
+          statusCode: 400,
+          statusMessage: "Latitude must be a valid number",
+        });
+      }
       updateData.lat = body.lat.toString();
     }
 
     if (body.lng !== undefined) {
+      if (!Number.isFinite(body.lng)) {
+        throw createError({
+          statusCode: 400,
+          statusMessage: "Longitude must be a valid number",
+        });
+      }
       updateData.lng = body.lng.toString();
     }
 
@@ -117,6 +166,9 @@ export default defineEventHandler(async (event) => {
       waypoint: formattedWaypoint
     };
   } catch (error) {
+    if (error && typeof error === "object" && "statusCode" in error) {
+      throw error;
+    }
     console.error("Error updating waypoint:", error);
     throw createError({
       statusCode: 500,

@@ -48,6 +48,25 @@ export default defineEventHandler(async (event) => {
       });
     }
 
+    if (
+      !Number.isFinite(body.lat) ||
+      !Number.isFinite(body.lng) ||
+      !Number.isFinite(body.distance)
+    ) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "Latitude, longitude, and distance must be valid numbers",
+      });
+    }
+
+    const normalizedDistance = Math.round(body.distance);
+    if (normalizedDistance < 0) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "Distance must be greater than or equal to 0",
+      });
+    }
+
     // Verify user is owner via user_courses membership
     const [membership] = await cloudDb
       .select({ role: userCourses.role })
@@ -74,6 +93,26 @@ export default defineEventHandler(async (event) => {
       });
     }
 
+    const existingWaypoints = await cloudDb
+      .select({
+        id: waypoints.id,
+        distance: waypoints.distance,
+      })
+      .from(waypoints)
+      .where(eq(waypoints.courseId, courseId));
+
+    const duplicateWaypoint = existingWaypoints.find(
+      (waypoint) => waypoint.distance === normalizedDistance,
+    );
+
+    if (duplicateWaypoint) {
+      throw createError({
+        statusCode: 409,
+        statusMessage:
+          "A waypoint already exists at this course position. Choose a different position.",
+      });
+    }
+
     // Create the waypoint
     const [newWaypoint] = await cloudDb
       .insert(waypoints)
@@ -84,9 +123,9 @@ export default defineEventHandler(async (event) => {
         lat: body.lat.toString(),
         lng: body.lng.toString(),
         elevation: body.elevation || null,
-        distance: body.distance,
+        distance: normalizedDistance,
         tags: JSON.stringify(body.tags || []),
-        order: Math.floor(body.distance),
+        order: Math.floor(normalizedDistance),
         createdAt: new Date(),
         updatedAt: new Date(),
       })
@@ -110,6 +149,9 @@ export default defineEventHandler(async (event) => {
       waypoint: formattedWaypoint,
     };
   } catch (error) {
+    if (error && typeof error === "object" && "statusCode" in error) {
+      throw error;
+    }
     console.error("Error creating waypoint:", error);
     throw createError({
       statusCode: 500,

@@ -2,309 +2,309 @@
 
 /* Robust responsive overrides independent of Tailwind scanning */
 @media (min-width: 48rem) {
-    /* Display */
-    .md\:flex {
-        display: flex !important;
-    }
-    .md\:block {
-        display: block !important;
-    }
-    .md\:hidden {
-        display: none !important;
-    }
+  /* Display */
+  .md\:flex {
+    display: flex !important;
+  }
+  .md\:block {
+    display: block !important;
+  }
+  .md\:hidden {
+    display: none !important;
+  }
 
-    /* Layout/position */
-    .md\:flex-1 {
-        flex: 1 1 0% !important;
-    }
-    .md\:overflow-hidden {
-        overflow: hidden !important;
-    }
-    .md\:justify-end {
-        justify-content: flex-end !important;
-    }
-    .md\:justify-between {
-        justify-content: space-between !important;
-    }
-    .md\:mt-0 {
-        margin-top: 0 !important;
-    }
-    .md\:w-auto {
-        width: auto !important;
-    }
-    .md\:right-0 {
-        right: 0 !important;
-    }
-    .md\:left-auto {
-        left: auto !important;
-    }
-    .md\:min-w-64 {
-        min-width: calc(var(--spacing) * 64) !important;
-    }
+  /* Layout/position */
+  .md\:flex-1 {
+    flex: 1 1 0% !important;
+  }
+  .md\:overflow-hidden {
+    overflow: hidden !important;
+  }
+  .md\:justify-end {
+    justify-content: flex-end !important;
+  }
+  .md\:justify-between {
+    justify-content: space-between !important;
+  }
+  .md\:mt-0 {
+    margin-top: 0 !important;
+  }
+  .md\:w-auto {
+    width: auto !important;
+  }
+  .md\:right-0 {
+    right: 0 !important;
+  }
+  .md\:left-auto {
+    left: auto !important;
+  }
+  .md\:min-w-64 {
+    min-width: calc(var(--spacing) * 64) !important;
+  }
 
-    /* Spacing */
-    .md\:p-2 {
-        padding: calc(var(--spacing) * 2) !important;
-    }
-    .md\:px-3 {
-        padding-left: calc(var(--spacing) * 3) !important;
-        padding-right: calc(var(--spacing) * 3) !important;
-    }
-    .md\:px-4 {
-        padding-left: calc(var(--spacing) * 4) !important;
-        padding-right: calc(var(--spacing) * 4) !important;
-    }
-    .md\:py-2 {
-        padding-top: calc(var(--spacing) * 2) !important;
-        padding-bottom: calc(var(--spacing) * 2) !important;
-    }
+  /* Spacing */
+  .md\:p-2 {
+    padding: calc(var(--spacing) * 2) !important;
+  }
+  .md\:px-3 {
+    padding-left: calc(var(--spacing) * 3) !important;
+    padding-right: calc(var(--spacing) * 3) !important;
+  }
+  .md\:px-4 {
+    padding-left: calc(var(--spacing) * 4) !important;
+    padding-right: calc(var(--spacing) * 4) !important;
+  }
+  .md\:py-2 {
+    padding-top: calc(var(--spacing) * 2) !important;
+    padding-bottom: calc(var(--spacing) * 2) !important;
+  }
 
-    /* Sizing */
-    .md\:h-4 {
-        height: calc(var(--spacing) * 4) !important;
-    }
-    .md\:w-4 {
-        width: calc(var(--spacing) * 4) !important;
-    }
+  /* Sizing */
+  .md\:h-4 {
+    height: calc(var(--spacing) * 4) !important;
+  }
+  .md\:w-4 {
+    width: calc(var(--spacing) * 4) !important;
+  }
 
-    /* Typography */
-    .md\:text-4xl {
-        font-size: 2.25rem !important;
-        line-height: 2.5rem !important;
-    }
-    .md\:text-sm {
-        font-size: var(--text-sm) !important;
-        line-height: var(--text-sm--line-height) !important;
-    }
+  /* Typography */
+  .md\:text-4xl {
+    font-size: 2.25rem !important;
+    line-height: 2.5rem !important;
+  }
+  .md\:text-sm {
+    font-size: var(--text-sm) !important;
+    line-height: var(--text-sm--line-height) !important;
+  }
 }
 
 :root {
-    --border-radius: 8px;
-    --yes-color: #008800;
-    --no-color: #880000;
-    --transition: all 0.3s;
+  --border-radius: 8px;
+  --yes-color: #008800;
+  --no-color: #880000;
+  --transition: all 0.3s;
 }
 
 body {
-    background: var(--bg-color);
-    color: var(--text-color);
-    font-family: "Geist", sans-serif;
-    overflow: hidden;
-    scrollbar-color: var(--main-color) transparent;
-    scrollbar-width: auto;
+  background: var(--bg-color);
+  color: var(--text-color);
+  font-family: "Geist", sans-serif;
+  overflow: hidden;
+  scrollbar-color: var(--main-color) transparent;
+  scrollbar-width: auto;
 }
 
 h1 {
-    font-size: 2.5rem;
+  font-size: 2.5rem;
 }
 
 h2 {
-    font-size: 2rem;
+  font-size: 2rem;
 }
 
 h3 {
-    font-size: 1.75rem;
+  font-size: 1.75rem;
 }
 
 h4 {
-    font-size: 1.5rem;
+  font-size: 1.5rem;
 }
 
 h5 {
-    font-size: 1.25rem;
+  font-size: 1.25rem;
 }
 
 h6 {
-    font-size: 1rem;
+  font-size: 1rem;
 }
 
 ul,
 ol {
-    padding-left: 2rem;
+  padding-left: 2rem;
 }
 
 ul {
-    list-style-type: disc;
+  list-style-type: disc;
 }
 
 ul ul {
-    list-style-type: circle;
+  list-style-type: circle;
 }
 
 ul ul ul {
-    list-style-type: square;
+  list-style-type: square;
 }
 
 ol {
-    list-style-type: decimal;
+  list-style-type: decimal;
 }
 
 ol ol {
-    list-style-type: lower-alpha;
+  list-style-type: lower-alpha;
 }
 
 ol ol ol {
-    list-style-type: lower-roman;
+  list-style-type: lower-roman;
 }
 
 li {
-    margin-bottom: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 
 math {
-    padding: 5px 0;
+  padding: 5px 0;
 }
 
 code {
-    white-space: pre;
+  white-space: pre;
 }
 
 hr {
-    border: none;
-    border-top: 1px solid var(--sub-alt-color);
-    margin: 1rem 0;
+  border: none;
+  border-top: 1px solid var(--sub-alt-color);
+  margin: 1rem 0;
 }
 
 input {
-    background-color: var(--sub-alt-color);
-    border-radius: var(--border-radius);
-    padding: 0.5em;
+  background-color: var(--sub-alt-color);
+  border-radius: var(--border-radius);
+  padding: 0.5em;
 }
 
 textarea {
-    background-color: var(--sub-alt-color);
-    border-radius: var(--border-radius);
-    padding: 0.5em;
+  background-color: var(--sub-alt-color);
+  border-radius: var(--border-radius);
+  padding: 0.5em;
 }
 
 input:focus,
 textarea:focus {
-    outline: none;
+  outline: none;
 }
 
 button {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 10px;
-    padding: 10px;
-    margin: 5px 0;
-    cursor: pointer;
-    transition: var(--transition);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  margin: 5px 0;
+  cursor: pointer;
+  transition: var(--transition);
 }
 
 button:hover {
-    opacity: 0.8;
+  opacity: 0.8;
 }
 
 button:active {
-    background-color: var(--sub-color);
-    color: var(--bg-color);
+  background-color: var(--sub-color);
+  color: var(--bg-color);
 }
 
 button:active:focus {
-    outline: none;
+  outline: none;
 }
 
 button:focus {
-    outline: 2px solid var(--main-color);
-    outline-offset: 3px;
+  outline: 2px solid var(--main-color);
+  outline-offset: 3px;
 }
 
 a:focus {
-    outline: 2px solid var(--main-color);
-    outline-offset: 3px;
+  outline: 2px solid var(--main-color);
+  outline-offset: 3px;
 }
 
 table {
-    border-collapse: separate; /* Needed for border-radius */
-    border-spacing: 0;
-    width: 100%;
-    border-radius: 10px;
-    overflow: hidden; /* Ensures content fits rounded corners */
-    border: 1px solid var(--sub-alt-color);
-    background: var(--bg-color);
+  border-collapse: separate; /* Needed for border-radius */
+  border-spacing: 0;
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden; /* Ensures content fits rounded corners */
+  border: 1px solid var(--sub-alt-color);
+  background: var(--bg-color);
 }
 
 th,
 td {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--sub-alt-color);
-    text-align: left;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--sub-alt-color);
+  text-align: left;
 }
 
 th {
-    background: var(--sub-alt-color);
+  background: var(--sub-alt-color);
 }
 
 tr:last-child td {
-    border-bottom: none;
+  border-bottom: none;
 }
 
 .settings-select-item-select:focus {
-    outline: 2px solid var(--main-color);
-    outline-offset: 3px;
+  outline: 2px solid var(--main-color);
+  outline-offset: 3px;
 }
 
 .katex-html {
-    display: none;
+  display: none;
 }
 
 ::selection {
-    background-color: var(--main-color);
-    color: var(--bg-color);
-    outline: 3px solid var(--sub-color);
+  background-color: var(--main-color);
+  color: var(--bg-color);
+  outline: 3px solid var(--sub-color);
 }
 
 .focus-outline:focus {
-    outline: 2px solid var(--main-color);
-    outline-offset: 3px;
+  outline: 2px solid var(--main-color);
+  outline-offset: 3px;
 }
 
 /* Custom radio styles: filled center when checked, empty center when unchecked */
 input[type="radio"] {
-    appearance: none;
-    -webkit-appearance: none;
-    width: 1rem;
-    height: 1rem;
-    padding: 0;
-    border: 2px solid var(--main-color);
-    border-radius: 50%;
-    background-color: var(--bg-color);
-    display: inline-grid;
-    place-content: center;
-    cursor: pointer;
-    transition: var(--transition);
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  border: 2px solid var(--main-color);
+  border-radius: 50%;
+  background-color: var(--bg-color);
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+  transition: var(--transition);
 }
 
 input[type="radio"]::before {
-    content: "";
-    width: 0.55rem;
-    height: 0.55rem;
-    border-radius: 50%;
-    transform: scale(0);
-    transition:
-        transform 120ms ease-in-out,
-        background-color 120ms ease-in-out;
-    background-color: var(--bg-color);
+  content: "";
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  transform: scale(0);
+  transition:
+    transform 120ms ease-in-out,
+    background-color 120ms ease-in-out;
+  background-color: var(--bg-color);
 }
 
 input[type="radio"]:checked::before {
-    transform: scale(1);
-    background-color: var(--main-color);
+  transform: scale(1);
+  background-color: var(--main-color);
 }
 
 input[type="radio"]:focus {
-    outline: 2px solid var(--main-color);
-    outline-offset: 3px;
+  outline: 2px solid var(--main-color);
+  outline-offset: 3px;
 }
 
 input[type="radio"]:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    border-color: var(--sub-color);
+  opacity: 0.6;
+  cursor: not-allowed;
+  border-color: var(--sub-color);
 }
 
 .course-description a {
-    text-decoration: underline;
+  text-decoration: underline;
 }
