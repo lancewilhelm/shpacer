@@ -200,6 +200,8 @@ type TrackClickEvent = {
   distance: number;
   distances?: number[];
   candidates?: TrackClickCandidate[];
+  screenX?: number;
+  screenY?: number;
 };
 
 type MapClickAction = "create" | "move";
@@ -209,7 +211,17 @@ const mapClickLocation = ref<{
   action: MapClickAction;
   candidates: MapClickCandidateOption[];
   selectedIndex: number | null;
+  screenX: number | null;
+  screenY: number | null;
 } | null>(null);
+const mapPanelRef = ref<HTMLElement | null>(null);
+const mapClickPopupRef = ref<HTMLElement | null>(null);
+const mapClickPopupPosition = ref<{ left: number; top: number } | null>(null);
+const mapClickOutsideCloseEnabled = ref(false);
+let mapClickOutsideEnableTimer: ReturnType<typeof setTimeout> | null = null;
+
+const MAP_CLICK_POPUP_PADDING_PX = 12;
+const MAP_CLICK_POPUP_OFFSET_PX = 12;
 
 const mapClickPreviewLocation = computed(() => {
   const selected = getSelectedMapClickCandidate();
@@ -222,6 +234,104 @@ const mapClickPreviewLocation = computed(() => {
 });
 
 const selectedMapClickCandidate = computed(() => getSelectedMapClickCandidate());
+
+const mapClickPopupStyle = computed(() => {
+  if (mapClickPopupPosition.value) {
+    return {
+      left: `${mapClickPopupPosition.value.left}px`,
+      top: `${mapClickPopupPosition.value.top}px`,
+      transform: "none",
+    };
+  }
+
+  const location = mapClickLocation.value;
+  if (
+    !location ||
+    typeof location.screenX !== "number" ||
+    typeof location.screenY !== "number"
+  ) {
+    return {
+      left: "50%",
+      top: "50%",
+      transform: "translate(-50%, -50%)",
+    };
+  }
+
+  return {
+    left: `${location.screenX}px`,
+    top: `${location.screenY}px`,
+    transform: "translate(-50%, calc(-100% - 12px))",
+  };
+});
+
+function clamp(value: number, min: number, max: number): number {
+  if (max < min) return min;
+  return Math.min(Math.max(value, min), max);
+}
+
+function updateMapClickPopupPosition() {
+  const location = mapClickLocation.value;
+  const mapPanel = mapPanelRef.value;
+  const popup = mapClickPopupRef.value;
+
+  if (!location || !mapPanel || !popup) {
+    mapClickPopupPosition.value = null;
+    return;
+  }
+
+  const panelWidth = mapPanel.clientWidth;
+  const panelHeight = mapPanel.clientHeight;
+  const popupWidth = popup.offsetWidth;
+  const popupHeight = popup.offsetHeight;
+
+  const anchorX =
+    typeof location.screenX === "number" ? location.screenX : panelWidth / 2;
+  const anchorY =
+    typeof location.screenY === "number" ? location.screenY : panelHeight / 2;
+
+  const minLeft = MAP_CLICK_POPUP_PADDING_PX;
+  const maxLeft = panelWidth - popupWidth - MAP_CLICK_POPUP_PADDING_PX;
+  const left = clamp(anchorX - popupWidth / 2, minLeft, maxLeft);
+
+  const topAbove = anchorY - popupHeight - MAP_CLICK_POPUP_OFFSET_PX;
+  const topBelow = anchorY + MAP_CLICK_POPUP_OFFSET_PX;
+  let top = topAbove;
+
+  if (
+    topAbove < MAP_CLICK_POPUP_PADDING_PX &&
+    topBelow + popupHeight <= panelHeight - MAP_CLICK_POPUP_PADDING_PX
+  ) {
+    top = topBelow;
+  }
+
+  const minTop = MAP_CLICK_POPUP_PADDING_PX;
+  const maxTop = panelHeight - popupHeight - MAP_CLICK_POPUP_PADDING_PX;
+  mapClickPopupPosition.value = {
+    left,
+    top: clamp(top, minTop, maxTop),
+  };
+}
+
+function scheduleEnableMapClickOutsideClose() {
+  mapClickOutsideCloseEnabled.value = false;
+  if (mapClickOutsideEnableTimer) {
+    clearTimeout(mapClickOutsideEnableTimer);
+    mapClickOutsideEnableTimer = null;
+  }
+
+  mapClickOutsideEnableTimer = setTimeout(() => {
+    mapClickOutsideCloseEnabled.value = true;
+    mapClickOutsideEnableTimer = null;
+  }, 0);
+}
+
+function handleDocumentPointerDown(event: PointerEvent) {
+  if (!mapClickLocation.value || !mapClickOutsideCloseEnabled.value) return;
+  const popup = mapClickPopupRef.value;
+  const target = event.target;
+  if (popup && target instanceof Node && popup.contains(target)) return;
+  mapClickLocation.value = null;
+}
 
 function getSelectedMapClickCandidate(): MapClickCandidateOption | null {
   if (!mapClickLocation.value) return null;
@@ -281,6 +391,68 @@ function getDefaultMapClickCandidateIndex(
   if (firstAvailableIndex !== -1) return firstAvailableIndex;
   return null;
 }
+
+watch(
+  () => [
+    mapClickLocation.value?.screenX,
+    mapClickLocation.value?.screenY,
+    mapClickLocation.value?.selectedIndex,
+    mapClickLocation.value?.candidates.length,
+    mapClickLocation.value?.action,
+  ],
+  async () => {
+    if (!mapClickLocation.value) {
+      mapClickPopupPosition.value = null;
+      return;
+    }
+
+    await nextTick();
+    if (import.meta.client) {
+      requestAnimationFrame(() => {
+        updateMapClickPopupPosition();
+      });
+      return;
+    }
+    updateMapClickPopupPosition();
+  },
+);
+
+watch(
+  () => mapClickLocation.value,
+  (newLocation) => {
+    if (newLocation) {
+      scheduleEnableMapClickOutsideClose();
+      return;
+    }
+
+    mapClickOutsideCloseEnabled.value = false;
+    if (mapClickOutsideEnableTimer) {
+      clearTimeout(mapClickOutsideEnableTimer);
+      mapClickOutsideEnableTimer = null;
+    }
+  },
+);
+
+function handleWindowResize() {
+  if (!mapClickLocation.value) return;
+  updateMapClickPopupPosition();
+}
+
+onMounted(() => {
+  if (!import.meta.client) return;
+  window.addEventListener("resize", handleWindowResize);
+  document.addEventListener("pointerdown", handleDocumentPointerDown, true);
+});
+
+onBeforeUnmount(() => {
+  if (!import.meta.client) return;
+  window.removeEventListener("resize", handleWindowResize);
+  document.removeEventListener("pointerdown", handleDocumentPointerDown, true);
+  if (mapClickOutsideEnableTimer) {
+    clearTimeout(mapClickOutsideEnableTimer);
+    mapClickOutsideEnableTimer = null;
+  }
+});
 
 function findNearestAvailableWaypointDistance(
   preferredDistance: number,
@@ -952,6 +1124,14 @@ function handleMapTrackClick(event: TrackClickEvent) {
     action,
     candidates,
     selectedIndex: defaultIndex,
+    screenX:
+      typeof event.screenX === "number" && Number.isFinite(event.screenX)
+        ? event.screenX
+        : null,
+    screenY:
+      typeof event.screenY === "number" && Number.isFinite(event.screenY)
+        ? event.screenY
+        : null,
   };
 }
 
@@ -1811,7 +1991,8 @@ function canMoveBackward(waypoint: Waypoint): boolean {
       >
         <!-- Left Panel: Map -->
         <div
-          class="h-full w-full rounded-lg overflow-hidden border border-(--sub-color) bg-gray-100"
+          ref="mapPanelRef"
+          class="relative h-full w-full rounded-lg overflow-hidden border border-(--sub-color) bg-gray-100"
         >
           <ClientOnly>
             <LeafletMap
@@ -1845,12 +2026,9 @@ function canMoveBackward(waypoint: Waypoint): boolean {
           <!-- Map Click Popup -->
           <div
             v-if="mapClickLocation"
+            ref="mapClickPopupRef"
             class="absolute bg-(--bg-color) border border-(--sub-color) rounded-lg shadow-lg p-3 z-1000"
-            :style="{
-              left: '50%',
-              top: '50%',
-              transform: 'translate(-50%, -50%)',
-            }"
+            :style="mapClickPopupStyle"
           >
             <div class="text-sm text-(--main-color) mb-2">
               {{

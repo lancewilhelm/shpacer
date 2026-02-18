@@ -107,6 +107,8 @@ const emit = defineEmits<{
             distance: number;
             distances: number[];
             candidates: TrackDistanceCandidate[];
+            screenX: number;
+            screenY: number;
         },
     ];
 }>();
@@ -240,6 +242,8 @@ function handleTrackClick(e: L.LeafletMouseEvent) {
         distance: primaryCandidate.distance,
         distances: candidates.map((candidate) => candidate.distance),
         candidates,
+        screenX: e.containerPoint.x,
+        screenY: e.containerPoint.y,
     });
 }
 
