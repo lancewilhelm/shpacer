@@ -12,8 +12,9 @@ import {
   interpolateAtDistance,
 } from "~/utils/elevationProfile";
 import { getTagsByIds } from "~/utils/waypointTags";
-import { formatElapsedTime } from "~/utils/timeCalculations";
+import { formatDelayTime, formatElapsedTime } from "~/utils/timeCalculations";
 import { buildPlanWaypointExportRows } from "~/utils/planWaypointExport";
+import { buildPlanPdfHtml } from "~/utils/planWaypointPrint";
 import type { DistanceUnit } from "~/stores/userSettings";
 
 // Define the waypoint type that matches what we get from the API
@@ -1024,18 +1025,50 @@ function formatExportDistance(meters: number | null): string {
   return Number(value.toFixed(2)).toString();
 }
 
+function formatExportDistanceWithUnit(meters: number | null): string {
+  const value = formatExportDistance(meters);
+  if (!value) return "";
+  const unit = distanceUnit.value === "miles" ? "mi" : "km";
+  return `${value} ${unit}`;
+}
+
 function formatExportElevation(meters: number | null): string {
   if (meters == null) return "";
   const value = elevationUnit.value === "feet" ? meters * 3.28084 : meters;
   return Math.round(value).toString();
 }
 
+function formatExportElevationWithUnit(meters: number | null): string {
+  const value = formatExportElevation(meters);
+  if (!value) return "";
+  const unit = elevationUnit.value === "feet" ? "ft" : "m";
+  return `${value} ${unit}`;
+}
+
+function formatExportPace(paceSeconds: number | null): string {
+  if (paceSeconds == null || !currentPlan.value) return "";
+  const minutes = Math.floor(paceSeconds / 60);
+  const seconds = Math.round(paceSeconds % 60);
+  const unit = currentPlan.value.paceUnit === "min_per_mi" ? "/mi" : "/km";
+  return `${minutes}:${seconds.toString().padStart(2, "0")}${unit}`;
+}
+
+function formatExportGrade(grade: number | null): string {
+  if (grade == null) return "";
+  const sign = grade >= 0 ? "+" : "";
+  return `${sign}${grade.toFixed(1)}%`;
+}
+
+function withFallback(value: string, fallback = "—"): string {
+  return value.trim() ? value : fallback;
+}
+
 function escapeCsvCell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
 }
 
-function downloadCsvFile(filename: string, csv: string) {
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+function downloadFile(filename: string, contents: BlobPart, mimeType: string) {
+  const blob = new Blob([contents], { type: mimeType });
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -1046,9 +1079,48 @@ function downloadCsvFile(filename: string, csv: string) {
   window.URL.revokeObjectURL(url);
 }
 
-function exportPlanCsv() {
-  if (!course.value || !currentPlan.value || !waypoints.value.length) return;
+function printHtmlDocument(html: string) {
+  const iframe = document.createElement("iframe");
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  iframe.setAttribute("aria-hidden", "true");
 
+  const cleanup = () => {
+    window.setTimeout(() => {
+      iframe.remove();
+    }, 250);
+  };
+
+  iframe.onload = () => {
+    const frameWindow = iframe.contentWindow;
+    if (!frameWindow) {
+      cleanup();
+      alert("Unable to open the PDF export preview. Please try again.");
+      return;
+    }
+
+    const handleAfterPrint = () => {
+      frameWindow.removeEventListener("afterprint", handleAfterPrint);
+      cleanup();
+    };
+
+    frameWindow.addEventListener("afterprint", handleAfterPrint);
+    window.setTimeout(() => {
+      frameWindow.focus();
+      frameWindow.print();
+    }, 150);
+  };
+
+  document.body.appendChild(iframe);
+  iframe.srcdoc = html;
+}
+
+function buildPlanExportRows(includeUnits = false) {
+  if (!course.value || !currentPlan.value || !waypoints.value.length) return null;
   const exportRows = buildPlanWaypointExportRows({
     plan: effectivePlanForTiming.value,
     waypoints: waypoints.value,
@@ -1061,6 +1133,57 @@ function exportPlanCsv() {
     maintainTargetAverage:
       (effectivePlanForTiming.value?.paceMode || "pace") !== "normalized",
   });
+
+  return exportRows.map((row) => ({
+    waypointName: row.waypointName,
+    distanceFromStart: withFallback(
+      includeUnits
+        ? formatExportDistanceWithUnit(row.distanceFromStartMeters)
+        : formatExportDistance(row.distanceFromStartMeters),
+    ),
+    waypointElevation: withFallback(
+      includeUnits
+        ? formatExportElevationWithUnit(row.waypointElevationMeters)
+        : formatExportElevation(row.waypointElevationMeters),
+    ),
+    timeEstimate: withFallback(
+      row.elapsedTimeSeconds != null ? formatElapsedTime(row.elapsedTimeSeconds) : "",
+    ),
+    plannedDelay:
+      row.delaySeconds != null ? formatDelayTime(row.delaySeconds) : "No delay",
+    distanceToNext: withFallback(
+      includeUnits
+        ? formatExportDistanceWithUnit(row.distanceToNextMeters)
+        : formatExportDistance(row.distanceToNextMeters),
+    ),
+    timeToNext: withFallback(
+      row.timeToNextSeconds != null ? formatElapsedTime(row.timeToNextSeconds) : "",
+    ),
+    elevationGainToNext: withFallback(
+      includeUnits
+        ? formatExportElevationWithUnit(row.elevationGainToNextMeters)
+        : formatExportElevation(row.elevationGainToNextMeters),
+    ),
+    elevationLossToNext: withFallback(
+      includeUnits
+        ? formatExportElevationWithUnit(row.elevationLossToNextMeters)
+        : formatExportElevation(row.elevationLossToNextMeters),
+    ),
+    segmentPace: withFallback(formatExportPace(row.segmentAdjustedPace)),
+    segmentGrade: withFallback(formatExportGrade(row.segmentAverageGrade)),
+    tags: withFallback(
+      getTagsByIds(row.tagIds)
+        .map((tag) => tag.label)
+        .join(", "),
+    ),
+    notes: withFallback(getWaypointNote(row.waypointId), "No notes"),
+  }));
+}
+
+function exportPlanCsv() {
+  if (!course.value || !currentPlan.value) return;
+  const exportRows = buildPlanExportRows(false);
+  if (!exportRows) return;
 
   const distanceHeaderUnit = distanceUnit.value === "miles" ? "mi" : "km";
   const elevationHeaderUnit = elevationUnit.value === "feet" ? "ft" : "m";
@@ -1078,26 +1201,50 @@ function exportPlanCsv() {
 
   const csvRows = exportRows.map((row) => [
     row.waypointName,
-    formatExportDistance(row.distanceFromStartMeters),
-    row.elapsedTimeSeconds != null ? formatElapsedTime(row.elapsedTimeSeconds) : "",
-    formatExportDistance(row.distanceToNextMeters),
-    row.timeToNextSeconds != null ? formatElapsedTime(row.timeToNextSeconds) : "",
-    formatExportElevation(row.elevationGainToNextMeters),
-    formatExportElevation(row.elevationLossToNextMeters),
-    getTagsByIds(row.tagIds)
-      .map((tag) => tag.label)
-      .join(", "),
-    getWaypointNote(row.waypointId),
+    row.distanceFromStart,
+    row.timeEstimate,
+    row.distanceToNext,
+    row.timeToNext,
+    row.elevationGainToNext,
+    row.elevationLossToNext,
+    row.tags,
+    row.notes,
   ]);
 
   const csv = [headers, ...csvRows]
     .map((row) => row.map((value) => escapeCsvCell(value)).join(","))
     .join("\r\n");
 
-  downloadCsvFile(
+  downloadFile(
     `${slugifyFilePart(course.value.name)}-${slugifyFilePart(currentPlan.value.name)}-waypoints.csv`,
     csv,
+    "text/csv;charset=utf-8;",
   );
+}
+
+function exportPlanPdf() {
+  if (!course.value || !currentPlan.value) return;
+  const exportRows = buildPlanExportRows(true);
+  if (!exportRows) return;
+
+  const html = buildPlanPdfHtml({
+    courseName: course.value.name,
+    planName: currentPlan.value.name,
+    generatedAt: new Date().toLocaleString("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }),
+    overviewRows: exportRows.map((row) => ({
+      waypointName: row.waypointName,
+      distanceFromStart: row.distanceFromStart,
+      timeEstimate: row.timeEstimate,
+      distanceToNext: row.distanceToNext,
+      timeToNext: row.timeToNext,
+    })),
+    detailRows: exportRows,
+  });
+
+  printHtmlDocument(html);
 }
 
 /**
@@ -2037,6 +2184,7 @@ onUnmounted(() => {
                 @edit-course="openCourseEditModal"
                 @download-file="downloadOriginalFile"
                 @export-plan-csv="exportPlanCsv"
+                @export-plan-pdf="exportPlanPdf"
                 @delete-course="deleteCourse"
                 @toggle-public="toggleCoursePublic"
                 @toggle-share="toggleCourseShare"

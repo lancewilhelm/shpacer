@@ -1,8 +1,8 @@
-# Plan CSV Export
+# Plan Exports
 
-When a plan is selected on the course page, the `Menu` dropdown now includes an `Export Plan CSV` action.
+When a plan is selected on the course page, the `Menu` dropdown now includes `Export Plan CSV` and `Export Plan PDF` actions.
 
-The export downloads one row per waypoint and includes:
+The CSV export downloads one row per waypoint and includes:
 
 - Waypoint name
 - Distance from start
@@ -16,4 +16,6 @@ The export downloads one row per waypoint and includes:
 
 The exported distance and elevation columns follow the viewer's current unit settings. Timing values follow the active plan timing calculations shown in the waypoint panel, including plan pacing adjustments and waypoint stoppage handling.
 
-Implementation lives in [app/pages/courses/[id].vue](/Users/lancewilhelm/projects/shpacer/app/pages/courses/[id].vue), [app/components/CourseActionsDropdown.vue](/Users/lancewilhelm/projects/shpacer/app/components/CourseActionsDropdown.vue), and [app/utils/planWaypointExport.ts](/Users/lancewilhelm/projects/shpacer/app/utils/planWaypointExport.ts).
+The PDF export opens a print-ready document. The first page is a quick-reference overview table. Each following page renders a single waypoint section with the same export fields broken out for easier reading and printing.
+
+Implementation lives in [app/pages/courses/[id].vue](/Users/lancewilhelm/projects/shpacer/app/pages/courses/[id].vue), [app/components/CourseActionsDropdown.vue](/Users/lancewilhelm/projects/shpacer/app/components/CourseActionsDropdown.vue), [app/utils/planWaypointExport.ts](/Users/lancewilhelm/projects/shpacer/app/utils/planWaypointExport.ts), and [app/utils/planWaypointPrint.ts](/Users/lancewilhelm/projects/shpacer/app/utils/planWaypointPrint.ts).

@@ -4,6 +4,7 @@ import {
   calculateAllElapsedTimes,
   getWaypointDelay,
 } from '~/utils/timeCalculations';
+import { getSegmentPacingInfo } from '~/utils/gradeAdjustedTimeCalculations';
 import {
   calculateWaypointSegments,
   getSegmentAfterWaypoint,
@@ -22,11 +23,15 @@ export interface PlanWaypointExportRow {
   waypointId: string;
   waypointName: string;
   distanceFromStartMeters: number;
+  waypointElevationMeters: number | null;
   elapsedTimeSeconds: number | null;
+  delaySeconds: number | null;
   distanceToNextMeters: number | null;
   timeToNextSeconds: number | null;
   elevationGainToNextMeters: number | null;
   elevationLossToNextMeters: number | null;
+  segmentAdjustedPace: number | null;
+  segmentAverageGrade: number | null;
   tagIds: string[];
 }
 
@@ -71,6 +76,28 @@ export function buildPlanWaypointExportRows(
     const nextWaypoint = sortedWaypoints[index + 1] || null;
     const nextSegment = getSegmentAfterWaypoint(waypoint.id, segments);
     const elapsedTime = elapsedTimes[waypoint.id];
+    const delaySeconds = getWaypointDelay(
+      waypoint.id,
+      options.waypointStoppageTimes,
+      options.getDefaultStoppageTime(),
+      sortedWaypoints,
+    );
+
+    const segmentPacingInfo =
+      nextWaypoint && options.plan && options.elevationProfile?.length
+        ? getSegmentPacingInfo(waypoint.id, nextWaypoint.id, {
+            plan: options.plan,
+            waypoints: sortedWaypoints,
+            waypointStoppageTimes: options.waypointStoppageTimes,
+            elevationProfile: options.elevationProfile,
+            waypointSegments: segments,
+            useGradeAdjustment: options.useGradeAdjustment,
+            getDefaultStoppageTime: options.getDefaultStoppageTime,
+            gradeWindowMeters: options.gradeWindowMeters,
+            sampleStepMeters: options.sampleStepMeters,
+            maintainTargetAverage: options.maintainTargetAverage,
+          })
+        : null;
 
     let timeToNextSeconds: number | null = null;
     if (nextWaypoint) {
@@ -93,7 +120,9 @@ export function buildPlanWaypointExportRows(
       waypointId: waypoint.id,
       waypointName: waypoint.name,
       distanceFromStartMeters: waypoint.distance,
+      waypointElevationMeters: waypoint.elevation,
       elapsedTimeSeconds: typeof elapsedTime === 'number' ? elapsedTime : null,
+      delaySeconds: delaySeconds > 0 ? delaySeconds : null,
       distanceToNextMeters: nextSegment?.distance ?? null,
       timeToNextSeconds:
         typeof timeToNextSeconds === 'number' && timeToNextSeconds > 0
@@ -101,6 +130,8 @@ export function buildPlanWaypointExportRows(
           : null,
       elevationGainToNextMeters: nextSegment?.elevationGain ?? null,
       elevationLossToNextMeters: nextSegment?.elevationLoss ?? null,
+      segmentAdjustedPace: segmentPacingInfo?.adjustedPace ?? null,
+      segmentAverageGrade: segmentPacingInfo?.averageGrade ?? null,
       tagIds: waypoint.tags,
     };
   });

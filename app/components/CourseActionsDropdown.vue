@@ -31,6 +31,7 @@ interface Emits {
       | "edit-course"
       | "download-file"
       | "export-plan-csv"
+      | "export-plan-pdf"
       | "delete-course"
       | "toggle-public"
       | "toggle-share"
@@ -164,6 +165,14 @@ const actions = computed<ActionItem[]>(() => {
                 popupVisible.value = false;
               },
               icon: "lucide:file-spreadsheet",
+            } as ActionItem,
+            {
+              name: "Print/Export Plan PDF",
+              action: () => {
+                emit("export-plan-pdf");
+                popupVisible.value = false;
+              },
+              icon: "lucide:file-text",
             } as ActionItem,
           ]
         : []),
