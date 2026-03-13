@@ -30,6 +30,7 @@ interface Emits {
     e:
       | "edit-course"
       | "download-file"
+      | "export-plan-csv"
       | "delete-course"
       | "toggle-public"
       | "toggle-share"
@@ -154,6 +155,18 @@ const actions = computed<ActionItem[]>(() => {
   // Copy / Info / Download available to any member (owner or starred)
   if (_props.course) {
     list.push(
+      ...(_props.currentPlan
+        ? [
+            {
+              name: "Export Plan CSV",
+              action: () => {
+                emit("export-plan-csv");
+                popupVisible.value = false;
+              },
+              icon: "lucide:file-spreadsheet",
+            } as ActionItem,
+          ]
+        : []),
       {
         name: "Copy Course",
         action: () => {

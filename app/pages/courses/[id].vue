@@ -11,6 +11,9 @@ import {
   extractElevationProfile,
   interpolateAtDistance,
 } from "~/utils/elevationProfile";
+import { getTagsByIds } from "~/utils/waypointTags";
+import { formatElapsedTime } from "~/utils/timeCalculations";
+import { buildPlanWaypointExportRows } from "~/utils/planWaypointExport";
 import type { DistanceUnit } from "~/stores/userSettings";
 
 // Define the waypoint type that matches what we get from the API
@@ -316,6 +319,17 @@ const distanceUnit = computed<DistanceUnit>(() =>
     (course.value as unknown as { defaultDistanceUnit?: DistanceUnit }) ||
       undefined,
   ),
+);
+
+const elevationUnit = computed<"meters" | "feet">(() =>
+  userSettingsStore.getElevationUnitForCourse(
+    (course.value as unknown as { defaultElevationUnit?: "meters" | "feet" }) ||
+      undefined,
+  ),
+);
+
+const smoothingConfig = computed(() =>
+  userSettingsStore.getSmoothingForCourse(currentPlan.value?.courseId),
 );
 
 // Set the page title dynamically; always discourage SEO indexing for any public (shared) view
@@ -992,6 +1006,98 @@ async function downloadOriginalFile() {
     console.error("Error downloading file:", error);
     alert("Failed to download file");
   }
+}
+
+function slugifyFilePart(value: string): string {
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "export"
+  );
+}
+
+function formatExportDistance(meters: number | null): string {
+  if (meters == null) return "";
+  const value =
+    distanceUnit.value === "miles" ? meters / 1609.344 : meters / 1000;
+  return Number(value.toFixed(2)).toString();
+}
+
+function formatExportElevation(meters: number | null): string {
+  if (meters == null) return "";
+  const value = elevationUnit.value === "feet" ? meters * 3.28084 : meters;
+  return Math.round(value).toString();
+}
+
+function escapeCsvCell(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+function downloadCsvFile(filename: string, csv: string) {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+}
+
+function exportPlanCsv() {
+  if (!course.value || !currentPlan.value || !waypoints.value.length) return;
+
+  const exportRows = buildPlanWaypointExportRows({
+    plan: effectivePlanForTiming.value,
+    waypoints: waypoints.value,
+    waypointStoppageTimes: waypointStoppageTimes.value,
+    getDefaultStoppageTime,
+    elevationProfile: elevationPointsForDisplay.value,
+    useGradeAdjustment: effectivePlanForTiming.value?.useGradeAdjustment ?? true,
+    gradeWindowMeters: smoothingConfig.value.gradeWindowMeters,
+    sampleStepMeters: smoothingConfig.value.sampleStepMeters,
+    maintainTargetAverage:
+      (effectivePlanForTiming.value?.paceMode || "pace") !== "normalized",
+  });
+
+  const distanceHeaderUnit = distanceUnit.value === "miles" ? "mi" : "km";
+  const elevationHeaderUnit = elevationUnit.value === "feet" ? "ft" : "m";
+  const headers = [
+    "Waypoint",
+    `Distance from start (${distanceHeaderUnit})`,
+    "Time estimate",
+    `Distance to next waypoint (${distanceHeaderUnit})`,
+    "Estimated time to next waypoint",
+    `Elevation gain to next waypoint (${elevationHeaderUnit})`,
+    `Elevation loss to next waypoint (${elevationHeaderUnit})`,
+    "Tags",
+    "Notes",
+  ];
+
+  const csvRows = exportRows.map((row) => [
+    row.waypointName,
+    formatExportDistance(row.distanceFromStartMeters),
+    row.elapsedTimeSeconds != null ? formatElapsedTime(row.elapsedTimeSeconds) : "",
+    formatExportDistance(row.distanceToNextMeters),
+    row.timeToNextSeconds != null ? formatElapsedTime(row.timeToNextSeconds) : "",
+    formatExportElevation(row.elevationGainToNextMeters),
+    formatExportElevation(row.elevationLossToNextMeters),
+    getTagsByIds(row.tagIds)
+      .map((tag) => tag.label)
+      .join(", "),
+    getWaypointNote(row.waypointId),
+  ]);
+
+  const csv = [headers, ...csvRows]
+    .map((row) => row.map((value) => escapeCsvCell(value)).join(","))
+    .join("\r\n");
+
+  downloadCsvFile(
+    `${slugifyFilePart(course.value.name)}-${slugifyFilePart(currentPlan.value.name)}-waypoints.csv`,
+    csv,
+  );
 }
 
 /**
@@ -1930,6 +2036,7 @@ onUnmounted(() => {
                 :current-plan="effectivePlanForTiming"
                 @edit-course="openCourseEditModal"
                 @download-file="downloadOriginalFile"
+                @export-plan-csv="exportPlanCsv"
                 @delete-course="deleteCourse"
                 @toggle-public="toggleCoursePublic"
                 @toggle-share="toggleCourseShare"
