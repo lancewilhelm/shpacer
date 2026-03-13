@@ -8,6 +8,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits(["close"]);
+const backdropPressStarted = ref(false);
 
 // Compute modal styles based on props
 const modalStyles = computed(() => {
@@ -28,6 +29,20 @@ const handleKeydown = (event: KeyboardEvent) => {
     }
 };
 
+function handleBackdropPointerDown(event: PointerEvent) {
+    backdropPressStarted.value = event.target === event.currentTarget;
+}
+
+function handleBackdropClick(event: MouseEvent) {
+    const clickedBackdrop = event.target === event.currentTarget;
+
+    if (backdropPressStarted.value && clickedBackdrop) {
+        emit("close");
+    }
+
+    backdropPressStarted.value = false;
+}
+
 onMounted(() => {
     window.addEventListener("keydown", handleKeydown);
 });
@@ -42,7 +57,8 @@ onBeforeUnmount(() => {
         <div
             v-if="open"
             class="fixed top-0 left-0 w-full h-full bg-black/50 flex items-center justify-center z-50"
-            @click="emit('close')"
+            @pointerdown="handleBackdropPointerDown"
+            @click="handleBackdropClick"
         >
             <div
                 class="bg-(--bg-color) border border-(--main-color) m-4 max-w-[80%] p-4 rounded-lg shadow-lg"
