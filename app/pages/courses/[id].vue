@@ -15,6 +15,11 @@ import { getTagsByIds } from "~/utils/waypointTags";
 import { formatDelayTime, formatElapsedTime } from "~/utils/timeCalculations";
 import { buildPlanWaypointExportRows } from "~/utils/planWaypointExport";
 import { buildPlanPdfHtml } from "~/utils/planWaypointPrint";
+import {
+  captureCourseOverviewMapImage,
+  captureWaypointMapImage,
+  OSM_ATTRIBUTION,
+} from "~/utils/leafletBigImageExport";
 import type { DistanceUnit } from "~/stores/userSettings";
 
 // Define the waypoint type that matches what we get from the API
@@ -251,6 +256,7 @@ watchEffect(async () => {
 });
 const waypointNotes = ref<SelectWaypointNote[]>([]);
 const waypointStoppageTimes = ref<SelectWaypointStoppageTime[]>([]);
+const isExportingPlanPdf = ref(false);
 const planSetupModalOpen = ref(false);
 const editingPlan = ref<SelectPlan | null>(null);
 const editingPlanPayload = computed(() => {
@@ -1135,6 +1141,7 @@ function buildPlanExportRows(includeUnits = false) {
   });
 
   return exportRows.map((row) => ({
+    waypointId: row.waypointId,
     waypointName: row.waypointName,
     distanceFromStart: withFallback(
       includeUnits
@@ -1222,29 +1229,106 @@ function exportPlanCsv() {
   );
 }
 
-function exportPlanPdf() {
-  if (!course.value || !currentPlan.value) return;
+async function exportPlanPdf() {
+  if (!course.value || !currentPlan.value || isExportingPlanPdf.value) return;
   const exportRows = buildPlanExportRows(true);
   if (!exportRows) return;
 
-  const html = buildPlanPdfHtml({
-    courseName: course.value.name,
-    planName: currentPlan.value.name,
-    generatedAt: new Date().toLocaleString("en-US", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }),
-    overviewRows: exportRows.map((row) => ({
-      waypointName: row.waypointName,
-      distanceFromStart: row.distanceFromStart,
-      timeEstimate: row.timeEstimate,
-      distanceToNext: row.distanceToNext,
-      timeToNext: row.timeToNext,
-    })),
-    detailRows: exportRows,
-  });
+  isExportingPlanPdf.value = true;
+  document.body.style.cursor = "progress";
 
-  printHtmlDocument(html);
+  try {
+    const waypointById = new Map(
+      waypoints.value.map((waypoint) => [waypoint.id, waypoint]),
+    );
+    const exportWaypoints = waypoints.value.map((waypoint) => ({
+      id: waypoint.id,
+      name: waypoint.name,
+      lat: waypoint.lat,
+      lng: waypoint.lng,
+      order: waypoint.order,
+    }));
+    let overviewMapImageDataUrl = "";
+    let overviewMapError = "";
+
+    try {
+      overviewMapImageDataUrl = await captureCourseOverviewMapImage({
+        geoJsonData: geoJsonData.value,
+        allWaypoints: exportWaypoints,
+        size: {
+          width: 620,
+          height: 360,
+        },
+      });
+    } catch (error) {
+      console.error("Error capturing course overview map image:", error);
+      overviewMapError = "Overview map unavailable for this export.";
+    }
+
+    const detailRows = [];
+    for (const row of exportRows) {
+      const waypoint = waypointById.get(row.waypointId);
+      let mapImageDataUrl = "";
+      let mapImageError = "";
+
+      if (waypoint) {
+        try {
+          mapImageDataUrl = await captureWaypointMapImage({
+            geoJsonData: geoJsonData.value,
+            waypoint: {
+              id: waypoint.id,
+              name: waypoint.name,
+              lat: waypoint.lat,
+              lng: waypoint.lng,
+              order: waypoint.order,
+            },
+            allWaypoints: exportWaypoints,
+            size: {
+              width: 420,
+              height: 250,
+            },
+          });
+        } catch (error) {
+          console.error("Error capturing waypoint map image:", error);
+          mapImageError = "Map snapshot unavailable for this waypoint.";
+        }
+      } else {
+        mapImageError = "Map snapshot unavailable for this waypoint.";
+      }
+
+      detailRows.push({
+        ...row,
+        mapImageDataUrl,
+        mapImageError,
+        mapAttribution: OSM_ATTRIBUTION,
+      });
+    }
+
+    const html = buildPlanPdfHtml({
+      courseName: course.value.name,
+      planName: currentPlan.value.name,
+      generatedAt: new Date().toLocaleString("en-US", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }),
+      overviewMapImageDataUrl,
+      overviewMapError,
+      overviewMapAttribution: OSM_ATTRIBUTION,
+      overviewRows: detailRows.map((row) => ({
+        waypointName: row.waypointName,
+        distanceFromStart: row.distanceFromStart,
+        timeEstimate: row.timeEstimate,
+        distanceToNext: row.distanceToNext,
+        timeToNext: row.timeToNext,
+      })),
+      detailRows,
+    });
+
+    printHtmlDocument(html);
+  } finally {
+    isExportingPlanPdf.value = false;
+    document.body.style.cursor = "";
+  }
 }
 
 /**

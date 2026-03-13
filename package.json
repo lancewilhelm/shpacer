@@ -41,6 +41,7 @@
     "drizzle-orm": "^0.45.1",
     "fuzzysort": "^3.1.0",
     "leaflet": "1.9.4",
+    "leaflet.bigimage": "^1.0.1",
     "nuxt": "^4.3.0",
     "pinia": "^3.0.4",
     "pinia-plugin-persistedstate": "^4.7.1",

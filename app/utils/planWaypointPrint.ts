@@ -7,6 +7,9 @@ export interface PlanPdfOverviewRow {
 }
 
 export interface PlanPdfDetailRow extends PlanPdfOverviewRow {
+  mapImageDataUrl?: string;
+  mapAttribution?: string;
+  mapImageError?: string;
   waypointElevation: string;
   plannedDelay: string;
   elevationGainToNext: string;
@@ -21,6 +24,9 @@ interface BuildPlanPdfHtmlOptions {
   courseName: string;
   planName: string;
   generatedAt: string;
+  overviewMapImageDataUrl?: string;
+  overviewMapAttribution?: string;
+  overviewMapError?: string;
   overviewRows: PlanPdfOverviewRow[];
   detailRows: PlanPdfDetailRow[];
 }
@@ -59,11 +65,29 @@ export function buildPlanPdfHtml(
       (row, index) => `
         <section class="detail-page">
           <div class="detail-header">
-            <div>
+            <div class="detail-header-main">
               <div class="eyebrow">Waypoint ${index + 1}</div>
-              <h2>${escapeHtml(row.waypointName)}</h2>
+              <div class="detail-title-row">
+                <h2>${escapeHtml(row.waypointName)}</h2>
+                <div class="detail-stats-inline">
+                  <div class="detail-chip">${escapeHtml(row.distanceFromStart)} from start</div>
+                  <div class="detail-chip">${escapeHtml(row.waypointElevation)} elevation</div>
+                </div>
+              </div>
             </div>
-            <div class="detail-chip">${escapeHtml(row.distanceFromStart)} from start</div>
+          </div>
+
+          <div class="map-block">
+            ${
+              row.mapImageDataUrl
+                ? `<img
+                    class="map-image"
+                    src="${row.mapImageDataUrl}"
+                    alt="${escapeHtml(row.waypointName)} map snapshot"
+                  />`
+                : `<div class="map-placeholder">${escapeHtml(row.mapImageError || 'Map snapshot unavailable')}</div>`
+            }
+            <div class="map-attribution">${escapeHtml(row.mapAttribution || '')}</div>
           </div>
 
           <div class="detail-grid">
@@ -256,80 +280,182 @@ export function buildPlanPdfHtml(
         max-width: 42rem;
       }
 
+      .overview-page {
+        page-break-after: always;
+      }
+
+      .overview-page-header {
+        margin-bottom: 16px;
+      }
+
+      .overview-page-header h2 {
+        font-size: 28px;
+        line-height: 1.1;
+      }
+
+      .overview-page-copy {
+        font-size: 14px;
+        color: var(--muted);
+        margin-top: 6px;
+      }
+
+      .overview-map-block {
+        border: 1px solid var(--line);
+        background: linear-gradient(180deg, #fff, #fbfaf8);
+        padding: 14px;
+      }
+
+      .overview-map-image {
+        display: block;
+        width: 100%;
+        height: auto;
+        margin: 0 auto;
+        border: 1px solid var(--panel-strong);
+      }
+
+      .overview-map-placeholder {
+        width: 100%;
+        min-height: 420px;
+        border: 1px dashed var(--panel-strong);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 18px;
+        color: var(--muted);
+        font-family: "Helvetica Neue", "Arial", sans-serif;
+        font-size: 13px;
+        text-align: center;
+      }
+
       .detail-page {
         page-break-before: always;
-        min-height: 100vh;
-        padding: 0.7in;
+        min-height: auto;
+        padding: 0.55in 0.6in;
       }
 
       .detail-header {
+        margin-bottom: 14px;
+      }
+
+      .detail-header-main {
+        min-width: 0;
+      }
+
+      .detail-title-row {
         display: flex;
+        flex-wrap: wrap;
+        align-items: center;
         justify-content: space-between;
-        gap: 20px;
-        align-items: flex-start;
-        margin-bottom: 26px;
+        gap: 10px 14px;
+      }
+
+      .detail-stats-inline {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
       }
 
       .detail-header h2 {
-        font-size: 28px;
+        font-size: 24px;
         line-height: 1.1;
       }
 
       .detail-chip {
         border: 1px solid var(--panel-strong);
         background: var(--panel);
-        padding: 10px 14px;
-        font-size: 13px;
+        padding: 6px 10px;
+        font-size: 12px;
         white-space: nowrap;
+        line-height: 1.2;
       }
 
       .detail-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 12px;
-        margin-bottom: 22px;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+
+      .map-block {
+        border: 1px solid var(--line);
+        background: linear-gradient(180deg, #fff, #fbfaf8);
+        padding: 10px;
+        margin: 0 auto 12px;
+        max-width: 320px;
+      }
+
+      .map-image {
+        display: block;
+        width: 100%;
+        height: auto;
+        margin: 0 auto;
+        border: 1px solid var(--panel-strong);
+      }
+
+      .map-placeholder {
+        width: 100%;
+        min-height: 170px;
+        margin: 0 auto;
+        border: 1px dashed var(--panel-strong);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 14px;
+        color: var(--muted);
+        font-family: "Helvetica Neue", "Arial", sans-serif;
+        font-size: 12px;
+        text-align: center;
+      }
+
+      .map-attribution {
+        margin-top: 6px;
+        text-align: center;
+        font-size: 10px;
+        color: var(--muted);
+        font-family: "Helvetica Neue", "Arial", sans-serif;
       }
 
       .metric-card {
         border: 1px solid var(--line);
-        padding: 14px;
-        min-height: 74px;
+        padding: 10px 12px;
+        min-height: 58px;
       }
 
       .metric-label {
         display: block;
-        font-size: 11px;
+        font-size: 10px;
         font-family: "Helvetica Neue", "Arial", sans-serif;
         letter-spacing: 0.06em;
         text-transform: uppercase;
         color: var(--muted);
-        margin-bottom: 8px;
+        margin-bottom: 5px;
       }
 
       .metric-value {
         display: block;
-        font-size: 18px;
+        font-size: 16px;
+        line-height: 1.2;
       }
 
       .notes-block {
         border: 1px solid var(--line);
         background: linear-gradient(180deg, #fff, #fbfaf8);
-        padding: 16px;
+        padding: 12px;
       }
 
       .notes-label {
-        font-size: 11px;
+        font-size: 10px;
         font-family: "Helvetica Neue", "Arial", sans-serif;
         letter-spacing: 0.06em;
         text-transform: uppercase;
         color: var(--muted);
-        margin-bottom: 10px;
+        margin-bottom: 6px;
       }
 
       .notes-body {
-        font-size: 14px;
-        line-height: 1.6;
-        min-height: 80px;
+        font-size: 13px;
+        line-height: 1.45;
+        min-height: 54px;
       }
 
       @page {
@@ -390,6 +516,31 @@ export function buildPlanPdfHtml(
             ${overviewRows}
           </tbody>
         </table>
+      </section>
+
+      <section class="page overview-page">
+        <div class="overview-page-header">
+          <div>
+            <div class="eyebrow">Course overview</div>
+            <h2>Whole-course map</h2>
+            <p class="overview-page-copy">
+              Full route context before the waypoint-by-waypoint breakdown.
+            </p>
+          </div>
+        </div>
+
+        <div class="overview-map-block">
+          ${
+            options.overviewMapImageDataUrl
+              ? `<img
+                  class="overview-map-image"
+                  src="${options.overviewMapImageDataUrl}"
+                  alt="${escapeHtml(options.courseName)} course overview map"
+                />`
+              : `<div class="overview-map-placeholder">${escapeHtml(options.overviewMapError || 'Overview map unavailable')}</div>`
+          }
+          <div class="map-attribution">${escapeHtml(options.overviewMapAttribution || '')}</div>
+        </div>
       </section>
 
       ${detailSections}
