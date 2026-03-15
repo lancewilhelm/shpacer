@@ -231,6 +231,41 @@ export const plans = sqliteTable("plans", {
     .$defaultFn(() => new Date()),
 });
 
+// COURSE ACTIVITIES TABLE
+export const courseActivities = sqliteTable("course_activities", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => uuidv4()),
+  courseId: text("course_id")
+    .notNull()
+    .references(() => courses.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  sourceFileName: text("source_file_name").notNull(),
+  fileType: text("file_type").notNull(), // 'gpx' or 'tcx'
+  provider: text("provider").notNull().default("unknown"), // 'strava' | 'garmin' | 'unknown'
+  originalFileContent: text("original_file_content").notNull(),
+  geoJsonData: text("geojson_data", { mode: "json" }).notNull(),
+  startedAt: integer("started_at", { mode: "timestamp" }),
+  endedAt: integer("ended_at", { mode: "timestamp" }),
+  elapsedTimeSeconds: integer("elapsed_time_seconds"),
+  recordedDistanceMeters: integer("recorded_distance_meters"),
+  matchedDistanceMeters: integer("matched_distance_meters"),
+  matchStatus: text("match_status").notNull().default("failed"), // 'matched' | 'partial' | 'failed'
+  matchConfidence: integer("match_confidence").notNull().default(0), // percentage integer 0-100
+  isPrimary: integer("is_primary", { mode: "boolean" }).notNull().default(false),
+  matchData: text("match_data", { mode: "json" }).notNull(),
+
+  // Timestamps
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
 // WAYPOINT NOTES TABLE
 export const waypointNotes = sqliteTable("waypoint_notes", {
   id: text("id")
@@ -307,6 +342,7 @@ export type InsertGlobalSettings = InferInsertModel<typeof globalSettings>;
 export type InsertCourse = InferInsertModel<typeof courses>;
 export type InsertWaypoint = InferInsertModel<typeof waypoints>;
 export type InsertPlan = InferInsertModel<typeof plans>;
+export type InsertCourseActivity = InferInsertModel<typeof courseActivities>;
 export type InsertWaypointNote = InferInsertModel<typeof waypointNotes>;
 export type InsertWaypointStoppageTime = InferInsertModel<
   typeof waypointStoppageTimes
@@ -319,6 +355,7 @@ export type SelectKnowledge = InferSelectModel<typeof knowledge>;
 export type SelectCourse = InferSelectModel<typeof courses>;
 export type SelectWaypoint = InferSelectModel<typeof waypoints>;
 export type SelectPlan = InferSelectModel<typeof plans>;
+export type SelectCourseActivity = InferSelectModel<typeof courseActivities>;
 export type SelectWaypointNote = InferSelectModel<typeof waypointNotes>;
 export type SelectWaypointStoppageTime = InferSelectModel<
   typeof waypointStoppageTimes

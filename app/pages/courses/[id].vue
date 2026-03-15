@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import type {
   SelectCourse,
+  SelectCourseActivity,
   SelectPlan,
   SelectWaypointNote,
   SelectWaypointStoppageTime,
 } from "~/utils/db/schema";
+import type {
+  CourseActivitiesResponse,
+  CourseActivityPlanDetail,
+} from "~/utils/courseActivities";
+import { formatSignedDuration } from "~/utils/courseActivities";
 import { formatDistance, formatElevation } from "~/utils/courseMetrics";
 import { clampChartPanelHeight } from "~/utils/uiConstants";
 import {
@@ -106,8 +112,8 @@ const userSettingsStore = useUserSettingsStore();
 const uiStore = useUiStore();
 
 // Fetch course data
-// Fetch course and plans in parallel (avoid SSR waterfall)
-const [courseResp, plansResp] = await Promise.all([
+// Fetch course, plans, and activities in parallel (avoid SSR waterfall)
+const [courseResp, plansResp, activitiesResp] = await Promise.all([
   useFetch<{
     mode: "member" | "public";
     capabilities: {
@@ -117,6 +123,8 @@ const [courseResp, plansResp] = await Promise.all([
       canToggleShare: boolean;
       canManagePlans: boolean;
       canViewPlans: boolean;
+      canManageActivities: boolean;
+      canViewActivities: boolean;
       canEditWaypoints: boolean;
       canMutateNotes: boolean;
       canClone: boolean;
@@ -134,6 +142,14 @@ const [courseResp, plansResp] = await Promise.all([
       }
     },
   }),
+  useFetch<CourseActivitiesResponse>(`/api/courses/${courseId}/activities`, {
+    default: () => ({ activities: [], primaryActivityId: null }),
+    onResponseError(ctx) {
+      if (ctx.response.status === 401) {
+        ctx.error = null as unknown as never;
+      }
+    },
+  }),
 ]);
 if (isClient && isDev) {
   console.timeEnd("CoursePage: initial fetches");
@@ -141,6 +157,7 @@ if (isClient && isDev) {
     courseId,
     courseFetched: !!courseResp?.data?.value?.course,
     plansCount: (plansResp?.data?.value?.plans || []).length,
+    activitiesCount: (activitiesResp?.data?.value?.activities || []).length,
   });
 }
 
@@ -157,10 +174,17 @@ const {
   error: _plansError,
   refresh: refreshPlans,
 } = plansResp;
+const {
+  data: activitiesData,
+  refresh: refreshActivities,
+} = activitiesResp;
 
 // Plans state
 const plans = computed(() => plansData.value?.plans || []);
+const activities = computed(() => activitiesData.value?.activities || []);
 const currentPlanId = ref<string | null>(null);
+const currentActivityId = ref<string | null>(null);
+const activitySelectionInitialized = ref(false);
 const publicSharedPlan = ref<SelectPlan | null>(null); // populated when viewing a publicly shared plan (logged-out)
 
 // Optional deferral for initial ancillary fetch to test perceived performance.
@@ -291,6 +315,8 @@ const capabilities = ref({
   canToggleShare: false,
   canManagePlans: false,
   canViewPlans: false,
+  canManageActivities: false,
+  canViewActivities: false,
   canEditWaypoints: false,
   canMutateNotes: false,
   canClone: false,
@@ -320,6 +346,14 @@ const currentPlan = computed(() =>
       publicSharedPlan.value
     : null,
 );
+const currentActivity = computed<SelectCourseActivity | null>(() =>
+  currentActivityId.value
+    ? activities.value.find((activity) => activity.id === currentActivityId.value) ||
+      null
+    : null,
+);
+const activityPlanDetail = ref<CourseActivityPlanDetail | null>(null);
+const activityPlanDetailPending = ref(false);
 
 const distanceUnit = computed<DistanceUnit>(() =>
   userSettingsStore.getDistanceUnitForCourse(
@@ -337,6 +371,86 @@ const elevationUnit = computed<"meters" | "feet">(() =>
 
 const smoothingConfig = computed(() =>
   userSettingsStore.getSmoothingForCourse(currentPlan.value?.courseId),
+);
+
+watchEffect(() => {
+  if (mode.value !== "member") {
+    currentActivityId.value = null;
+    activitySelectionInitialized.value = false;
+    activityPlanDetail.value = null;
+    return;
+  }
+
+  const availableActivities = activities.value;
+  if (!availableActivities.length) {
+    currentActivityId.value = null;
+    activitySelectionInitialized.value = false;
+    activityPlanDetail.value = null;
+    return;
+  }
+
+  if (
+    currentActivityId.value &&
+    availableActivities.some((activity) => activity.id === currentActivityId.value)
+  ) {
+    activitySelectionInitialized.value = true;
+    return;
+  }
+
+  if (!activitySelectionInitialized.value) {
+    currentActivityId.value =
+      activitiesData.value?.primaryActivityId || availableActivities[0]?.id || null;
+    activitySelectionInitialized.value = true;
+  }
+});
+
+async function refreshActivityComparisons() {
+  if (
+    mode.value !== "member" ||
+    !currentActivityId.value ||
+    !capabilities.value.canViewActivities ||
+    !currentPlanId.value
+  ) {
+    activityPlanDetail.value = null;
+    return;
+  }
+
+  activityPlanDetailPending.value = true;
+  try {
+    const response = await $fetch<{ detail: CourseActivityPlanDetail }>(
+      `/api/courses/${courseId}/activities/${currentActivityId.value}/compare`,
+      {
+        query: {
+          planId: currentPlanId.value,
+          distanceUnit: distanceUnit.value,
+          gradeWindowMeters: smoothingConfig.value.gradeWindowMeters,
+          sampleStepMeters: smoothingConfig.value.sampleStepMeters,
+        },
+      },
+    );
+    activityPlanDetail.value = response.detail;
+  } catch (error) {
+    console.error("Failed to load activity plan detail", error);
+    activityPlanDetail.value = null;
+  } finally {
+    activityPlanDetailPending.value = false;
+  }
+}
+
+watch(
+  [
+    () => mode.value,
+    () => currentActivityId.value,
+    () => currentPlanId.value,
+    () => distanceUnit.value,
+    () => smoothingConfig.value.gradeWindowMeters,
+    () => smoothingConfig.value.sampleStepMeters,
+    () => plans.value.length,
+  ],
+  () => {
+    refreshActivityComparisons();
+  },
+  { immediate: true },
 );
 
 // Set the page title dynamically; always discourage SEO indexing for any public (shared) view
@@ -1409,6 +1523,10 @@ const geoJsonData = computed(() => {
   }
   return arr;
 });
+const activityOverlayGeoJsonData = computed(() => {
+  if (!currentActivity.value?.geoJsonData) return [];
+  return [currentActivity.value.geoJsonData as GeoJSON.FeatureCollection];
+});
 
 // Build elevation points and per-unit split waypoints for display switching
 const elevationPointsForDisplay = computed(() => {
@@ -1937,6 +2055,23 @@ function handleWaypointUpdated(_updatedWaypoint: Waypoint) {
   refreshWaypoints();
 }
 
+function handleActivitySelected(activityId: string) {
+  activitySelectionInitialized.value = true;
+  currentActivityId.value = activityId || null;
+}
+
+async function handleActivitiesChanged() {
+  await refreshActivities();
+  if (
+    currentActivityId.value &&
+    !activitiesData.value?.activities.some(
+      (activity) => activity.id === currentActivityId.value,
+    )
+  ) {
+    currentActivityId.value = activitiesData.value?.primaryActivityId || null;
+  }
+}
+
 // Plan management functions
 function handlePlanSelected(planId: string) {
   currentPlanId.value = planId || null;
@@ -1972,6 +2107,7 @@ function closePlanSetupModal() {
 
 async function handlePlanCreated(plan: unknown) {
   await refreshPlans();
+  await refreshActivityComparisons();
   const planId = (plan as SelectPlan).id;
   currentPlanId.value = planId;
 
@@ -1987,6 +2123,7 @@ async function handlePlanCreated(plan: unknown) {
 async function handlePlanUpdated(plan: unknown) {
   const typedPlan = plan as SelectPlan;
   await refreshPlans();
+  await refreshActivityComparisons();
   if (currentPlanId.value === typedPlan.id) {
     // Refresh waypoint notes and stoppage times in case plan details changed
     try {
@@ -2013,6 +2150,7 @@ async function handlePlanDeleted(planId: string) {
     });
 
     await refreshPlans();
+    await refreshActivityComparisons();
 
     if (currentPlanId.value === planId) {
       currentPlanId.value = null;
@@ -2250,6 +2388,15 @@ onUnmounted(() => {
               v-if="mode === 'member'"
               class="flex items-center gap-2 flex-wrap justify-start md:justify-end mt-1 md:mt-0 w-full md:w-auto"
             >
+              <ActivitySelector
+                v-if="capabilities.canManageActivities"
+                :activities="activities"
+                :current-activity-id="currentActivityId"
+                :course-id="courseId"
+                @activity-selected="handleActivitySelected"
+                @activities-changed="handleActivitiesChanged"
+              />
+
               <PlanSelector
                 v-if="mode === 'member' && capabilities.canManagePlans"
                 :plans="plans"
@@ -2424,6 +2571,53 @@ onUnmounted(() => {
               >
                 {{ planTargetInterpretationNote }}
               </p>
+            </div>
+          </div>
+
+          <div
+            v-if="mode === 'member' && currentActivity"
+            class="mt-2 flex flex-wrap gap-2 text-xs md:text-sm"
+          >
+            <div
+              class="px-3 py-2 rounded-lg border border-(--sub-color) bg-(--sub-alt-color) text-(--main-color)"
+            >
+              <span class="font-medium">Activity:</span>
+              {{ currentActivity.sourceFileName }}
+            </div>
+            <div
+              class="px-3 py-2 rounded-lg border border-(--sub-color) bg-(--sub-alt-color) text-(--main-color)"
+            >
+              <span class="font-medium">Actual:</span>
+              {{
+                currentActivity.elapsedTimeSeconds != null
+                  ? formatElapsedTime(currentActivity.elapsedTimeSeconds)
+                  : "—"
+              }}
+            </div>
+            <div
+              class="px-3 py-2 rounded-lg border border-(--sub-color) bg-(--sub-alt-color) text-(--main-color)"
+            >
+              <span class="font-medium">Match:</span>
+              {{ currentActivity.matchStatus }} ·
+              {{ currentActivity.matchConfidence }}%
+            </div>
+            <div
+              v-if="currentPlan && activityPlanDetail"
+              class="px-3 py-2 rounded-lg border border-(--sub-color) bg-(--sub-alt-color) text-(--main-color)"
+            >
+              <span class="font-medium">Planned:</span>
+              {{
+                activityPlanDetail.plannedElapsedSeconds != null
+                  ? formatElapsedTime(activityPlanDetail.plannedElapsedSeconds)
+                  : "—"
+              }}
+            </div>
+            <div
+              v-if="currentPlan && activityPlanDetail"
+              class="px-3 py-2 rounded-lg border border-(--sub-color) bg-(--sub-alt-color) text-(--main-color)"
+            >
+              <span class="font-medium">Delta:</span>
+              {{ formatSignedDuration(activityPlanDetail.deltaSeconds) }}
             </div>
           </div>
         </div>
@@ -2651,6 +2845,7 @@ onUnmounted(() => {
                   <LeafletMap
                     :key="mapResetKey"
                     :geo-json-data="geoJsonData"
+                    :overlay-geo-json-data="activityOverlayGeoJsonData"
                     :waypoints="displayWaypoints"
                     :display-markers-as-splits="waypointPanelTab === 'splits'"
                     :selected-waypoint="selectedWaypoint"
@@ -2702,6 +2897,7 @@ onUnmounted(() => {
                   "
                   :waypoints="displayWaypoints"
                   :plan="effectivePlanForTiming"
+                  :activity="currentActivity"
                   :show-pace-chart="!!currentPlan"
                   @elevation-hover="handleElevationHover"
                   @elevation-leave="handleElevationLeave"
@@ -2732,6 +2928,7 @@ onUnmounted(() => {
               :selected-waypoint="selectedWaypoint"
               :current-plan-id="currentPlanId"
               :current-plan="effectivePlanForTiming"
+              :activity-comparison-waypoints="activityPlanDetail?.waypoints || []"
               :waypoint-stoppage-times="waypointStoppageTimes"
               :get-waypoint-note="getWaypointNote"
               :get-waypoint-stoppage-time="getWaypointStoppageTime"
@@ -2753,6 +2950,7 @@ onUnmounted(() => {
               :geo-json-data="geoJsonData"
               :current-plan="effectivePlanForTiming"
               :course-defaults="course || null"
+              :activity-comparison-splits="activityPlanDetail?.splits || []"
               :waypoints="
                 waypoints.map((w) => ({
                   id: w.id,
@@ -2792,6 +2990,7 @@ onUnmounted(() => {
                   "
                   :waypoints="displayWaypoints"
                   :plan="effectivePlanForTiming"
+                  :activity="currentActivity"
                   :show-pace-chart="!!currentPlan"
                   :highlight-segment="stableHighlightSegment"
                   highlight-color="#ff0000"
@@ -2820,6 +3019,7 @@ onUnmounted(() => {
                   <LeafletMap
                     :key="mapResetKey"
                     :geo-json-data="geoJsonData"
+                    :overlay-geo-json-data="activityOverlayGeoJsonData"
                     :waypoints="displayWaypoints"
                     :display-markers-as-splits="waypointPanelTab === 'splits'"
                     :selected-waypoint="selectedWaypoint"
@@ -2904,6 +3104,9 @@ onUnmounted(() => {
                   :selected-waypoint="selectedWaypoint"
                   :current-plan-id="currentPlanId"
                   :current-plan="effectivePlanForTiming"
+                  :activity-comparison-waypoints="
+                    activityPlanDetail?.waypoints || []
+                  "
                   :waypoint-stoppage-times="waypointStoppageTimes"
                   :get-waypoint-note="getWaypointNote"
                   :get-waypoint-stoppage-time="getWaypointStoppageTime"
@@ -2924,6 +3127,9 @@ onUnmounted(() => {
                   :geo-json-data="geoJsonData"
                   :current-plan="effectivePlanForTiming"
                   :course-defaults="course || null"
+                  :activity-comparison-splits="
+                    activityPlanDetail?.splits || []
+                  "
                   :waypoints="
                     waypoints.map((w) => ({
                       id: w.id,

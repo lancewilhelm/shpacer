@@ -11,7 +11,8 @@ import { calculateActualPacesForTarget } from "~/utils/paceAdjustment";
 import { formatDistance, formatElevation } from "~/utils/courseMetrics";
 import { useUserSettingsStore } from "~/stores/userSettings";
 import { getWaypointColorFromOrder } from "~/utils/waypoints";
-import type { SelectPlan } from "~/utils/db/schema";
+import type { SelectCourseActivity, SelectPlan } from "~/utils/db/schema";
+import { getCourseActivityMatchData } from "~/utils/courseActivities";
 
 interface Props {
     geoJsonData: GeoJSON.FeatureCollection[];
@@ -28,6 +29,7 @@ interface Props {
     }>;
     creationMode?: boolean;
     plan?: SelectPlan | null;
+    activity?: SelectCourseActivity | null;
     showPaceChart?: boolean;
     highlightSegment?: { start: number; end: number } | null;
     highlightColor?: string;
@@ -57,6 +59,7 @@ const props = withDefaults(defineProps<Props>(), {
     waypoints: () => [],
     creationMode: false,
     plan: null,
+    activity: null,
     showPaceChart: true,
     highlightSegment: null,
     highlightColor: "#ff0000",
@@ -102,7 +105,12 @@ type TooltipModel = {
     distance: string;
     elevation: string;
     grade: string;
-    actualPace: string;
+    planPace: string;
+    planElapsed: string;
+    activityPace: string;
+    activityElapsed: string;
+    paceDelta: string;
+    elapsedDelta: string;
 };
 
 const tooltipVisible = ref(false);
@@ -111,25 +119,38 @@ const tooltipData = ref<TooltipModel>({
     distance: "",
     elevation: "",
     grade: "",
-    actualPace: "",
+    planPace: "",
+    planElapsed: "",
+    activityPace: "",
+    activityElapsed: "",
+    paceDelta: "",
+    elapsedDelta: "",
 });
 const secondaryTooltipVisible = ref(false);
 const secondaryTooltipData = ref<TooltipModel>({
     distance: "",
     elevation: "",
     grade: "",
-    actualPace: "",
+    planPace: "",
+    planElapsed: "",
+    activityPace: "",
+    activityElapsed: "",
+    paceDelta: "",
+    elapsedDelta: "",
 });
-const secondaryTooltipElapsed = ref("");
 
 function clearSecondaryMapTooltipState() {
     secondaryTooltipVisible.value = false;
-    secondaryTooltipElapsed.value = "";
     secondaryTooltipData.value = {
         distance: "",
         elevation: "",
         grade: "",
-        actualPace: "",
+        planPace: "",
+        planElapsed: "",
+        activityPace: "",
+        activityElapsed: "",
+        paceDelta: "",
+        elapsedDelta: "",
     };
 }
 
@@ -372,6 +393,38 @@ const smoothingConfig = computed(() => {
     };
 });
 
+const currentDistanceUnit = computed<"miles" | "kilometers">(() => {
+    const getter = (
+        userSettingsStore as unknown as {
+            getDistanceUnitForCourse?: () => "miles" | "kilometers";
+        }
+    )?.getDistanceUnitForCourse;
+    return typeof getter === "function" ? getter() : "miles";
+});
+
+const currentElevationUnit = computed<"feet" | "meters">(() => {
+    const getter = (
+        userSettingsStore as unknown as {
+            getElevationUnitForCourse?: () => "feet" | "meters";
+        }
+    )?.getElevationUnitForCourse;
+    return typeof getter === "function" ? getter() : "feet";
+});
+
+const tooltipPaceUnitMeters = computed(() =>
+    props.plan?.paceUnit === "min_per_mi"
+        ? 1609.344
+        : props.plan?.paceUnit === "min_per_km"
+          ? 1000
+          : currentDistanceUnit.value === "miles"
+            ? 1609.344
+            : 1000,
+);
+
+const tooltipPaceUnitLabel = computed(() =>
+    tooltipPaceUnitMeters.value === 1609.344 ? "/mi" : "/km",
+);
+
 // Calculate actual paces needed at each point to achieve target average pace
 const actualPaceData = computed(() => {
     if (!props.plan || !props.plan.pace || elevationPoints.length === 0) {
@@ -450,6 +503,51 @@ function formatPace(paceInSeconds: number): string {
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function formatSignedPaceDelta(paceDeltaSeconds: number): string {
+    const sign = paceDeltaSeconds > 0 ? "+" : paceDeltaSeconds < 0 ? "-" : "";
+    return `${sign}${formatPace(Math.abs(paceDeltaSeconds))}${tooltipPaceUnitLabel.value}`;
+}
+
+function formatSignedElapsedTime(totalSeconds: number): string {
+    const sign = totalSeconds > 0 ? "+" : totalSeconds < 0 ? "-" : "";
+    return `${sign}${formatElapsedTimeLocal(Math.abs(totalSeconds))}`;
+}
+
+function interpolateSeriesAtDistance(
+    distances: number[],
+    values: number[],
+    distance: number,
+): number | null {
+    const n = Math.min(distances.length, values.length);
+    if (n === 0) return null;
+    if (distance <= distances[0]!) return values[0]!;
+
+    const lastDistance = distances[n - 1]!;
+    if (distance >= lastDistance) {
+        return distance <= lastDistance + 1 ? values[n - 1]! : null;
+    }
+
+    let lo = 0;
+    let hi = n - 1;
+    while (lo + 1 < hi) {
+        const mid = (lo + hi) >> 1;
+        if (distances[mid]! <= distance) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+
+    const d0 = distances[lo]!;
+    const d1 = distances[hi]!;
+    const v0 = values[lo]!;
+    const v1 = values[hi]!;
+    if (d1 <= d0) return v1;
+
+    const ratio = (distance - d0) / (d1 - d0);
+    return v0 + ratio * (v1 - v0);
 }
 
 // Process GeoJSON data to extract elevation profile
@@ -932,70 +1030,9 @@ function showElevationChartHover(distance: number) {
             .style("opacity", 0.8);
     }
 
-    // Show tooltip for elevation chart
-    const interpolatedPoint = interpolateAtDistance(
-        smoothedElevationPoints.value,
-        distance,
-    );
-    if (interpolatedPoint) {
-        const grade = calculateGradeAtDistance(
-            smoothedElevationPoints.value,
-            interpolatedPoint.distance,
-            smoothingConfig.value.gradeWindowMeters,
-        );
-        const gradeFormatted =
-            grade >= 0 ? `+${grade.toFixed(1)}%` : `${grade.toFixed(1)}%`;
-
-        // Find closest pace data point if available
-        let actualPace = "";
-        if (hasPaceData.value && actualPaceData.value.length > 0) {
-            const closestPacePoint = actualPaceData.value.reduce(
-                (prev, curr) =>
-                    Math.abs(curr.distance - distance) <
-                    Math.abs(prev.distance - distance)
-                        ? curr
-                        : prev,
-            );
-            if (closestPacePoint) {
-                const isMiles =
-                    (typeof (
-                        userSettingsStore as unknown as {
-                            getDistanceUnitForCourse?: unknown;
-                        }
-                    )?.getDistanceUnitForCourse === "function"
-                        ? userSettingsStore.getDistanceUnitForCourse()
-                        : "miles") === "miles";
-                const paceWithUnits =
-                    formatPace(closestPacePoint.actualPace) +
-                    (isMiles ? "/mi" : "/km");
-                actualPace = paceWithUnits;
-            }
-        }
-
-        tooltipData.value = {
-            distance: formatDistance(
-                interpolatedPoint.distance,
-                typeof (
-                    userSettingsStore as unknown as {
-                        getDistanceUnitForCourse?: unknown;
-                    }
-                )?.getDistanceUnitForCourse === "function"
-                    ? userSettingsStore.getDistanceUnitForCourse()
-                    : "miles",
-            ),
-            elevation: formatElevation(
-                interpolatedPoint.elevation,
-                typeof (
-                    userSettingsStore as unknown as {
-                        getElevationUnitForCourse?: unknown;
-                    }
-                )?.getElevationUnitForCourse === "function"
-                    ? userSettingsStore.getElevationUnitForCourse()
-                    : "feet",
-            ),
-            grade: gradeFormatted,
-            actualPace: actualPace,
-        };
+    const model = buildTooltipModelAtDistance(distance);
+    if (model) {
+        tooltipData.value = model;
 
         // Position tooltip
         const containerRect = chartContainer.value!.getBoundingClientRect();
@@ -1314,66 +1351,14 @@ function handleMouseMove(event: MouseEvent) {
     );
 
     if (interpolatedPoint) {
-        // Calculate grade at this distance
         const grade = calculateGradeAtDistance(
             smoothedElevationPoints.value,
             interpolatedPoint.distance,
             smoothingConfig.value.gradeWindowMeters,
         );
-        const gradeFormatted =
-            grade >= 0 ? `+${grade.toFixed(1)}%` : `${grade.toFixed(1)}%`;
-
-        // Find closest pace data point if available
-        let actualPace = "";
-        if (hasPaceData.value && actualPaceData.value.length > 0) {
-            const closestPacePoint = actualPaceData.value.reduce(
-                (prev, curr) =>
-                    Math.abs(curr.distance - distance) <
-                    Math.abs(prev.distance - distance)
-                        ? curr
-                        : prev,
-            );
-            if (closestPacePoint) {
-                const isMiles =
-                    (typeof (
-                        userSettingsStore as unknown as {
-                            getDistanceUnitForCourse?: unknown;
-                        }
-                    )?.getDistanceUnitForCourse === "function"
-                        ? userSettingsStore.getDistanceUnitForCourse()
-                        : "miles") === "miles";
-                const paceWithUnits =
-                    formatPace(closestPacePoint.actualPace) +
-                    (isMiles ? "/mi" : "/km");
-                actualPace = paceWithUnits;
-            }
-        }
-
-        // Update tooltip data
-        tooltipData.value = {
-            distance: formatDistance(
-                interpolatedPoint.distance,
-                typeof (
-                    userSettingsStore as unknown as {
-                        getDistanceUnitForCourse?: unknown;
-                    }
-                )?.getDistanceUnitForCourse === "function"
-                    ? userSettingsStore.getDistanceUnitForCourse()
-                    : "miles",
-            ),
-            elevation: formatElevation(
-                interpolatedPoint.elevation,
-                typeof (
-                    userSettingsStore as unknown as {
-                        getElevationUnitForCourse?: unknown;
-                    }
-                )?.getElevationUnitForCourse === "function"
-                    ? userSettingsStore.getElevationUnitForCourse()
-                    : "feet",
-            ),
-            grade: gradeFormatted,
-            actualPace: actualPace,
-        };
+        const model = buildTooltipModelAtDistance(distance);
+        if (!model) return;
+        tooltipData.value = model;
 
         // Position tooltip
         const containerRect = chartContainer.value!.getBoundingClientRect();
@@ -1398,7 +1383,7 @@ function handleMouseMove(event: MouseEvent) {
         tooltipVisible.value = true;
         tooltipFromMap.value = false; // This is from chart hover
         secondaryTooltipVisible.value = false;
-        secondaryTooltipElapsed.value = "";
+        clearSecondaryMapTooltipState();
 
         emit("elevation-hover", {
             lat: interpolatedPoint.lat,
@@ -1473,57 +1458,48 @@ function buildTooltipModelAtDistance(distance: number): TooltipModel | null {
     );
     const gradeFormatted =
         grade >= 0 ? `+${grade.toFixed(1)}%` : `${grade.toFixed(1)}%`;
-
-    let actualPace = "";
-    if (hasPaceData.value && actualPaceData.value.length > 0) {
-        const closestPacePoint = actualPaceData.value.reduce((prev, curr) =>
-            Math.abs(curr.distance - distance) < Math.abs(prev.distance - distance)
-                ? curr
-                : prev,
-        );
-        if (closestPacePoint) {
-            const isMiles =
-                (typeof (
-                    userSettingsStore as unknown as {
-                        getDistanceUnitForCourse?: unknown;
-                    }
-                )?.getDistanceUnitForCourse === "function"
-                    ? userSettingsStore.getDistanceUnitForCourse()
-                    : "miles") === "miles";
-            actualPace =
-                formatPace(closestPacePoint.actualPace) + (isMiles ? "/mi" : "/km");
-        }
-    }
+    const planPaceSeconds = getPlanPaceAtDistance(distance);
+    const planElapsedSeconds = getElapsedAtDistance(distance);
+    const activityPaceSeconds = getActivityPaceAtDistance(distance);
+    const activityElapsedSeconds = getActivityElapsedAtDistance(distance);
 
     return {
         distance: formatDistance(
             interpolatedPoint.distance,
-            typeof (
-                userSettingsStore as unknown as {
-                    getDistanceUnitForCourse?: unknown;
-                }
-            )?.getDistanceUnitForCourse === "function"
-                ? userSettingsStore.getDistanceUnitForCourse()
-                : "miles",
+            currentDistanceUnit.value,
         ),
         elevation: formatElevation(
             interpolatedPoint.elevation,
-            typeof (
-                userSettingsStore as unknown as {
-                    getElevationUnitForCourse?: unknown;
-                }
-            )?.getElevationUnitForCourse === "function"
-                ? userSettingsStore.getElevationUnitForCourse()
-                : "feet",
+            currentElevationUnit.value,
         ),
         grade: gradeFormatted,
-        actualPace,
+        planPace:
+            planPaceSeconds !== null
+                ? `${formatPace(planPaceSeconds)}${tooltipPaceUnitLabel.value}`
+                : "",
+        planElapsed:
+            planElapsedSeconds !== null
+                ? formatElapsedTimeLocal(planElapsedSeconds)
+                : "",
+        activityPace:
+            activityPaceSeconds !== null
+                ? `${formatPace(activityPaceSeconds)}${tooltipPaceUnitLabel.value}`
+                : "",
+        activityElapsed:
+            activityElapsedSeconds !== null
+                ? formatElapsedTimeLocal(activityElapsedSeconds)
+                : "",
+        paceDelta:
+            planPaceSeconds !== null && activityPaceSeconds !== null
+                ? formatSignedPaceDelta(activityPaceSeconds - planPaceSeconds)
+                : "",
+        elapsedDelta:
+            planElapsedSeconds !== null && activityElapsedSeconds !== null
+                ? formatSignedElapsedTime(
+                      activityElapsedSeconds - planElapsedSeconds,
+                  )
+                : "",
     };
-}
-
-function getElapsedForDistance(distance: number): string {
-    const secs = getElapsedAtDistance(distance);
-    return secs != null ? formatElapsedTimeLocal(secs) : "";
 }
 
 function clampTooltipX(
@@ -1537,6 +1513,7 @@ function clampTooltipX(
 // Update map hover crosshair position
 function updateMapHoverCrosshair() {
     if (!xScale || !tooltip.value) return;
+    const localXScale = xScale;
 
     const distances = activeMapHoverDistances.value;
 
@@ -1547,7 +1524,7 @@ function updateMapHoverCrosshair() {
             return;
         }
 
-        const x = xScale(distance);
+        const x = localXScale(distance);
         line.attr("x1", x)
             .attr("x2", x)
             .style("opacity", MAP_HOVER_CROSSHAIR_OPACITY);
@@ -1565,7 +1542,7 @@ function updateMapHoverCrosshair() {
         return;
     }
 
-    const primaryX = xScale(primaryDistance);
+    const primaryX = localXScale(primaryDistance);
     const primaryModel = buildTooltipModelAtDistance(primaryDistance);
     if (!primaryModel) return;
     tooltipData.value = primaryModel;
@@ -1593,10 +1570,9 @@ function updateMapHoverCrosshair() {
         const secondaryModel = buildTooltipModelAtDistance(secondaryDistance);
         if (secondaryModel) {
             secondaryTooltipData.value = secondaryModel;
-            secondaryTooltipElapsed.value = getElapsedForDistance(secondaryDistance);
             secondaryTooltipVisible.value = true;
 
-            const secondaryX = xScale(secondaryDistance) + margin.left;
+            const secondaryX = localXScale(secondaryDistance) + margin.left;
             const secondaryFinalX = clampTooltipX(
                 secondaryTooltipEl,
                 secondaryX,
@@ -1680,6 +1656,7 @@ function handlePaceMouseLeave() {
 // Update pace chart map hover crosshair
 function updatePaceMapHoverCrosshair() {
     if (!paceXScale || !hasPaceData.value) return;
+    const localPaceXScale = paceXScale;
 
     const distances = activeMapHoverDistances.value;
 
@@ -1690,7 +1667,7 @@ function updatePaceMapHoverCrosshair() {
             return;
         }
 
-        const x = paceXScale(distance);
+        const x = localPaceXScale(distance);
         line.attr("x1", x)
             .attr("x2", x)
             .style("opacity", MAP_HOVER_CROSSHAIR_OPACITY);
@@ -1715,70 +1692,11 @@ function updateWaypointCrosshair() {
         );
 
         if (interpolatedPoint) {
-            // Calculate grade at this distance
-            const grade = calculateGradeAtDistance(
-                smoothedElevationPoints.value,
-                interpolatedPoint.distance,
-                smoothingConfig.value.gradeWindowMeters,
+            const model = buildTooltipModelAtDistance(
+                props.selectedWaypointDistance,
             );
-            const gradeFormatted =
-                grade >= 0 ? `+${grade.toFixed(1)}%` : `${grade.toFixed(1)}%`;
-
-            // Find closest pace data point if available
-            let actualPace = "";
-            if (hasPaceData.value && actualPaceData.value.length > 0) {
-                const closestPacePoint = actualPaceData.value.reduce(
-                    (prev, curr) =>
-                        Math.abs(
-                            curr.distance - props.selectedWaypointDistance!,
-                        ) <
-                        Math.abs(
-                            prev.distance - props.selectedWaypointDistance!,
-                        )
-                            ? curr
-                            : prev,
-                );
-                if (closestPacePoint) {
-                    const isMiles =
-                        (typeof (
-                            userSettingsStore as unknown as {
-                                getDistanceUnitForCourse?: unknown;
-                            }
-                        )?.getDistanceUnitForCourse === "function"
-                            ? userSettingsStore.getDistanceUnitForCourse()
-                            : "miles") === "miles";
-                    const paceWithUnits =
-                        formatPace(closestPacePoint.actualPace) +
-                        (isMiles ? "/mi" : "/km");
-                    actualPace = paceWithUnits;
-                }
-            }
-
-            // Update tooltip data
-            tooltipData.value = {
-                distance: formatDistance(
-                    interpolatedPoint.distance,
-                    typeof (
-                        userSettingsStore as unknown as {
-                            getDistanceUnitForCourse?: unknown;
-                        }
-                    )?.getDistanceUnitForCourse === "function"
-                        ? userSettingsStore.getDistanceUnitForCourse()
-                        : "miles",
-                ),
-                elevation: formatElevation(
-                    interpolatedPoint.elevation,
-                    typeof (
-                        userSettingsStore as unknown as {
-                            getElevationUnitForCourse?: unknown;
-                        }
-                    )?.getElevationUnitForCourse === "function"
-                        ? userSettingsStore.getElevationUnitForCourse()
-                        : "feet",
-                ),
-                grade: gradeFormatted,
-                actualPace: actualPace,
-            };
+            if (!model) return;
+            tooltipData.value = model;
 
             // Position tooltip at the waypoint crosshair
             const containerRect = chartContainer.value!.getBoundingClientRect();
@@ -2109,6 +2027,125 @@ function formatElapsedTimeLocal(totalSeconds: number): string {
         .padStart(2, "0")}`;
 }
 
+const tooltipPlanPacePrecompute = computed(() => {
+    if (!hasPaceData.value || actualPaceData.value.length === 0) {
+        return null;
+    }
+
+    return {
+        distances: actualPaceData.value.map((point) => point.distance),
+        paces: actualPaceData.value.map((point) => point.actualPace),
+    };
+});
+
+const tooltipActivityPrecompute = computed(() => {
+    if (!props.activity) {
+        return null;
+    }
+
+    const matchData = getCourseActivityMatchData(props.activity);
+    if (!matchData.samples.length) {
+        return null;
+    }
+
+    const distances: number[] = [];
+    const elapsedSeconds: number[] = [];
+
+    for (const sample of matchData.samples) {
+        if (
+            !Number.isFinite(sample.distanceMeters) ||
+            !Number.isFinite(sample.elapsedSeconds)
+        ) {
+            continue;
+        }
+
+        const lastDistance = distances[distances.length - 1];
+        if (lastDistance !== undefined && sample.distanceMeters < lastDistance) {
+            continue;
+        }
+
+        if (lastDistance !== undefined && sample.distanceMeters === lastDistance) {
+            elapsedSeconds[elapsedSeconds.length - 1] = Math.max(
+                elapsedSeconds[elapsedSeconds.length - 1] ?? 0,
+                sample.elapsedSeconds,
+            );
+            continue;
+        }
+
+        distances.push(sample.distanceMeters);
+        elapsedSeconds.push(sample.elapsedSeconds);
+    }
+
+    if (!distances.length) {
+        return null;
+    }
+
+    const paceValues: number[] = [];
+    if (distances.length >= 2) {
+        const rawPaces: number[] = new Array(distances.length).fill(0);
+        for (let index = 0; index < distances.length; index++) {
+            const previousIndex = index > 0 ? index - 1 : index;
+            const nextIndex =
+                index + 1 < distances.length ? index + 1 : index;
+            const deltaDistance =
+                distances[nextIndex]! - distances[previousIndex]!;
+            const deltaElapsed =
+                elapsedSeconds[nextIndex]! - elapsedSeconds[previousIndex]!;
+
+            rawPaces[index] =
+                deltaDistance > 0 && deltaElapsed >= 0
+                    ? (deltaElapsed / deltaDistance) *
+                      tooltipPaceUnitMeters.value
+                    : index > 0
+                      ? rawPaces[index - 1]!
+                      : 0;
+        }
+
+        const halfWindow = Math.max(
+            0,
+            smoothingConfig.value.paceSmoothingMeters / 2,
+        );
+        if (halfWindow === 0) {
+            paceValues.push(...rawPaces);
+        } else {
+            let left = 0;
+            let right = -1;
+            let sum = 0;
+            let count = 0;
+
+            for (let index = 0; index < distances.length; index++) {
+                const center = distances[index]!;
+
+                while (
+                    right + 1 < distances.length &&
+                    distances[right + 1]! <= center + halfWindow
+                ) {
+                    right++;
+                    sum += rawPaces[right]!;
+                    count++;
+                }
+
+                while (
+                    left < distances.length &&
+                    distances[left]! < center - halfWindow
+                ) {
+                    sum -= rawPaces[left]!;
+                    count--;
+                    left++;
+                }
+
+                paceValues[index] = count > 0 ? sum / count : rawPaces[index]!;
+            }
+        }
+    }
+
+    return {
+        distances,
+        elapsedSeconds,
+        paceValues,
+    };
+});
+
 // Precompute elapsed travel and stoppage for tooltip (fast lookup on hover)
 const elapsedPrecompute = computed(() => {
     if (
@@ -2237,30 +2274,38 @@ function getElapsedAtDistance(distance: number): number | null {
     return travel + stoppage;
 }
 
-// Distance source for tooltip (map hover, waypoint, or chart hover)
-const currentTooltipDistance = computed<number | null>(() => {
-    if (tooltipFromMap.value) {
-        const primaryMapHoverDistance = activeMapHoverDistances.value[0];
-        if (primaryMapHoverDistance !== undefined) {
-            return primaryMapHoverDistance;
-        }
-        if (
-            props.selectedWaypointDistance !== null &&
-            props.selectedWaypointDistance !== undefined
-        ) {
-            return props.selectedWaypointDistance;
-        }
-    }
-    return chartHoverDistance.value;
-});
+function getPlanPaceAtDistance(distance: number): number | null {
+    const precompute = tooltipPlanPacePrecompute.value;
+    if (!precompute) return null;
 
-// Final formatted elapsed string (no label)
-const tooltipElapsed = computed<string>(() => {
-    const d = currentTooltipDistance.value;
-    if (d === null || d === undefined) return "";
-    const secs = getElapsedAtDistance(d);
-    return secs != null ? formatElapsedTimeLocal(secs) : "";
-});
+    return interpolateSeriesAtDistance(
+        precompute.distances,
+        precompute.paces,
+        distance,
+    );
+}
+
+function getActivityElapsedAtDistance(distance: number): number | null {
+    const precompute = tooltipActivityPrecompute.value;
+    if (!precompute) return null;
+
+    return interpolateSeriesAtDistance(
+        precompute.distances,
+        precompute.elapsedSeconds,
+        distance,
+    );
+}
+
+function getActivityPaceAtDistance(distance: number): number | null {
+    const precompute = tooltipActivityPrecompute.value;
+    if (!precompute || precompute.paceValues.length === 0) return null;
+
+    return interpolateSeriesAtDistance(
+        precompute.distances,
+        precompute.paceValues,
+        distance,
+    );
+}
 </script>
 
 <template>
@@ -2314,19 +2359,37 @@ const tooltipElapsed = computed<string>(() => {
                     />
                     {{ tooltipData.grade }}
                 </div>
-                <div v-if="tooltipData.actualPace" class="tooltip-pace">
-                    <Icon
-                        name="lucide:timer"
-                        class="inline h-3 w-3 translate-y-0.5"
-                    />
-                    {{ tooltipData.actualPace }}
+                <div v-if="tooltipData.planPace" class="tooltip-metric">
+                    <span class="tooltip-label">Plan pace</span>
+                    <span class="tooltip-value">{{ tooltipData.planPace }}</span>
                 </div>
-                <div v-if="tooltipElapsed" class="tooltip-elapsed">
-                    <Icon
-                        name="lucide:clock"
-                        class="inline h-3 w-3 translate-y-0.5"
-                    />
-                    {{ tooltipElapsed }}
+                <div v-if="tooltipData.activityPace" class="tooltip-metric">
+                    <span class="tooltip-label">Act pace</span>
+                    <span class="tooltip-value">
+                        {{ tooltipData.activityPace }}
+                    </span>
+                </div>
+                <div v-if="tooltipData.paceDelta" class="tooltip-delta">
+                    <span class="tooltip-label">Pace delta</span>
+                    <span class="tooltip-value">{{ tooltipData.paceDelta }}</span>
+                </div>
+                <div v-if="tooltipData.planElapsed" class="tooltip-metric">
+                    <span class="tooltip-label">Plan time</span>
+                    <span class="tooltip-value">
+                        {{ tooltipData.planElapsed }}
+                    </span>
+                </div>
+                <div v-if="tooltipData.activityElapsed" class="tooltip-metric">
+                    <span class="tooltip-label">Act time</span>
+                    <span class="tooltip-value">
+                        {{ tooltipData.activityElapsed }}
+                    </span>
+                </div>
+                <div v-if="tooltipData.elapsedDelta" class="tooltip-delta">
+                    <span class="tooltip-label">Time delta</span>
+                    <span class="tooltip-value">
+                        {{ tooltipData.elapsedDelta }}
+                    </span>
                 </div>
             </div>
             <div
@@ -2363,25 +2426,56 @@ const tooltipElapsed = computed<string>(() => {
                     />
                     {{ secondaryTooltipData.grade }}
                 </div>
-                <div
-                    v-if="secondaryTooltipData.actualPace"
-                    class="tooltip-pace"
-                >
-                    <Icon
-                        name="lucide:timer"
-                        class="inline h-3 w-3 translate-y-0.5"
-                    />
-                    {{ secondaryTooltipData.actualPace }}
+                <div v-if="secondaryTooltipData.planPace" class="tooltip-metric">
+                    <span class="tooltip-label">Plan pace</span>
+                    <span class="tooltip-value">
+                        {{ secondaryTooltipData.planPace }}
+                    </span>
                 </div>
                 <div
-                    v-if="secondaryTooltipElapsed"
-                    class="tooltip-elapsed"
+                    v-if="secondaryTooltipData.activityPace"
+                    class="tooltip-metric"
                 >
-                    <Icon
-                        name="lucide:clock"
-                        class="inline h-3 w-3 translate-y-0.5"
-                    />
-                    {{ secondaryTooltipElapsed }}
+                    <span class="tooltip-label">Act pace</span>
+                    <span class="tooltip-value">
+                        {{ secondaryTooltipData.activityPace }}
+                    </span>
+                </div>
+                <div
+                    v-if="secondaryTooltipData.paceDelta"
+                    class="tooltip-delta"
+                >
+                    <span class="tooltip-label">Pace delta</span>
+                    <span class="tooltip-value">
+                        {{ secondaryTooltipData.paceDelta }}
+                    </span>
+                </div>
+                <div
+                    v-if="secondaryTooltipData.planElapsed"
+                    class="tooltip-metric"
+                >
+                    <span class="tooltip-label">Plan time</span>
+                    <span class="tooltip-value">
+                        {{ secondaryTooltipData.planElapsed }}
+                    </span>
+                </div>
+                <div
+                    v-if="secondaryTooltipData.activityElapsed"
+                    class="tooltip-metric"
+                >
+                    <span class="tooltip-label">Act time</span>
+                    <span class="tooltip-value">
+                        {{ secondaryTooltipData.activityElapsed }}
+                    </span>
+                </div>
+                <div
+                    v-if="secondaryTooltipData.elapsedDelta"
+                    class="tooltip-delta"
+                >
+                    <span class="tooltip-label">Time delta</span>
+                    <span class="tooltip-value">
+                        {{ secondaryTooltipData.elapsedDelta }}
+                    </span>
                 </div>
             </div>
 
@@ -2512,27 +2606,30 @@ const tooltipElapsed = computed<string>(() => {
     font-weight: 500;
 }
 
-.tooltip-pace {
-    color: var(--main-color);
+.tooltip-metric,
+.tooltip-delta {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
     font-size: 11px;
-    font-weight: 500;
 }
 
-.tooltip-elapsed {
+.tooltip-metric {
     color: var(--main-color);
-    font-size: 11px;
-    font-weight: 600;
 }
 
-.tooltip-actual-pace {
-    color: var(--main-color);
-    font-size: 0.7rem;
-    font-weight: 600;
-}
-
-.tooltip-target-pace {
+.tooltip-delta {
     color: var(--sub-color);
-    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.tooltip-label {
+    white-space: nowrap;
+}
+
+.tooltip-value {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
 }
 
 .no-elevation-warning {

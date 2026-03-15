@@ -12,6 +12,8 @@ import {
 import { formatElevation } from "~/utils/courseMetrics";
 import { paceAdjustment } from "~/utils/paceAdjustment";
 import { formatElapsedTime } from "~/utils/timeCalculations";
+import type { CourseActivitySplitComparison } from "~/utils/courseActivities";
+import { formatSignedDuration } from "~/utils/courseActivities";
 
 type DistanceUnit = "kilometers" | "miles";
 
@@ -23,6 +25,7 @@ interface Props {
     getDefaultStoppageTime?: () => number;
     selectedSplitIndex?: number | null;
     selectedSplitRange?: { startIndex: number; endIndex: number } | null;
+    activityComparisonSplits?: CourseActivitySplitComparison[];
     readOnly?: boolean;
     courseDefaults?: Partial<CourseUnitDefaults> | null;
 }
@@ -35,6 +38,7 @@ const _props = withDefaults(defineProps<Props>(), {
     getDefaultStoppageTime: () => 0,
     selectedSplitIndex: null,
     selectedSplitRange: null,
+    activityComparisonSplits: () => [],
     readOnly: false,
     courseDefaults: null,
 });
@@ -46,6 +50,7 @@ const {
     getDefaultStoppageTime,
     selectedSplitIndex,
     selectedSplitRange,
+    activityComparisonSplits,
     courseDefaults,
 } = toRefs(_props);
 
@@ -745,6 +750,14 @@ function onRowClick(row: SplitRow, e: MouseEvent) {
     // Otherwise select this single split
     emit("split-click", { start: row.start, end: row.end, index });
 }
+
+function getActivityComparison(index: number) {
+    return (
+        activityComparisonSplits.value.find(
+            (comparison) => comparison.index === index,
+        ) || null
+    );
+}
 </script>
 
 <template>
@@ -778,6 +791,18 @@ function onRowClick(row: SplitRow, e: MouseEvent) {
                             class="text-right p-x-1! py-1! whitespace-nowrap"
                         >
                             Elapsed
+                        </th>
+                        <th
+                            v-if="currentPlan && activityComparisonSplits.length > 0"
+                            class="text-right p-x-1! py-1! whitespace-nowrap"
+                        >
+                            Actual
+                        </th>
+                        <th
+                            v-if="currentPlan && activityComparisonSplits.length > 0"
+                            class="text-right p-x-1! py-1! whitespace-nowrap"
+                        >
+                            Delta
                         </th>
                     </tr>
                 </thead>
@@ -856,12 +881,50 @@ function onRowClick(row: SplitRow, e: MouseEvent) {
                             }}</span>
                             <span v-else>—</span>
                         </td>
+                        <td
+                            v-if="currentPlan && activityComparisonSplits.length > 0"
+                            class="p-x-1! py-1! text-(--main-color) text-right whitespace-nowrap"
+                        >
+                            <span
+                                v-if="
+                                    getActivityComparison(row.index)
+                                        ?.actualElapsedSeconds != null
+                                "
+                            >
+                                {{
+                                    formatElapsedTime(
+                                        Math.round(
+                                            getActivityComparison(row.index)!
+                                                .actualElapsedSeconds!,
+                                        ),
+                                    )
+                                }}
+                            </span>
+                            <span v-else>—</span>
+                        </td>
+                        <td
+                            v-if="currentPlan && activityComparisonSplits.length > 0"
+                            class="p-x-1! py-1! text-(--main-color) text-right whitespace-nowrap"
+                        >
+                            {{
+                                formatSignedDuration(
+                                    getActivityComparison(row.index)
+                                        ?.deltaSeconds ?? null,
+                                )
+                            }}
+                        </td>
                     </tr>
 
                     <tr v-if="splits.length === 0">
                         <td
                             class="p-x-1! py-6 text-center text-(--sub-color) whitespace-nowrap"
-                            :colspan="currentPlan ? 6 : 4"
+                            :colspan="
+                                currentPlan
+                                    ? activityComparisonSplits.length > 0
+                                      ? 8
+                                      : 6
+                                    : 4
+                            "
                         >
                             No splits available.
                         </td>

@@ -38,6 +38,18 @@ export interface OverlapIndex {
   linksBySegment: SegmentOverlapLink[][];
 }
 
+export type TrackDistanceCandidate = {
+  lat: number;
+  lng: number;
+  distance: number;
+  pointerDistanceMeters: number;
+};
+
+export type TrackProjectionCandidate = TrackDistanceCandidate & {
+  segmentIndex: number;
+  t: number;
+};
+
 type LocalPoint = { x: number; y: number };
 
 function clamp01(value: number): number {
@@ -469,4 +481,96 @@ export function resolveSecondaryFromOverlap(
         snappedLng: best.snappedLng,
       }
     : null;
+}
+
+export function getPrimaryTrackProjectionCandidate(
+  overlapIndex: OverlapIndex,
+  targetLat: number,
+  targetLng: number,
+): TrackProjectionCandidate | null {
+  if (!overlapIndex.segments.length) return null;
+
+  let primaryCandidate: TrackProjectionCandidate | null = null;
+
+  for (
+    let segmentIndex = 0;
+    segmentIndex < overlapIndex.segments.length;
+    segmentIndex++
+  ) {
+    const segment = overlapIndex.segments[segmentIndex];
+    if (!segment) continue;
+
+    const projected = projectPointOnTrackSegment(targetLat, targetLng, segment);
+    const pointerDistanceMeters = calculateDistance(
+      targetLat,
+      targetLng,
+      projected.snappedLat,
+      projected.snappedLng,
+    );
+    const routeDistance =
+      segment.cumulativeStartMeters + projected.t * segment.segmentLengthMeters;
+
+    if (!Number.isFinite(pointerDistanceMeters)) continue;
+
+    if (
+      !primaryCandidate ||
+      pointerDistanceMeters < primaryCandidate.pointerDistanceMeters
+    ) {
+      primaryCandidate = {
+        segmentIndex,
+        t: projected.t,
+        lat: projected.snappedLat,
+        lng: projected.snappedLng,
+        distance: routeDistance,
+        pointerDistanceMeters,
+      };
+    }
+  }
+
+  return primaryCandidate;
+}
+
+export function getTrackDistanceCandidatesForPoint(
+  overlapIndex: OverlapIndex,
+  targetLat: number,
+  targetLng: number,
+): TrackDistanceCandidate[] {
+  const primaryCandidate = getPrimaryTrackProjectionCandidate(
+    overlapIndex,
+    targetLat,
+    targetLng,
+  );
+
+  if (!primaryCandidate) return [];
+
+  const candidates: TrackDistanceCandidate[] = [primaryCandidate];
+  const secondaryCandidate = resolveSecondaryFromOverlap(
+    overlapIndex,
+    primaryCandidate.segmentIndex,
+    primaryCandidate.t,
+    primaryCandidate.lat,
+    primaryCandidate.lng,
+  );
+
+  if (
+    secondaryCandidate &&
+    Math.abs(secondaryCandidate.distance - primaryCandidate.distance) >=
+      DEFAULT_ROUTE_SEPARATION_MIN_METERS
+  ) {
+    candidates.push({
+      lat: secondaryCandidate.snappedLat,
+      lng: secondaryCandidate.snappedLng,
+      distance: secondaryCandidate.distance,
+      pointerDistanceMeters: calculateDistance(
+        targetLat,
+        targetLng,
+        secondaryCandidate.snappedLat,
+        secondaryCandidate.snappedLng,
+      ),
+    });
+  }
+
+  return candidates.sort(
+    (a, b) => a.pointerDistanceMeters - b.pointerDistanceMeters,
+  );
 }

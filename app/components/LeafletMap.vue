@@ -3,9 +3,10 @@ import { getWaypointColorFromOrder } from "~/utils/waypoints";
 import { calculateDistance } from "~/utils/distance";
 import {
     buildOverlapIndexForGeoJsonTracks,
-    projectPointOnTrackSegment,
-    resolveSecondaryFromOverlap,
+    getPrimaryTrackProjectionCandidate,
+    getTrackDistanceCandidatesForPoint,
     type OverlapIndex,
+    type TrackDistanceCandidate,
 } from "~/utils/routeOverlapIndex";
 
 // Define a waypoint type that matches what we get from the API
@@ -19,18 +20,6 @@ type Waypoint = {
     distance: number;
     tags: string[];
     order: number;
-};
-
-type TrackDistanceCandidate = {
-    lat: number;
-    lng: number;
-    distance: number;
-};
-
-type TrackProjectionCandidate = TrackDistanceCandidate & {
-    segmentIndex: number;
-    t: number;
-    pointerDistanceMeters: number;
 };
 
 // Only import Leaflet on client side to avoid SSR issues
@@ -49,6 +38,7 @@ interface Props {
         open?: boolean;
     }>;
     geoJsonData?: GeoJSON.FeatureCollection[];
+    overlayGeoJsonData?: GeoJSON.FeatureCollection[];
     waypoints?: Waypoint[];
     selectedWaypoint?: Waypoint | null;
     elevationHoverPoint?: {
@@ -76,6 +66,7 @@ const props = withDefaults(defineProps<Props>(), {
     zoom: 13,
     markers: () => [],
     geoJsonData: () => [],
+    overlayGeoJsonData: () => [],
     waypoints: () => [],
     selectedWaypoint: null,
     elevationHoverPoint: null,
@@ -118,6 +109,7 @@ const mapId = `map-${Math.random().toString(36).slice(2, 9)}`;
 
 let map: L.Map | null = null;
 const geoJsonLayers: L.GeoJSON[] = [];
+const overlayGeoJsonLayers: L.GeoJSON[] = [];
 const waypointMarkers: Map<string, L.Marker> = new Map(); // Track markers by waypoint ID
 let elevationHoverMarker: L.CircleMarker | null = null;
 let highlightLayer: L.Polyline | null = null;
@@ -125,101 +117,28 @@ let prevFitHighlight = false;
 let lastFittedSegmentKey: string | null = null;
 let hasDoneInitialFit = false;
 const MAX_HOVER_DISTANCES = 2;
-const OVERLAP_DISTANCE_SEPARATION_MIN_METERS = 25;
 let overlapIndex: OverlapIndex | null = null;
 
 function rebuildOverlapIndex() {
     overlapIndex = buildOverlapIndexForGeoJsonTracks(props.geoJsonData);
 }
 
-function getPrimaryTrackProjection(
-    targetLat: number,
-    targetLng: number,
-): TrackProjectionCandidate | null {
-    if (!overlapIndex || overlapIndex.segments.length === 0) return null;
-    let primaryCandidate: TrackProjectionCandidate | null = null;
-
-    for (
-        let segmentIndex = 0;
-        segmentIndex < overlapIndex.segments.length;
-        segmentIndex++
-    ) {
-        const segment = overlapIndex.segments[segmentIndex];
-        if (!segment) continue;
-
-        const projected = projectPointOnTrackSegment(targetLat, targetLng, segment);
-        const pointerDistanceMeters = calculateDistance(
-            targetLat,
-            targetLng,
-            projected.snappedLat,
-            projected.snappedLng,
-        );
-        const routeDistance =
-            segment.cumulativeStartMeters + projected.t * segment.segmentLengthMeters;
-
-        if (!Number.isFinite(pointerDistanceMeters)) continue;
-
-        if (
-            !primaryCandidate ||
-            pointerDistanceMeters < primaryCandidate.pointerDistanceMeters
-        ) {
-            primaryCandidate = {
-                segmentIndex,
-                t: projected.t,
-                lat: projected.snappedLat,
-                lng: projected.snappedLng,
-                distance: routeDistance,
-                pointerDistanceMeters,
-            };
-        }
-    }
-
-    return primaryCandidate;
-}
-
-function getTrackDistanceCandidates(
-    primaryCandidate: TrackProjectionCandidate,
-): TrackDistanceCandidate[] {
-    const candidates: TrackDistanceCandidate[] = [
-        {
-            lat: primaryCandidate.lat,
-            lng: primaryCandidate.lng,
-            distance: primaryCandidate.distance,
-        },
-    ];
-
-    if (!overlapIndex) return candidates;
-
-    const secondaryCandidate = resolveSecondaryFromOverlap(
-        overlapIndex,
-        primaryCandidate.segmentIndex,
-        primaryCandidate.t,
-        primaryCandidate.lat,
-        primaryCandidate.lng,
-    );
-    if (
-        secondaryCandidate &&
-        Math.abs(secondaryCandidate.distance - primaryCandidate.distance) >=
-            OVERLAP_DISTANCE_SEPARATION_MIN_METERS &&
-        candidates.length < MAX_HOVER_DISTANCES
-    ) {
-        candidates.push({
-            lat: secondaryCandidate.snappedLat,
-            lng: secondaryCandidate.snappedLng,
-            distance: secondaryCandidate.distance,
-        });
-    }
-
-    return candidates;
-}
-
 // Function to handle track hover and calculate one or two distances along route
 function handleTrackHover(e: L.LeafletMouseEvent) {
     const hoverLat = e.latlng.lat;
     const hoverLng = e.latlng.lng;
-    const primaryCandidate = getPrimaryTrackProjection(hoverLat, hoverLng);
+    if (!overlapIndex) return;
+    const primaryCandidate = getPrimaryTrackProjectionCandidate(
+        overlapIndex,
+        hoverLat,
+        hoverLng,
+    );
     if (!primaryCandidate) return;
-    const candidates = getTrackDistanceCandidates(primaryCandidate);
+    const candidates = getTrackDistanceCandidatesForPoint(
+        overlapIndex,
+        hoverLat,
+        hoverLng,
+    ).slice(0, MAX_HOVER_DISTANCES);
 
     emit("map-hover", {
         lat: hoverLat,
@@ -232,9 +151,18 @@ function handleTrackHover(e: L.LeafletMouseEvent) {
 function handleTrackClick(e: L.LeafletMouseEvent) {
     const clickLat = e.latlng.lat;
     const clickLng = e.latlng.lng;
-    const primaryCandidate = getPrimaryTrackProjection(clickLat, clickLng);
+    if (!overlapIndex) return;
+    const primaryCandidate = getPrimaryTrackProjectionCandidate(
+        overlapIndex,
+        clickLat,
+        clickLng,
+    );
     if (!primaryCandidate) return;
-    const candidates = getTrackDistanceCandidates(primaryCandidate);
+    const candidates = getTrackDistanceCandidatesForPoint(
+        overlapIndex,
+        clickLat,
+        clickLng,
+    ).slice(0, MAX_HOVER_DISTANCES);
 
     emit("track-click", {
         lat: clickLat,
@@ -258,6 +186,10 @@ function addGeoJsonLayers() {
         map!.removeLayer(layer);
     });
     geoJsonLayers.length = 0;
+    overlayGeoJsonLayers.forEach((layer) => {
+        map!.removeLayer(layer);
+    });
+    overlayGeoJsonLayers.length = 0;
 
     // Add new GeoJSON layers
     props.geoJsonData.forEach((geoJson, index) => {
@@ -316,6 +248,29 @@ function addGeoJsonLayers() {
 
         geoJsonLayers.push(visibleLayer);
         geoJsonLayers.push(bufferLayer);
+    });
+
+    props.overlayGeoJsonData.forEach((geoJson) => {
+        const overlayLayer = L.geoJSON(geoJson, {
+            style: {
+                color: "#d97706",
+                weight: 3,
+                opacity: 0.85,
+                dashArray: "8 6",
+            },
+            interactive: false,
+            pointToLayer: () => {
+                return null as unknown as L.Layer;
+            },
+            filter: (feature) => {
+                return (
+                    feature.geometry.type === "LineString" ||
+                    feature.geometry.type === "MultiLineString"
+                );
+            },
+        }).addTo(map!);
+
+        overlayGeoJsonLayers.push(overlayLayer);
     });
 
     // Fit bounds to show all tracks on initial mount only
@@ -776,7 +731,7 @@ function updateHighlightSegment() {
 
 // Watch for changes in geoJsonData
 watch(
-    () => props.geoJsonData,
+    () => [props.geoJsonData, props.overlayGeoJsonData],
     () => {
         addGeoJsonLayers();
         updateHighlightSegment();

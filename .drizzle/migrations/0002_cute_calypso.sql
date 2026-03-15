@@ -1,0 +1,23 @@
+CREATE TABLE `course_activities` (
+	`id` text PRIMARY KEY NOT NULL,
+	`course_id` text NOT NULL,
+	`user_id` text NOT NULL,
+	`source_file_name` text NOT NULL,
+	`file_type` text NOT NULL,
+	`provider` text DEFAULT 'unknown' NOT NULL,
+	`original_file_content` text NOT NULL,
+	`geojson_data` text NOT NULL,
+	`started_at` integer,
+	`ended_at` integer,
+	`elapsed_time_seconds` integer,
+	`recorded_distance_meters` integer,
+	`matched_distance_meters` integer,
+	`match_status` text DEFAULT 'failed' NOT NULL,
+	`match_confidence` integer DEFAULT 0 NOT NULL,
+	`is_primary` integer DEFAULT false NOT NULL,
+	`match_data` text NOT NULL,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL,
+	FOREIGN KEY (`course_id`) REFERENCES `courses`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
+);

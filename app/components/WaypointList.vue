@@ -18,6 +18,8 @@ import {
 } from "~/utils/timeCalculations";
 import { getSegmentPacingInfo } from "~/utils/gradeAdjustedTimeCalculations";
 import type { SelectPlan, SelectWaypointStoppageTime } from "~/utils/db/schema";
+import type { CourseActivityWaypointComparison } from "~/utils/courseActivities";
+import { formatSignedDuration } from "~/utils/courseActivities";
 
 // Define a waypoint type that matches what we get from the API
 type Waypoint = {
@@ -44,6 +46,7 @@ interface Props {
     selectedWaypoint?: Waypoint | null;
     currentPlanId?: string | null;
     currentPlan?: SelectPlan | null;
+    activityComparisonWaypoints?: CourseActivityWaypointComparison[];
     waypointStoppageTimes?: SelectWaypointStoppageTime[];
     getWaypointNote?: (waypointId: string) => string;
     getWaypointStoppageTime?: (waypointId: string) => number;
@@ -66,6 +69,7 @@ const _props = withDefaults(defineProps<Props>(), {
     selectedWaypoint: null,
     currentPlanId: null,
     currentPlan: null,
+    activityComparisonWaypoints: () => [],
     waypointStoppageTimes: () => [],
     getWaypointNote: () => () => "",
     getWaypointStoppageTime: () => () => 0,
@@ -78,6 +82,7 @@ const {
     selectedWaypoint,
     currentPlanId,
     currentPlan,
+    activityComparisonWaypoints,
     waypointStoppageTimes,
     getWaypointNote,
     getWaypointStoppageTime,
@@ -372,6 +377,14 @@ function getSegmentGradeDisplay(waypointId: string): string {
     const sign = grade >= 0 ? "+" : "";
     return `${sign}${grade.toFixed(1)}%`;
 }
+
+function getActivityComparison(waypointId: string) {
+    return (
+        activityComparisonWaypoints.value.find(
+            (comparison) => comparison.waypointId === waypointId,
+        ) || null
+    );
+}
 </script>
 
 <template>
@@ -519,6 +532,45 @@ function getSegmentGradeDisplay(waypointId: string): string {
                                         </span>
                                     </div>
 
+                                    <div
+                                        v-if="getActivityComparison(waypoint.id)"
+                                        class="flex items-center gap-4 text-sm mb-1 text-(--main-color)"
+                                    >
+                                        <span class="flex items-center gap-1">
+                                            <Icon
+                                                name="lucide:flag"
+                                                class="h-3 w-3 -translate-y-0.25"
+                                            />
+                                            <span class="font-medium">
+                                                {{
+                                                    getActivityComparison(
+                                                        waypoint.id,
+                                                    )?.actualElapsedSeconds !=
+                                                    null
+                                                        ? formatElapsedTime(
+                                                              Math.round(
+                                                                  getActivityComparison(
+                                                                      waypoint.id,
+                                                                  )!
+                                                                      .actualElapsedSeconds!,
+                                                              ),
+                                                          )
+                                                        : "—"
+                                                }}
+                                            </span>
+                                        </span>
+                                        <span class="text-xs text-(--sub-color)">
+                                            Delta
+                                            {{
+                                                formatSignedDuration(
+                                                    getActivityComparison(
+                                                        waypoint.id,
+                                                    )?.deltaSeconds ?? null,
+                                                )
+                                            }}
+                                        </span>
+                                    </div>
+
                                     <!-- Tags Row -->
                                     <div
                                         v-if="waypoint.tags.length > 0"
@@ -572,7 +624,6 @@ function getSegmentGradeDisplay(waypointId: string): string {
                             v-if="index < waypoints.length - 1"
                             class="flex justify-center my-1 border-t border-b border-dotted text-(--sub-color)"
                         >
-                            {{ console.log(waypoints.length) }}
                             <div class="w-full">
                                 <div
                                     v-if="getSegmentForWaypoint(waypoint.id)"
@@ -652,10 +703,10 @@ function getSegmentGradeDisplay(waypointId: string): string {
                                         </div>
 
                                         <!-- Segment Time and Pace -->
-                                        <div
-                                            v-if="currentPlan"
-                                            class="contents"
-                                        >
+                                            <div
+                                                v-if="currentPlan"
+                                                class="contents"
+                                            >
                                             <!-- Segment Time -->
                                             <div
                                                 v-tooltip="'Estimated duration'"
@@ -716,6 +767,57 @@ function getSegmentGradeDisplay(waypointId: string): string {
                                                         waypoint.id,
                                                     )
                                                 }}</span>
+                                            </div>
+
+                                            <div
+                                                v-if="
+                                                    getActivityComparison(
+                                                        waypoint.id,
+                                                    )
+                                                "
+                                                class="flex items-center gap-4 justify-center mt-1 text-(--main-color)"
+                                            >
+                                                <div class="flex items-center gap-1">
+                                                    <Icon
+                                                        name="lucide:flag"
+                                                        class="w-3 h-3 -translate-y-0.25"
+                                                    />
+                                                    <span>
+                                                        {{
+                                                            getActivityComparison(
+                                                                waypoint.id,
+                                                            )
+                                                                ?.actualSegmentSeconds !=
+                                                            null
+                                                                ? formatElapsedTime(
+                                                                      Math.round(
+                                                                          getActivityComparison(
+                                                                              waypoint.id,
+                                                                          )!
+                                                                              .actualSegmentSeconds!,
+                                                                      ),
+                                                                  )
+                                                                : "—"
+                                                        }}
+                                                    </span>
+                                                </div>
+                                                <div class="flex items-center gap-1">
+                                                    <Icon
+                                                        name="lucide:git-compare-arrows"
+                                                        class="w-3 h-3 -translate-y-0.25"
+                                                    />
+                                                    <span>
+                                                        {{
+                                                            formatSignedDuration(
+                                                                getActivityComparison(
+                                                                    waypoint.id,
+                                                                )
+                                                                    ?.segmentDeltaSeconds ??
+                                                                    null,
+                                                            )
+                                                        }}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
