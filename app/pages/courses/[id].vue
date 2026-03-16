@@ -186,6 +186,35 @@ const currentPlanId = ref<string | null>(null);
 const currentActivityId = ref<string | null>(null);
 const activitySelectionInitialized = ref(false);
 const publicSharedPlan = ref<SelectPlan | null>(null); // populated when viewing a publicly shared plan (logged-out)
+const NO_ACTIVITY_QUERY_VALUE = "none";
+
+function replaceCourseSelectionQuery(updates: {
+  planId?: string | null;
+  activityParam?: string | null;
+}) {
+  const query = { ...route.query };
+
+  if (updates.planId !== undefined) {
+    if (updates.planId) {
+      query.plan = updates.planId;
+    } else {
+      delete query.plan;
+    }
+  }
+
+  if (updates.activityParam !== undefined) {
+    if (updates.activityParam) {
+      query.activity = updates.activityParam;
+    } else {
+      delete query.activity;
+    }
+  }
+
+  router.replace({
+    path: route.path,
+    query,
+  });
+}
 
 // Optional deferral for initial ancillary fetch to test perceived performance.
 // Enable deferral by default; disable with ?deferAncillary=0 or ?deferAncillary=false
@@ -223,9 +252,7 @@ watchEffect(async () => {
       return;
     }
     if (plans.value.length > 0) {
-      const query = { ...route.query };
-      delete query.plan;
-      router.replace({ path: route.path, query });
+      replaceCourseSelectionQuery({ planId: null });
     }
     return;
   }
@@ -386,6 +413,29 @@ watchEffect(() => {
     currentActivityId.value = null;
     activitySelectionInitialized.value = false;
     activityPlanDetail.value = null;
+    if (route.query.activity) {
+      replaceCourseSelectionQuery({ activityParam: null });
+    }
+    return;
+  }
+
+  const activityIdFromUrl = route.query.activity as string | undefined;
+  if (activityIdFromUrl === NO_ACTIVITY_QUERY_VALUE) {
+    currentActivityId.value = null;
+    activitySelectionInitialized.value = true;
+    return;
+  }
+
+  if (activityIdFromUrl) {
+    if (
+      availableActivities.some((activity) => activity.id === activityIdFromUrl)
+    ) {
+      currentActivityId.value = activityIdFromUrl;
+      activitySelectionInitialized.value = true;
+      return;
+    }
+
+    replaceCourseSelectionQuery({ activityParam: null });
     return;
   }
 
@@ -2056,19 +2106,25 @@ function handleWaypointUpdated(_updatedWaypoint: Waypoint) {
 }
 
 function handleActivitySelected(activityId: string) {
+  const normalizedActivityId = activityId || null;
   activitySelectionInitialized.value = true;
-  currentActivityId.value = activityId || null;
+  currentActivityId.value = normalizedActivityId;
+  replaceCourseSelectionQuery({
+    activityParam: normalizedActivityId || NO_ACTIVITY_QUERY_VALUE,
+  });
 }
 
 async function handleActivitiesChanged() {
   await refreshActivities();
+  const availableActivities = activitiesData.value?.activities || [];
   if (
     currentActivityId.value &&
-    !activitiesData.value?.activities.some(
-      (activity) => activity.id === currentActivityId.value,
-    )
+    !availableActivities.some((activity) => activity.id === currentActivityId.value)
   ) {
-    currentActivityId.value = activitiesData.value?.primaryActivityId || null;
+    const nextActivityId =
+      activitiesData.value?.primaryActivityId || availableActivities[0]?.id || null;
+    currentActivityId.value = nextActivityId;
+    replaceCourseSelectionQuery({ activityParam: nextActivityId });
   }
 }
 
@@ -2077,16 +2133,8 @@ function handlePlanSelected(planId: string) {
   currentPlanId.value = planId || null;
 
   // Update URL with plan query parameter
-  const query = { ...route.query };
-  if (planId) {
-    query.plan = planId;
-  } else {
-    delete query.plan;
-  }
-
-  router.replace({
-    path: route.path,
-    query,
+  replaceCourseSelectionQuery({
+    planId: planId || null,
   });
 }
 
@@ -2112,11 +2160,8 @@ async function handlePlanCreated(plan: unknown) {
   currentPlanId.value = planId;
 
   // Update URL with new plan
-  const query = { ...route.query };
-  query.plan = planId;
-  router.replace({
-    path: route.path,
-    query,
+  replaceCourseSelectionQuery({
+    planId,
   });
 }
 
@@ -2158,12 +2203,7 @@ async function handlePlanDeleted(planId: string) {
       waypointStoppageTimes.value = [];
 
       // Remove plan from URL
-      const query = { ...route.query };
-      delete query.plan;
-      router.replace({
-        path: route.path,
-        query,
-      });
+      replaceCourseSelectionQuery({ planId: null });
     }
   } catch (error) {
     console.error("Error deleting plan:", error);
