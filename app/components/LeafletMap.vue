@@ -3,7 +3,6 @@ import { getWaypointColorFromOrder } from "~/utils/waypoints";
 import { calculateDistance } from "~/utils/distance";
 import {
     buildOverlapIndexForGeoJsonTracks,
-    getPrimaryTrackProjectionCandidate,
     getTrackDistanceCandidatesForPoint,
     type OverlapIndex,
     type TrackDistanceCandidate,
@@ -118,6 +117,13 @@ let lastFittedSegmentKey: string | null = null;
 let hasDoneInitialFit = false;
 const MAX_HOVER_DISTANCES = 2;
 let overlapIndex: OverlapIndex | null = null;
+let pendingTrackHover:
+    | {
+          lat: number;
+          lng: number;
+      }
+    | null = null;
+let trackHoverFrame: number | null = null;
 
 function rebuildOverlapIndex() {
     overlapIndex = buildOverlapIndexForGeoJsonTracks(props.geoJsonData);
@@ -125,44 +131,56 @@ function rebuildOverlapIndex() {
 
 // Function to handle track hover and calculate one or two distances along route
 function handleTrackHover(e: L.LeafletMouseEvent) {
-    const hoverLat = e.latlng.lat;
-    const hoverLng = e.latlng.lng;
-    if (!overlapIndex) return;
-    const primaryCandidate = getPrimaryTrackProjectionCandidate(
-        overlapIndex,
-        hoverLat,
-        hoverLng,
-    );
-    if (!primaryCandidate) return;
-    const candidates = getTrackDistanceCandidatesForPoint(
-        overlapIndex,
-        hoverLat,
-        hoverLng,
-    ).slice(0, MAX_HOVER_DISTANCES);
+    pendingTrackHover = {
+        lat: e.latlng.lat,
+        lng: e.latlng.lng,
+    };
 
-    emit("map-hover", {
-        lat: hoverLat,
-        lng: hoverLng,
-        distance: primaryCandidate.distance,
-        distances: candidates.map((candidate) => candidate.distance),
+    if (trackHoverFrame !== null) return;
+
+    trackHoverFrame = requestAnimationFrame(() => {
+        trackHoverFrame = null;
+        const hover = pendingTrackHover;
+        pendingTrackHover = null;
+        if (!hover || !overlapIndex) return;
+
+        const candidates = getTrackDistanceCandidatesForPoint(
+            overlapIndex,
+            hover.lat,
+            hover.lng,
+        ).slice(0, MAX_HOVER_DISTANCES);
+        const primaryCandidate = candidates[0];
+        if (!primaryCandidate) return;
+
+        emit("map-hover", {
+            lat: hover.lat,
+            lng: hover.lng,
+            distance: primaryCandidate.distance,
+            distances: candidates.map((candidate) => candidate.distance),
+        });
     });
+}
+
+function handleTrackLeave() {
+    pendingTrackHover = null;
+    if (trackHoverFrame !== null) {
+        cancelAnimationFrame(trackHoverFrame);
+        trackHoverFrame = null;
+    }
+    emit("map-leave");
 }
 
 function handleTrackClick(e: L.LeafletMouseEvent) {
     const clickLat = e.latlng.lat;
     const clickLng = e.latlng.lng;
     if (!overlapIndex) return;
-    const primaryCandidate = getPrimaryTrackProjectionCandidate(
-        overlapIndex,
-        clickLat,
-        clickLng,
-    );
-    if (!primaryCandidate) return;
     const candidates = getTrackDistanceCandidatesForPoint(
         overlapIndex,
         clickLat,
         clickLng,
     ).slice(0, MAX_HOVER_DISTANCES);
+    const primaryCandidate = candidates[0];
+    if (!primaryCandidate) return;
 
     emit("track-click", {
         lat: clickLat,
@@ -236,7 +254,7 @@ function addGeoJsonLayers() {
                 });
 
                 layer.on("mouseout", () => {
-                    emit("map-leave");
+                    handleTrackLeave();
                 });
 
                 // Add click event for track clicking (for waypoint creation)
@@ -587,26 +605,32 @@ onMounted(() => {
 function updateElevationHoverMarker() {
     if (!map || !L) return;
 
-    // Remove existing marker
-    if (elevationHoverMarker) {
-        map.removeLayer(elevationHoverMarker);
-        elevationHoverMarker = null;
+    if (!props.elevationHoverPoint) {
+        if (elevationHoverMarker) {
+            map.removeLayer(elevationHoverMarker);
+            elevationHoverMarker = null;
+        }
+        return;
     }
 
-    // Add new marker if point exists
-    if (props.elevationHoverPoint) {
-        elevationHoverMarker = L.circleMarker(
-            [props.elevationHoverPoint.lat, props.elevationHoverPoint.lng],
-            {
-                radius: 6,
-                fillColor: "#ff4444",
-                color: "#ffffff",
-                weight: 0,
-                opacity: 1,
-                fillOpacity: 0.8,
-            },
-        ).addTo(map);
+    const latLng: [number, number] = [
+        props.elevationHoverPoint.lat,
+        props.elevationHoverPoint.lng,
+    ];
+
+    if (elevationHoverMarker) {
+        elevationHoverMarker.setLatLng(latLng);
+        return;
     }
+
+    elevationHoverMarker = L.circleMarker(latLng, {
+        radius: 6,
+        fillColor: "#ff4444",
+        color: "#ffffff",
+        weight: 0,
+        opacity: 1,
+        fillOpacity: 0.8,
+    }).addTo(map);
 }
 
 // Highlight segment updater
@@ -819,6 +843,10 @@ watch(
 );
 
 onUnmounted(() => {
+    if (trackHoverFrame !== null) {
+        cancelAnimationFrame(trackHoverFrame);
+        trackHoverFrame = null;
+    }
     if (map) {
         map.remove();
         map = null;

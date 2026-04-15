@@ -333,6 +333,25 @@ export function extractElevationProfile(
   return validatedPoints;
 }
 
+function findDistanceLowerBound(
+  elevationPoints: ElevationPoint[],
+  targetDistance: number,
+): number {
+  let lo = 0;
+  let hi = elevationPoints.length;
+
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (elevationPoints[mid]!.distance < targetDistance) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+
+  return lo;
+}
+
 /**
  * Interpolate elevation and coordinates at a specific distance
  * @param elevationPoints Array of elevation points
@@ -352,35 +371,24 @@ export function interpolateAtDistance(
     return lastPoint || null;
   }
 
-  // Find the two points that bracket the target distance
-  for (let i = 1; i < elevationPoints.length; i++) {
-    const prevPoint = elevationPoints[i - 1];
-    const currentPoint = elevationPoints[i];
+  const upperIndex = findDistanceLowerBound(elevationPoints, targetDistance);
+  const currentPoint = elevationPoints[upperIndex];
+  const prevPoint = elevationPoints[upperIndex - 1];
 
-    if (!prevPoint || !currentPoint) continue;
+  if (!prevPoint || !currentPoint) return null;
 
-    if (
-      targetDistance >= prevPoint.distance &&
-      targetDistance <= currentPoint.distance
-    ) {
-      // Linear interpolation
-      const ratio =
-        (targetDistance - prevPoint.distance) /
-        (currentPoint.distance - prevPoint.distance);
+  const span = currentPoint.distance - prevPoint.distance;
+  const ratio = span > 0 ? (targetDistance - prevPoint.distance) / span : 1;
 
-      return {
-        distance: targetDistance,
-        elevation:
-          prevPoint.elevation +
-          ratio * (currentPoint.elevation - prevPoint.elevation),
-        lat: prevPoint.lat + ratio * (currentPoint.lat - prevPoint.lat),
-        lng: prevPoint.lng + ratio * (currentPoint.lng - prevPoint.lng),
-        originalIndex: -1, // Interpolated point
-      };
-    }
-  }
-
-  return null;
+  return {
+    distance: targetDistance,
+    elevation:
+      prevPoint.elevation +
+      ratio * (currentPoint.elevation - prevPoint.elevation),
+    lat: prevPoint.lat + ratio * (currentPoint.lat - prevPoint.lat),
+    lng: prevPoint.lng + ratio * (currentPoint.lng - prevPoint.lng),
+    originalIndex: -1, // Interpolated point
+  };
 }
 
 /**
@@ -462,148 +470,31 @@ export function calculateGradeAtDistance(
 
   // If windowDistance is 0, calculate grade using adjacent points
   if (windowDistance === 0) {
-    // Find the two points that bracket the target distance
-    for (let i = 0; i < elevationPoints.length - 1; i++) {
-      const currentPoint = elevationPoints[i];
-      const nextPoint = elevationPoints[i + 1];
+    const upperIndex = Math.min(
+      Math.max(findDistanceLowerBound(elevationPoints, targetDistance), 1),
+      elevationPoints.length - 1,
+    );
+    const currentPoint = elevationPoints[upperIndex - 1];
+    const nextPoint = elevationPoints[upperIndex];
+    if (!currentPoint || !nextPoint) return 0;
 
-      if (!currentPoint || !nextPoint) continue;
+    const rise = nextPoint.elevation - currentPoint.elevation;
+    const run = nextPoint.distance - currentPoint.distance;
+    if (run === 0) return 0;
 
-      if (
-        targetDistance >= currentPoint.distance &&
-        targetDistance <= nextPoint.distance
-      ) {
-        const rise = nextPoint.elevation - currentPoint.elevation;
-        const run = nextPoint.distance - currentPoint.distance;
-
-        if (run === 0) return 0;
-
-        const grade = (rise / run) * 100;
-        return Math.max(-100, Math.min(100, grade));
-      }
-    }
-
-    // If not found between points, use first or last segment
-    if (targetDistance <= elevationPoints[0]!.distance && elevationPoints[1]) {
-      const rise = elevationPoints[1].elevation - elevationPoints[0]!.elevation;
-      const run = elevationPoints[1].distance - elevationPoints[0]!.distance;
-      if (run > 0) {
-        const grade = (rise / run) * 100;
-        return Math.max(-100, Math.min(100, grade));
-      }
-    }
-
-    const lastIdx = elevationPoints.length - 1;
-    if (
-      targetDistance >= elevationPoints[lastIdx]!.distance &&
-      elevationPoints[lastIdx - 1]
-    ) {
-      const rise =
-        elevationPoints[lastIdx]!.elevation -
-        elevationPoints[lastIdx - 1]!.elevation;
-      const run =
-        elevationPoints[lastIdx]!.distance -
-        elevationPoints[lastIdx - 1]!.distance;
-      if (run > 0) {
-        const grade = (rise / run) * 100;
-        return Math.max(-100, Math.min(100, grade));
-      }
-    }
-
-    return 0;
+    const grade = (rise / run) * 100;
+    return Math.max(-100, Math.min(100, grade));
   }
 
-  // Find points within the window around the target distance
   const halfWindow = windowDistance / 2;
-  const startDistance = targetDistance - halfWindow;
-  const endDistance = targetDistance + halfWindow;
-
-  // Find the points that bracket our window
-  let startPoint: ElevationPoint | null = null;
-  let endPoint: ElevationPoint | null = null;
-
-  // Find the start point (interpolate if needed)
-  for (let i = 0; i < elevationPoints.length - 1; i++) {
-    const currentPoint = elevationPoints[i];
-    const nextPoint = elevationPoints[i + 1];
-
-    if (!currentPoint || !nextPoint) continue;
-
-    if (
-      startDistance >= currentPoint.distance &&
-      startDistance <= nextPoint.distance
-    ) {
-      // Interpolate the start point
-      const ratio =
-        (startDistance - currentPoint.distance) /
-        (nextPoint.distance - currentPoint.distance);
-      startPoint = {
-        distance: startDistance,
-        elevation:
-          currentPoint.elevation +
-          ratio * (nextPoint.elevation - currentPoint.elevation),
-        lat: currentPoint.lat + ratio * (nextPoint.lat - currentPoint.lat),
-        lng: currentPoint.lng + ratio * (nextPoint.lng - currentPoint.lng),
-        originalIndex: -1,
-      };
-      break;
-    }
-  }
-
-  // Find the end point (interpolate if needed)
-  for (let i = 0; i < elevationPoints.length - 1; i++) {
-    const currentPoint = elevationPoints[i];
-    const nextPoint = elevationPoints[i + 1];
-
-    if (!currentPoint || !nextPoint) continue;
-
-    if (
-      endDistance >= currentPoint.distance &&
-      endDistance <= nextPoint.distance
-    ) {
-      // Interpolate the end point
-      const ratio =
-        (endDistance - currentPoint.distance) /
-        (nextPoint.distance - currentPoint.distance);
-      endPoint = {
-        distance: endDistance,
-        elevation:
-          currentPoint.elevation +
-          ratio * (nextPoint.elevation - currentPoint.elevation),
-        lat: currentPoint.lat + ratio * (nextPoint.lat - currentPoint.lat),
-        lng: currentPoint.lng + ratio * (nextPoint.lng - currentPoint.lng),
-        originalIndex: -1,
-      };
-      break;
-    }
-  }
-
-  // Fall back to actual points if we can't interpolate
-  if (!startPoint) {
-    // Use the closest point at or before startDistance
-    for (let i = 0; i < elevationPoints.length; i++) {
-      const point = elevationPoints[i];
-      if (point && point.distance >= startDistance) {
-        startPoint = elevationPoints[Math.max(0, i - 1)] || point;
-        break;
-      }
-    }
-    if (!startPoint) startPoint = elevationPoints[0] || null;
-  }
-
-  if (!endPoint) {
-    // Use the closest point at or after endDistance
-    for (let i = elevationPoints.length - 1; i >= 0; i--) {
-      const point = elevationPoints[i];
-      if (point && point.distance <= endDistance) {
-        endPoint =
-          elevationPoints[Math.min(elevationPoints.length - 1, i + 1)] || point;
-        break;
-      }
-    }
-    if (!endPoint)
-      endPoint = elevationPoints[elevationPoints.length - 1] || null;
-  }
+  const startPoint = interpolateAtDistance(
+    elevationPoints,
+    targetDistance - halfWindow,
+  );
+  const endPoint = interpolateAtDistance(
+    elevationPoints,
+    targetDistance + halfWindow,
+  );
 
   if (!startPoint || !endPoint || startPoint.distance === endPoint.distance) {
     return 0;

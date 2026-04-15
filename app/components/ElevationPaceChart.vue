@@ -241,6 +241,15 @@ let paceSyncCrosshair: d3.Selection<
     null,
     undefined
 > | null = null;
+let pendingElevationHover:
+    | {
+          mouseX: number;
+          distance: number;
+      }
+    | null = null;
+let pendingPaceHoverDistance: number | null = null;
+let elevationHoverFrame: number | null = null;
+let paceHoverFrame: number | null = null;
 
 watch(
     () => [props.highlightSegment, props.highlightColor],
@@ -425,6 +434,12 @@ const tooltipPaceUnitLabel = computed(() =>
     tooltipPaceUnitMeters.value === 1609.344 ? "/mi" : "/km",
 );
 
+type HoverSnapshot = {
+    point: ElevationPoint;
+    grade: number;
+    model: TooltipModel;
+};
+
 // Calculate actual paces needed at each point to achieve target average pace
 const actualPaceData = computed(() => {
     if (!props.plan || !props.plan.pace || elevationPoints.length === 0) {
@@ -513,6 +528,64 @@ function formatSignedPaceDelta(paceDeltaSeconds: number): string {
 function formatSignedElapsedTime(totalSeconds: number): string {
     const sign = totalSeconds > 0 ? "+" : totalSeconds < 0 ? "-" : "";
     return `${sign}${formatElapsedTimeLocal(Math.abs(totalSeconds))}`;
+}
+
+function buildHoverSnapshotAtDistance(distance: number): HoverSnapshot | null {
+    const point = interpolateAtDistance(smoothedElevationPoints.value, distance);
+    if (!point) return null;
+
+    const grade = calculateGradeAtDistance(
+        smoothedElevationPoints.value,
+        point.distance,
+        smoothingConfig.value.gradeWindowMeters,
+    );
+    const gradeFormatted =
+        grade >= 0 ? `+${grade.toFixed(1)}%` : `${grade.toFixed(1)}%`;
+    const planPaceSeconds = getPlanPaceAtDistance(distance);
+    const planElapsedSeconds = getElapsedAtDistance(distance);
+    const activityPaceSeconds = getActivityPaceAtDistance(distance);
+    const activityElapsedSeconds = getActivityElapsedAtDistance(distance);
+
+    return {
+        point,
+        grade,
+        model: {
+            distance: formatDistance(point.distance, currentDistanceUnit.value),
+            elevation: formatElevation(
+                point.elevation,
+                currentElevationUnit.value,
+            ),
+            grade: gradeFormatted,
+            planPace:
+                planPaceSeconds !== null
+                    ? `${formatPace(planPaceSeconds)}${tooltipPaceUnitLabel.value}`
+                    : "",
+            planElapsed:
+                planElapsedSeconds !== null
+                    ? formatElapsedTimeLocal(planElapsedSeconds)
+                    : "",
+            activityPace:
+                activityPaceSeconds !== null
+                    ? `${formatPace(activityPaceSeconds)}${tooltipPaceUnitLabel.value}`
+                    : "",
+            activityElapsed:
+                activityElapsedSeconds !== null
+                    ? formatElapsedTimeLocal(activityElapsedSeconds)
+                    : "",
+            paceDelta:
+                planPaceSeconds !== null && activityPaceSeconds !== null
+                    ? formatSignedPaceDelta(
+                          activityPaceSeconds - planPaceSeconds,
+                      )
+                    : "",
+            elapsedDelta:
+                planElapsedSeconds !== null && activityElapsedSeconds !== null
+                    ? formatSignedElapsedTime(
+                          activityElapsedSeconds - planElapsedSeconds,
+                      )
+                    : "",
+        },
+    };
 }
 
 function interpolateSeriesAtDistance(
@@ -1335,41 +1408,33 @@ function handleMouseMove(event: MouseEvent) {
     if (!xScale || !crosshair || !tooltip.value) return;
 
     const [mouseX] = d3.pointer(event);
-    const distance = xScale.invert(mouseX);
+    pendingElevationHover = { mouseX, distance: xScale.invert(mouseX) };
 
-    // Show crosshair
-    crosshair.attr("x1", mouseX).attr("x2", mouseX).style("opacity", 0.8);
+    if (elevationHoverFrame !== null) return;
 
-    // Update chart hover sync state
-    chartHoverDistance.value = distance;
-    chartHoverSource.value = "elevation";
+    elevationHoverFrame = requestAnimationFrame(() => {
+        elevationHoverFrame = null;
+        const pending = pendingElevationHover;
+        pendingElevationHover = null;
+        if (!pending || !crosshair || !tooltip.value) return;
 
-    // Interpolate elevation and coordinates at this distance
-    const interpolatedPoint = interpolateAtDistance(
-        smoothedElevationPoints.value,
-        distance,
-    );
+        const snapshot = buildHoverSnapshotAtDistance(pending.distance);
+        if (!snapshot) return;
 
-    if (interpolatedPoint) {
-        const grade = calculateGradeAtDistance(
-            smoothedElevationPoints.value,
-            interpolatedPoint.distance,
-            smoothingConfig.value.gradeWindowMeters,
-        );
-        const model = buildTooltipModelAtDistance(distance);
-        if (!model) return;
-        tooltipData.value = model;
+        crosshair
+            .attr("x1", pending.mouseX)
+            .attr("x2", pending.mouseX)
+            .style("opacity", 0.8);
 
-        // Position tooltip
+        chartHoverDistance.value = pending.distance;
+        chartHoverSource.value = "elevation";
+        tooltipData.value = snapshot.model;
+
         const containerRect = chartContainer.value!.getBoundingClientRect();
         const tooltipEl = tooltip.value;
         const margin = TOOLTIP_MARGIN;
-
-        // Calculate position relative to chart area
-        const chartX = mouseX + margin.left;
-        const chartY = margin.top + 10; // Fixed position near the top
-
-        // Ensure tooltip doesn't go off-screen
+        const chartX = pending.mouseX + margin.left;
+        const chartY = margin.top + 10;
         const tooltipWidth = tooltipEl.offsetWidth;
         const finalX = Math.min(
             chartX,
@@ -1379,25 +1444,30 @@ function handleMouseMove(event: MouseEvent) {
         tooltipEl.style.left = `${finalX}px`;
         tooltipEl.style.top = `${chartY}px`;
 
-        // Show tooltip
         tooltipVisible.value = true;
-        tooltipFromMap.value = false; // This is from chart hover
+        tooltipFromMap.value = false;
         secondaryTooltipVisible.value = false;
         clearSecondaryMapTooltipState();
 
         emit("elevation-hover", {
-            lat: interpolatedPoint.lat,
-            lng: interpolatedPoint.lng,
-            distance: interpolatedPoint.distance,
-            elevation: interpolatedPoint.elevation,
-            grade: grade,
+            lat: snapshot.point.lat,
+            lng: snapshot.point.lng,
+            distance: snapshot.point.distance,
+            elevation: snapshot.point.elevation,
+            grade: snapshot.grade,
         });
-    }
+    });
 }
 
 // Handle mouse leaving the chart
 function handleMouseLeave() {
     if (!crosshair) return;
+
+    if (elevationHoverFrame !== null) {
+        cancelAnimationFrame(elevationHoverFrame);
+        elevationHoverFrame = null;
+    }
+    pendingElevationHover = null;
 
     // Hide chart crosshair
     crosshair.style("opacity", 0);
@@ -1445,61 +1515,7 @@ function handleChartClick(event: MouseEvent) {
 }
 
 function buildTooltipModelAtDistance(distance: number): TooltipModel | null {
-    const interpolatedPoint = interpolateAtDistance(
-        smoothedElevationPoints.value,
-        distance,
-    );
-    if (!interpolatedPoint) return null;
-
-    const grade = calculateGradeAtDistance(
-        smoothedElevationPoints.value,
-        interpolatedPoint.distance,
-        smoothingConfig.value.gradeWindowMeters,
-    );
-    const gradeFormatted =
-        grade >= 0 ? `+${grade.toFixed(1)}%` : `${grade.toFixed(1)}%`;
-    const planPaceSeconds = getPlanPaceAtDistance(distance);
-    const planElapsedSeconds = getElapsedAtDistance(distance);
-    const activityPaceSeconds = getActivityPaceAtDistance(distance);
-    const activityElapsedSeconds = getActivityElapsedAtDistance(distance);
-
-    return {
-        distance: formatDistance(
-            interpolatedPoint.distance,
-            currentDistanceUnit.value,
-        ),
-        elevation: formatElevation(
-            interpolatedPoint.elevation,
-            currentElevationUnit.value,
-        ),
-        grade: gradeFormatted,
-        planPace:
-            planPaceSeconds !== null
-                ? `${formatPace(planPaceSeconds)}${tooltipPaceUnitLabel.value}`
-                : "",
-        planElapsed:
-            planElapsedSeconds !== null
-                ? formatElapsedTimeLocal(planElapsedSeconds)
-                : "",
-        activityPace:
-            activityPaceSeconds !== null
-                ? `${formatPace(activityPaceSeconds)}${tooltipPaceUnitLabel.value}`
-                : "",
-        activityElapsed:
-            activityElapsedSeconds !== null
-                ? formatElapsedTimeLocal(activityElapsedSeconds)
-                : "",
-        paceDelta:
-            planPaceSeconds !== null && activityPaceSeconds !== null
-                ? formatSignedPaceDelta(activityPaceSeconds - planPaceSeconds)
-                : "",
-        elapsedDelta:
-            planElapsedSeconds !== null && activityElapsedSeconds !== null
-                ? formatSignedElapsedTime(
-                      activityElapsedSeconds - planElapsedSeconds,
-                  )
-                : "",
-    };
+    return buildHoverSnapshotAtDistance(distance)?.model ?? null;
 }
 
 function clampTooltipX(
@@ -1543,9 +1559,9 @@ function updateMapHoverCrosshair() {
     }
 
     const primaryX = localXScale(primaryDistance);
-    const primaryModel = buildTooltipModelAtDistance(primaryDistance);
-    if (!primaryModel) return;
-    tooltipData.value = primaryModel;
+    const primarySnapshot = buildHoverSnapshotAtDistance(primaryDistance);
+    if (!primarySnapshot) return;
+    tooltipData.value = primarySnapshot.model;
 
     // Position tooltip
     const containerRect = chartContainer.value!.getBoundingClientRect();
@@ -1567,9 +1583,9 @@ function updateMapHoverCrosshair() {
         secondaryTooltipEl &&
         Number.isFinite(secondaryDistance)
     ) {
-        const secondaryModel = buildTooltipModelAtDistance(secondaryDistance);
-        if (secondaryModel) {
-            secondaryTooltipData.value = secondaryModel;
+        const secondarySnapshot = buildHoverSnapshotAtDistance(secondaryDistance);
+        if (secondarySnapshot) {
+            secondaryTooltipData.value = secondarySnapshot.model;
             secondaryTooltipVisible.value = true;
 
             const secondaryX = localXScale(secondaryDistance) + margin.left;
@@ -1605,38 +1621,43 @@ function handlePaceMouseMove(event: MouseEvent) {
     if (!paceXScale || !paceCrosshair) return;
 
     const [mouseX] = d3.pointer(event);
-    const distance = paceXScale.invert(mouseX);
+    pendingPaceHoverDistance = paceXScale.invert(mouseX);
 
-    // Show crosshair
-    paceCrosshair.attr("x1", mouseX).attr("x2", mouseX).style("opacity", 0.8);
+    if (paceHoverFrame !== null) return;
 
-    // Update chart hover sync state
-    chartHoverDistance.value = distance;
-    chartHoverSource.value = "pace";
+    paceHoverFrame = requestAnimationFrame(() => {
+        paceHoverFrame = null;
+        const distance = pendingPaceHoverDistance;
+        pendingPaceHoverDistance = null;
+        if (distance === null || !paceXScale || !paceCrosshair) return;
 
-    // Emit hover event
-    const interpolatedPoint = interpolateAtDistance(
-        smoothedElevationPoints.value,
-        distance,
-    );
-    if (interpolatedPoint) {
-        const grade = calculateGradeAtDistance(
-            smoothedElevationPoints.value,
-            distance,
-            smoothingConfig.value.gradeWindowMeters,
-        );
+        const snapshot = buildHoverSnapshotAtDistance(distance);
+        if (!snapshot) return;
+
+        const x = paceXScale(distance);
+        paceCrosshair.attr("x1", x).attr("x2", x).style("opacity", 0.8);
+
+        chartHoverDistance.value = distance;
+        chartHoverSource.value = "pace";
+
         emit("pace-hover", {
-            lat: interpolatedPoint.lat,
-            lng: interpolatedPoint.lng,
+            lat: snapshot.point.lat,
+            lng: snapshot.point.lng,
             distance,
-            elevation: interpolatedPoint.elevation,
-            grade,
+            elevation: snapshot.point.elevation,
+            grade: snapshot.grade,
         });
-    }
+    });
 }
 
 // Handle mouse leave from pace chart
 function handlePaceMouseLeave() {
+    if (paceHoverFrame !== null) {
+        cancelAnimationFrame(paceHoverFrame);
+        paceHoverFrame = null;
+    }
+    pendingPaceHoverDistance = null;
+
     if (paceCrosshair) {
         paceCrosshair.style("opacity", 0);
     }
@@ -2007,6 +2028,14 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+    if (elevationHoverFrame !== null) {
+        cancelAnimationFrame(elevationHoverFrame);
+        elevationHoverFrame = null;
+    }
+    if (paceHoverFrame !== null) {
+        cancelAnimationFrame(paceHoverFrame);
+        paceHoverFrame = null;
+    }
     if (resizeObserver) {
         resizeObserver.disconnect();
         resizeObserver = null;
