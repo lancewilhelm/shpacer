@@ -86,6 +86,7 @@ const WAYPOINT_DISTANCE_DUPLICATE_TOLERANCE_METERS = 0.5;
 const waypointUpdateError = ref("");
 const updatingWaypointIds = ref<Set<string>>(new Set());
 const deletingWaypointIds = ref<Set<string>>(new Set());
+const waypointPendingDelete = ref<Waypoint | null>(null);
 
 // Helper functions for waypoint display
 function getWaypointDisplayContent(
@@ -689,6 +690,7 @@ function closeModal() {
   waypointUpdateError.value = "";
   updatingWaypointIds.value.clear();
   deletingWaypointIds.value.clear();
+  waypointPendingDelete.value = null;
 
   // Clean up temporary waypoint if it exists
   if (newWaypointBeingCreated.value) {
@@ -886,11 +888,6 @@ async function deleteWaypoint(waypoint: Waypoint) {
     return;
   }
 
-  const confirmed = confirm(
-    `Are you sure you want to delete waypoint "${waypoint.name}"?`,
-  );
-  if (!confirmed) return;
-
   deletingWaypointIds.value.add(waypoint.id);
   waypointUpdateError.value = "";
 
@@ -921,6 +918,29 @@ async function deleteWaypoint(waypoint: Waypoint) {
   } finally {
     deletingWaypointIds.value.delete(waypoint.id);
   }
+}
+
+function openDeleteWaypointConfirmation(waypoint: Waypoint) {
+  if (deletingWaypointIds.value.has(waypoint.id)) return;
+
+  if (isStartOrFinishWaypoint(waypoint, editableWaypoints.value)) {
+    waypointUpdateError.value = "Cannot delete start or finish waypoints.";
+    return;
+  }
+
+  waypointPendingDelete.value = waypoint;
+}
+
+function closeDeleteWaypointConfirmation() {
+  waypointPendingDelete.value = null;
+}
+
+async function confirmDeleteWaypoint() {
+  const waypoint = waypointPendingDelete.value;
+  if (!waypoint) return;
+
+  waypointPendingDelete.value = null;
+  await deleteWaypoint(waypoint);
 }
 
 async function createWaypoint(
@@ -1987,12 +2007,12 @@ function canMoveBackward(waypoint: Waypoint): boolean {
       <!-- Waypoints Tab -->
       <div
         v-if="activeTab === 'waypoints'"
-        class="flex-1 overflow-hidden flex gap-4 h-full"
+        class="flex h-full flex-1 gap-4 overflow-hidden"
       >
         <!-- Left Panel: Map -->
         <div
           ref="mapPanelRef"
-          class="relative h-full w-full rounded-lg overflow-hidden border border-(--sub-color) bg-gray-100"
+          class="relative h-full min-w-0 flex-1 rounded-lg overflow-hidden border border-(--sub-color) bg-gray-100"
         >
           <ClientOnly>
             <LeafletMap
@@ -2107,7 +2127,7 @@ function canMoveBackward(waypoint: Waypoint): boolean {
         </div>
 
         <!-- Right Panel: Waypoint List or Edit -->
-        <div class="w-96 flex flex-col">
+        <div class="relative z-10 w-96 shrink-0 flex flex-col">
           <DismissibleAlert
             v-if="waypointUpdateError"
             class="mb-4"
@@ -2317,11 +2337,14 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                         editableWaypoints,
                       )
                     "
+                    type="button"
                     class="w-min px-3 py-2 border border-(--error-color) text-(--error-color) rounded-lg hover:bg-(--error-color)! transition-colors disabled:opacity-50 flex items-center justify-center"
                     :disabled="
                       deletingWaypointIds.has(selectedWaypointForEdit.id)
                     "
-                    @click="deleteWaypoint(selectedWaypointForEdit)"
+                    @click="
+                      openDeleteWaypointConfirmation(selectedWaypointForEdit)
+                    "
                   >
                     <Icon name="lucide:trash-2" class="h-4 w-4" />
                   </button>
@@ -2409,9 +2432,12 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                                 canDeleteWaypoint(waypoint, editableWaypoints)
                               "
                               v-tooltip="'Delete waypoint'"
+                              type="button"
                               class="text-(--error-color) transition-colors flex-shrink-0 m-0! p-1! rounded!"
                               :disabled="deletingWaypointIds.has(waypoint.id)"
-                              @click.stop="deleteWaypoint(waypoint)"
+                              @click.stop="
+                                openDeleteWaypointConfirmation(waypoint)
+                              "
                             >
                               <Icon name="lucide:trash-2" class="h-3 w-3" />
                             </button>
@@ -2492,6 +2518,54 @@ function canMoveBackward(waypoint: Waypoint): boolean {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  </ModalWindow>
+
+  <ModalWindow
+    :open="!!waypointPendingDelete"
+    width="28rem"
+    max-width="calc(100vw - 2rem)"
+    @close="closeDeleteWaypointConfirmation"
+  >
+    <div class="space-y-4">
+      <div>
+        <h3 class="text-lg font-semibold text-(--main-color)">
+          Delete waypoint?
+        </h3>
+        <p class="mt-2 text-sm text-(--sub-color)">
+          {{
+            waypointPendingDelete
+              ? `This will permanently remove "${waypointPendingDelete.name}" from the course.`
+              : ""
+          }}
+        </p>
+      </div>
+
+      <div class="flex justify-end gap-2">
+        <button
+          type="button"
+          class="px-3 py-2 border border-(--sub-color) text-(--main-color) rounded-lg hover:bg-(--sub-alt-color) transition-colors"
+          @click="closeDeleteWaypointConfirmation"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="px-3 py-2 bg-(--error-color) text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+          :disabled="
+            !!waypointPendingDelete &&
+            deletingWaypointIds.has(waypointPendingDelete.id)
+          "
+          @click="confirmDeleteWaypoint"
+        >
+          {{
+            waypointPendingDelete &&
+            deletingWaypointIds.has(waypointPendingDelete.id)
+              ? "Deleting..."
+              : "Delete Waypoint"
+          }}
+        </button>
       </div>
     </div>
   </ModalWindow>
