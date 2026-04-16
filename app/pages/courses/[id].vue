@@ -2234,11 +2234,13 @@ function getWaypointNote(waypointId: string): string {
   return note?.notes || "";
 }
 
-function getWaypointStoppageTime(waypointId: string): number {
+function getWaypointCustomStoppageTime(
+  waypointId: string,
+): number | undefined {
   const stoppageTime = waypointStoppageTimes.value.find(
     (st) => st.waypointId === waypointId,
   );
-  return stoppageTime?.stoppageTime || 0;
+  return stoppageTime?.stoppageTime;
 }
 
 function getDefaultStoppageTime(): number {
@@ -2992,7 +2994,9 @@ onUnmounted(() => {
               :activity-comparison-waypoints="activityPlanDetail?.waypoints || []"
               :waypoint-stoppage-times="waypointStoppageTimes"
               :get-waypoint-note="getWaypointNote"
-              :get-waypoint-stoppage-time="getWaypointStoppageTime"
+              :get-waypoint-custom-stoppage-time="
+                getWaypointCustomStoppageTime
+              "
               :get-default-stoppage-time="getDefaultStoppageTime"
               :geo-json-data="geoJsonData"
               @waypoint-select="handleWaypointSelect"
@@ -3172,7 +3176,9 @@ onUnmounted(() => {
                   "
                   :waypoint-stoppage-times="waypointStoppageTimes"
                   :get-waypoint-note="getWaypointNote"
-                  :get-waypoint-stoppage-time="getWaypointStoppageTime"
+                  :get-waypoint-custom-stoppage-time="
+                    getWaypointCustomStoppageTime
+                  "
                   :get-default-stoppage-time="getDefaultStoppageTime"
                   :geo-json-data="geoJsonData"
                   @waypoint-select="handleWaypointSelect"

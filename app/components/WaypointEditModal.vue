@@ -18,7 +18,7 @@ interface Props {
     waypoints?: Waypoint[];
     currentPlanId?: string | null;
     getWaypointNote?: (waypointId: string) => string;
-    getWaypointStoppageTime?: (waypointId: string) => number;
+    getWaypointCustomStoppageTime?: (waypointId: string) => number | undefined;
     getDefaultStoppageTime?: () => number;
 }
 
@@ -41,7 +41,7 @@ const props = withDefaults(defineProps<Props>(), {
     waypoints: () => [],
     currentPlanId: null,
     getWaypointNote: () => () => "",
-    getWaypointStoppageTime: () => () => 0,
+    getWaypointCustomStoppageTime: () => () => undefined,
     getDefaultStoppageTime: () => () => 0,
 });
 
@@ -92,7 +92,7 @@ function canHaveStoppageTime(waypoint: Waypoint): boolean {
 }
 
 function getEffectiveStoppageTime(waypoint: Waypoint): number {
-    const customTime = props.getWaypointStoppageTime?.(waypoint.id);
+    const customTime = props.getWaypointCustomStoppageTime?.(waypoint.id);
     if (customTime !== undefined && customTime !== null) {
         return customTime;
     }
@@ -165,13 +165,25 @@ async function handleSave() {
             const totalSeconds =
                 formData.value.stoppageMinutes * 60 +
                 formData.value.stoppageSeconds;
-
-            // Always save the stoppage time, even if it's 0
-            emit(
-                "save-waypoint-stoppage-time",
+            const existingCustomTime = props.getWaypointCustomStoppageTime?.(
                 props.waypoint.id,
-                totalSeconds,
             );
+            const defaultTime = props.getDefaultStoppageTime?.() || 0;
+
+            if (totalSeconds === defaultTime) {
+                if (
+                    existingCustomTime !== undefined &&
+                    existingCustomTime !== null
+                ) {
+                    emit("delete-waypoint-stoppage-time", props.waypoint.id);
+                }
+            } else {
+                emit(
+                    "save-waypoint-stoppage-time",
+                    props.waypoint.id,
+                    totalSeconds,
+                );
+            }
         }
 
         emit("close");

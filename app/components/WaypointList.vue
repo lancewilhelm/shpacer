@@ -49,7 +49,7 @@ interface Props {
     activityComparisonWaypoints?: CourseActivityWaypointComparison[];
     waypointStoppageTimes?: SelectWaypointStoppageTime[];
     getWaypointNote?: (waypointId: string) => string;
-    getWaypointStoppageTime?: (waypointId: string) => number;
+    getWaypointCustomStoppageTime?: (waypointId: string) => number | undefined;
     getDefaultStoppageTime?: () => number;
     geoJsonData?: GeoJSON.FeatureCollection[];
 }
@@ -72,7 +72,7 @@ const _props = withDefaults(defineProps<Props>(), {
     activityComparisonWaypoints: () => [],
     waypointStoppageTimes: () => [],
     getWaypointNote: () => () => "",
-    getWaypointStoppageTime: () => () => 0,
+    getWaypointCustomStoppageTime: () => () => undefined,
     getDefaultStoppageTime: () => () => 0,
     geoJsonData: () => [],
 });
@@ -85,7 +85,7 @@ const {
     activityComparisonWaypoints,
     waypointStoppageTimes,
     getWaypointNote,
-    getWaypointStoppageTime,
+    getWaypointCustomStoppageTime,
     getDefaultStoppageTime,
     geoJsonData,
     readOnly,
@@ -256,13 +256,18 @@ function getElapsedTimeForWaypoint(waypointId: string): string {
 }
 
 function getDelayForWaypoint(waypointId: string): string {
+    const delaySeconds = getDelaySecondsForWaypoint(waypointId);
+    return formatDelayTime(delaySeconds);
+}
+
+function getDelaySecondsForWaypoint(waypointId: string): number {
     const delaySeconds = getWaypointDelay(
         waypointId,
         waypointStoppageTimes.value,
         getDefaultStoppageTime.value(),
         waypoints.value,
     );
-    return formatDelayTime(delaySeconds);
+    return delaySeconds;
 }
 
 function isStartOrFinishWaypoint(waypoint: Waypoint): boolean {
@@ -329,8 +334,7 @@ function getSegmentTime(waypointId: string): string {
     const nextElapsed = elapsedTimes.value[nextWaypoint.id] || 0;
 
     // Subtract stoppage time to get just travel time
-    const nextStoppageTime =
-        getWaypointStoppageTime.value?.(nextWaypoint.id) || 0;
+    const nextStoppageTime = getDelaySecondsForWaypoint(nextWaypoint.id);
     const segmentTime = nextElapsed - currentElapsed - nextStoppageTime;
 
     if (segmentTime <= 0) {
@@ -510,11 +514,9 @@ function getActivityComparison(waypointId: string) {
                                                 !isStartOrFinishWaypoint(
                                                     waypoint,
                                                 ) &&
-                                                (getWaypointStoppageTime?.(
+                                                getDelaySecondsForWaypoint(
                                                     waypoint.id,
-                                                ) > 0 ||
-                                                    getDefaultStoppageTime?.() >
-                                                        0)
+                                                ) > 0
                                             "
                                             class="flex items-center gap-1 text-(--main-color)"
                                         >
@@ -837,7 +839,9 @@ function getActivityComparison(waypointId: string) {
             :waypoints="waypoints"
             :current-plan-id="currentPlanId"
             :get-waypoint-note="getWaypointNote"
-            :get-waypoint-stoppage-time="getWaypointStoppageTime"
+            :get-waypoint-custom-stoppage-time="
+                getWaypointCustomStoppageTime
+            "
             :get-default-stoppage-time="getDefaultStoppageTime"
             @close="closeEditModal"
             @save-waypoint-note="handleSaveNote"
