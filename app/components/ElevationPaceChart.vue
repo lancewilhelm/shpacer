@@ -7,7 +7,10 @@ import {
     calculateGradeAtDistance,
     type ElevationPoint,
 } from "~/utils/elevationProfile";
-import { calculateActualPacesForTarget } from "~/utils/paceAdjustment";
+import {
+    calculateActualPacesForTarget,
+    paceAdjustment,
+} from "~/utils/paceAdjustment";
 import { formatDistance, formatElevation } from "~/utils/courseMetrics";
 import { useUserSettingsStore } from "~/stores/userSettings";
 import { getWaypointColorFromOrder } from "~/utils/waypoints";
@@ -31,6 +34,7 @@ interface Props {
     plan?: SelectPlan | null;
     activity?: SelectCourseActivity | null;
     showPaceChart?: boolean;
+    showGradeExplanationModal?: boolean;
     highlightSegment?: { start: number; end: number } | null;
     highlightColor?: string;
 }
@@ -61,6 +65,7 @@ const props = withDefaults(defineProps<Props>(), {
     plan: null,
     activity: null,
     showPaceChart: true,
+    showGradeExplanationModal: false,
     highlightSegment: null,
     highlightColor: "#ff0000",
 });
@@ -70,6 +75,7 @@ const emit = defineEmits<{
     "elevation-leave": [];
     "pace-hover": [event: PaceHoverEvent];
     "pace-leave": [];
+    "grade-explanation-close": [];
     "waypoint-click": [
         waypoint: {
             id: string;
@@ -97,6 +103,8 @@ const showAreaGradient = computed<boolean>(() => {
 });
 const chartContainer = ref<HTMLElement>();
 const paceChartContainer = ref<HTMLElement>();
+const gradeAdjustmentChartContainer = ref<HTMLElement>();
+const gradePaceChartContainer = ref<HTMLElement>();
 const tooltip = ref<HTMLElement>();
 const secondaryTooltip = ref<HTMLElement>();
 
@@ -111,6 +119,11 @@ type TooltipModel = {
     activityElapsed: string;
     paceDelta: string;
     elapsedDelta: string;
+};
+
+type GradeCurveSample = {
+    grade: number;
+    value: number;
 };
 
 const tooltipVisible = ref(false);
@@ -189,12 +202,21 @@ const PACE_CHART_MARGIN = {
     bottom: PACE_MARGIN_BOTTOM,
     left: AXIS_MARGIN_LEFT,
 };
+const EXPLANATION_CHART_MARGIN = {
+    top: 16,
+    right: AXIS_MARGIN_RIGHT,
+    bottom: 42,
+    left: 64,
+};
 const TOOLTIP_MARGIN = {
     top: TOOLTIP_MARGIN_TOP,
     right: AXIS_MARGIN_RIGHT,
     bottom: 40,
     left: AXIS_MARGIN_LEFT,
 };
+const GRADE_EXPLANATION_MIN = -50;
+const GRADE_EXPLANATION_MAX = 50;
+const GRADE_EXPLANATION_STEP = 1;
 
 // Chart state
 let svg: d3.Selection<SVGSVGElement, unknown, null, undefined> | null = null;
@@ -250,6 +272,8 @@ let pendingElevationHover:
 let pendingPaceHoverDistance: number | null = null;
 let elevationHoverFrame: number | null = null;
 let paceHoverFrame: number | null = null;
+let gradeAdjustmentResizeObserver: ResizeObserver | null = null;
+let gradePaceResizeObserver: ResizeObserver | null = null;
 
 watch(
     () => [props.highlightSegment, props.highlightColor],
@@ -349,7 +373,7 @@ const elevationStats = computed(() => {
 
 // Pace chart computed properties
 const hasPaceData = computed(() => {
-    return (
+    return Boolean(
         props.plan &&
         props.plan.pace &&
         props.plan.pace > 0 &&
@@ -357,6 +381,17 @@ const hasPaceData = computed(() => {
         props.geoJsonData.length > 0
     );
 });
+
+const gradeExplanationModalRequested = computed(
+    () => props.showGradeExplanationModal === true,
+);
+
+const gradeExplanationModalOpen = computed(
+    () =>
+        gradeExplanationModalRequested.value &&
+        props.showPaceChart &&
+        hasPaceData.value,
+);
 
 const totalDistance = computed(() => {
     if (elevationPoints.length === 0) return 0;
@@ -433,6 +468,72 @@ const tooltipPaceUnitMeters = computed(() =>
 const tooltipPaceUnitLabel = computed(() =>
     tooltipPaceUnitMeters.value === 1609.344 ? "/mi" : "/km",
 );
+
+const gradeExplanationSamples = computed<GradeCurveSample[]>(() => {
+    const samples: GradeCurveSample[] = [];
+    for (
+        let grade = GRADE_EXPLANATION_MIN;
+        grade <= GRADE_EXPLANATION_MAX;
+        grade += GRADE_EXPLANATION_STEP
+    ) {
+        samples.push({
+            grade,
+            value: paceAdjustment(grade),
+        });
+    }
+    return samples;
+});
+
+const gradeOnlyNormalizationScale = computed(() => {
+    const plan = props.plan;
+    if (!plan?.pace || plan.useGradeAdjustment === false) {
+        return 1;
+    }
+
+    return calculateGradeOnlyNormalizationScale(
+        smoothedElevationPoints.value,
+        smoothingConfig.value.gradeWindowMeters,
+        (plan.paceMode || "pace") !== "normalized",
+        true,
+    );
+});
+
+const gradePaceExplanationSamples = computed<GradeCurveSample[]>(() => {
+    const plan = props.plan;
+    if (!plan?.pace) {
+        return [];
+    }
+
+    const scale = gradeOnlyNormalizationScale.value;
+    return gradeExplanationSamples.value.map((sample) => ({
+        grade: sample.grade,
+        value:
+            plan.useGradeAdjustment === false
+                ? plan.pace!
+                : plan.pace! * sample.value * scale,
+    }));
+});
+
+const gradePaceAxisLabel = computed(() =>
+    `Pace (${tooltipPaceUnitLabel.value})`,
+);
+
+const gradePaceExplanationSummary = computed(() => {
+    const plan = props.plan;
+    if (!plan?.pace) {
+        return "";
+    }
+
+    if (plan.useGradeAdjustment === false) {
+        return "Grade adjustment is off for this plan, so the pace stays flat across grades.";
+    }
+
+    if ((plan.paceMode || "pace") === "normalized") {
+        return "This line shows the plan pace adjusted by grade only, without additional normalization.";
+    }
+
+    return "This line uses the course's actual grade distribution for normalization, while still ignoring distance-based pacing strategy effects.";
+});
 
 type HoverSnapshot = {
     point: ElevationPoint;
@@ -528,6 +629,375 @@ function formatSignedPaceDelta(paceDeltaSeconds: number): string {
 function formatSignedElapsedTime(totalSeconds: number): string {
     const sign = totalSeconds > 0 ? "+" : totalSeconds < 0 ? "-" : "";
     return `${sign}${formatElapsedTimeLocal(Math.abs(totalSeconds))}`;
+}
+
+function formatSignedGrade(grade: number): string {
+    const sign = grade > 0 ? "+" : "";
+    return `${sign}${grade.toFixed(1)}%`;
+}
+
+function calculateGradeOnlyNormalizationScale(
+    points: ElevationPoint[],
+    gradeWindowMeters: number,
+    maintainTargetAverage: boolean,
+    useGradeAdjustment: boolean,
+): number {
+    if (!maintainTargetAverage || !useGradeAdjustment || points.length < 2) {
+        return 1;
+    }
+
+    let totalDistance = 0;
+    let equivalentDistanceSum = 0;
+
+    for (let index = 1; index < points.length; index++) {
+        const previousDistance = points[index - 1]?.distance ?? 0;
+        const currentDistance = points[index]?.distance ?? previousDistance;
+        const segmentDistance = currentDistance - previousDistance;
+        if (segmentDistance <= 0) continue;
+
+        const gradeStart = calculateGradeAtDistance(
+            points,
+            previousDistance,
+            gradeWindowMeters,
+        );
+        const gradeEnd = calculateGradeAtDistance(
+            points,
+            currentDistance,
+            gradeWindowMeters,
+        );
+        const factorStart = paceAdjustment(gradeStart);
+        const factorEnd = paceAdjustment(gradeEnd);
+
+        totalDistance += segmentDistance;
+        equivalentDistanceSum +=
+            0.5 * (factorStart + factorEnd) * segmentDistance;
+    }
+
+    return equivalentDistanceSum > 0 ? totalDistance / equivalentDistanceSum : 1;
+}
+
+function closeGradeExplanationModal() {
+    emit("grade-explanation-close");
+}
+
+function buildExplanationYDomain(values: number[]): [number, number] {
+    const minValue = Math.min(...values);
+    const maxValue = Math.max(...values);
+
+    if (minValue === maxValue) {
+        const pad = Math.max(1, Math.abs(minValue) * 0.05);
+        return [minValue - pad, maxValue + pad];
+    }
+
+    const pad = (maxValue - minValue) * 0.08;
+    return [minValue - pad, maxValue + pad];
+}
+
+function renderExplanationChart(options: {
+    container: HTMLElement;
+    data: GradeCurveSample[];
+    yLabel: string;
+    yTickFormat?: (value: number) => string;
+    tooltipValueLabel?: string;
+    tooltipValueFormatter?: (value: number) => string;
+}) {
+    const {
+        container,
+        data,
+        yLabel,
+        yTickFormat,
+        tooltipValueLabel,
+        tooltipValueFormatter,
+    } = options;
+    if (!data.length) return;
+
+    d3.select(container).selectAll("*").remove();
+
+    const containerRect = container.getBoundingClientRect();
+    const width = Math.max(containerRect.width, 280);
+    const height = 240;
+    const margin = EXPLANATION_CHART_MARGIN;
+    const innerWidth = width - margin.left - margin.right;
+    const innerHeight = height - margin.top - margin.bottom;
+
+    const svgRoot = d3
+        .select(container)
+        .append("svg")
+        .attr("width", width)
+        .attr("height", height)
+        .style("background", "var(--bg-color)");
+
+    const svg = svgRoot
+        .append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+    const x = d3
+        .scaleLinear()
+        .domain([GRADE_EXPLANATION_MIN, GRADE_EXPLANATION_MAX])
+        .range([0, innerWidth]);
+    const y = d3
+        .scaleLinear()
+        .domain(buildExplanationYDomain(data.map((sample) => sample.value)))
+        .range([innerHeight, 0]);
+
+    svg.selectAll(".grid-line-x")
+        .data(x.ticks(6))
+        .enter()
+        .append("line")
+        .attr("class", "grid-line-x")
+        .attr("x1", (value) => x(value))
+        .attr("x2", (value) => x(value))
+        .attr("y1", 0)
+        .attr("y2", innerHeight)
+        .style("stroke", "var(--sub-color)")
+        .style("stroke-width", 0.5)
+        .style("opacity", 0.12);
+
+    svg.selectAll(".grid-line-y")
+        .data(y.ticks(5))
+        .enter()
+        .append("line")
+        .attr("class", "grid-line-y")
+        .attr("x1", 0)
+        .attr("x2", innerWidth)
+        .attr("y1", (value) => y(value))
+        .attr("y2", (value) => y(value))
+        .style("stroke", "var(--sub-color)")
+        .style("stroke-width", 0.5)
+        .style("opacity", 0.12);
+
+    svg.append("line")
+        .attr("x1", x(0))
+        .attr("x2", x(0))
+        .attr("y1", 0)
+        .attr("y2", innerHeight)
+        .style("stroke", "var(--sub-color)")
+        .style("stroke-width", 1)
+        .style("stroke-dasharray", "4,4")
+        .style("opacity", 0.45);
+
+    const line = d3
+        .line<GradeCurveSample>()
+        .x((sample) => x(sample.grade))
+        .y((sample) => y(sample.value))
+        .curve(d3.curveMonotoneX);
+
+    svg.append("path")
+        .datum(data)
+        .attr("fill", "none")
+        .attr("stroke", "var(--main-color)")
+        .attr("stroke-width", 2)
+        .attr("d", line);
+
+    const hoverGroup = svg.append("g").style("pointer-events", "none");
+    const hoverLineX = hoverGroup
+        .append("line")
+        .attr("y1", 0)
+        .attr("y2", innerHeight)
+        .style("stroke", "var(--main-color)")
+        .style("stroke-width", 1)
+        .style("stroke-dasharray", "4,4")
+        .style("opacity", 0);
+    const hoverLineY = hoverGroup
+        .append("line")
+        .attr("x1", 0)
+        .attr("x2", innerWidth)
+        .style("stroke", "var(--sub-color)")
+        .style("stroke-width", 1)
+        .style("stroke-dasharray", "4,4")
+        .style("opacity", 0);
+    const hoverPoint = hoverGroup
+        .append("circle")
+        .attr("r", 4)
+        .style("fill", "var(--bg-color)")
+        .style("stroke", "var(--main-color)")
+        .style("stroke-width", 2)
+        .style("opacity", 0);
+
+    const tooltipValue =
+        tooltipValueFormatter ??
+        ((value: number) =>
+            yTickFormat ? yTickFormat(value) : Number(value).toFixed(2));
+    const tooltip = d3
+        .select(container)
+        .append("div")
+        .attr("class", "elevation-tooltip explanation-tooltip")
+        .style("position", "absolute")
+        .style("pointer-events", "none")
+        .style("left", "0px")
+        .style("top", "0px")
+        .style("opacity", 0);
+
+    const bisector = d3.bisector((sample: GradeCurveSample) => sample.grade).center;
+
+    svg.append("rect")
+        .attr("width", innerWidth)
+        .attr("height", innerHeight)
+        .style("fill", "none")
+        .style("pointer-events", "all")
+        .on("pointermove", (event: PointerEvent) => {
+            const [mouseX] = d3.pointer(event);
+            const clampedGrade = Math.max(
+                GRADE_EXPLANATION_MIN,
+                Math.min(GRADE_EXPLANATION_MAX, x.invert(mouseX)),
+            );
+            const index = bisector(data, clampedGrade);
+            const sample = data[index] ?? data[data.length - 1];
+            if (!sample) return;
+
+            const xPos = x(sample.grade);
+            const yPos = y(sample.value);
+            hoverLineX
+                .attr("x1", xPos)
+                .attr("x2", xPos)
+                .style("opacity", 0.8);
+            hoverLineY
+                .attr("y1", yPos)
+                .attr("y2", yPos)
+                .style("opacity", 0.7);
+            hoverPoint.attr("cx", xPos).attr("cy", yPos).style("opacity", 1);
+
+            tooltip.html(
+                `<div class="tooltip-distance">${formatSignedGrade(sample.grade)}</div>` +
+                    `<div class="tooltip-metric"><span class="tooltip-label">${tooltipValueLabel ?? yLabel}</span><span class="tooltip-value">${tooltipValue(sample.value)}</span></div>`,
+            );
+
+            const tooltipNode = tooltip.node();
+            if (!tooltipNode) return;
+
+            const tooltipWidth = tooltipNode.offsetWidth;
+            const tooltipHeight = tooltipNode.offsetHeight;
+            const desiredLeft = xPos + margin.left + 12;
+            const left =
+                desiredLeft + tooltipWidth + 8 <= width
+                    ? desiredLeft
+                    : Math.max(8, xPos + margin.left - tooltipWidth - 12);
+            const preferredTop = yPos + margin.top - tooltipHeight - 12;
+            const top =
+                preferredTop >= 8
+                    ? preferredTop
+                    : Math.min(
+                          height - tooltipHeight - 8,
+                          yPos + margin.top + 12,
+                      );
+
+            tooltip
+                .style("left", `${left}px`)
+                .style("top", `${top}px`)
+                .style("opacity", 1);
+        })
+        .on("pointerleave", () => {
+            hoverLineX.style("opacity", 0);
+            hoverLineY.style("opacity", 0);
+            hoverPoint.style("opacity", 0);
+            tooltip.style("opacity", 0);
+        });
+
+    const xAxis = d3.axisBottom(x).ticks(6).tickFormat((value) => `${value}%`);
+    const yAxis = d3
+        .axisLeft(y)
+        .ticks(5)
+        .tickFormat((value) =>
+            yTickFormat ? yTickFormat(Number(value)) : Number(value).toFixed(2),
+        );
+
+    svg.append("g")
+        .attr("transform", `translate(0,${innerHeight})`)
+        .call(xAxis)
+        .selectAll("text")
+        .style("fill", "var(--sub-color)")
+        .style("font-size", "12px");
+
+    svg.append("g")
+        .call(yAxis)
+        .selectAll("text")
+        .style("fill", "var(--sub-color)")
+        .style("font-size", "12px");
+
+    svg.selectAll(".domain, .tick line")
+        .style("stroke", "var(--sub-color)")
+        .style("opacity", 0.35);
+
+    svg.append("text")
+        .attr("x", innerWidth / 2)
+        .attr("y", innerHeight + margin.bottom - 6)
+        .style("text-anchor", "middle")
+        .style("fill", "var(--sub-color)")
+        .style("font-size", "12px")
+        .text("Grade (%)");
+
+    svg.append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("x", 0 - innerHeight / 2)
+        .attr("y", 0 - margin.left + 16)
+        .style("text-anchor", "middle")
+        .style("fill", "var(--sub-color)")
+        .style("font-size", "12px")
+        .text(yLabel);
+}
+
+function initGradeAdjustmentExplanationChart() {
+    if (!gradeAdjustmentChartContainer.value) return;
+
+    renderExplanationChart({
+        container: gradeAdjustmentChartContainer.value,
+        data: gradeExplanationSamples.value,
+        yLabel: "Adjustment Factor",
+        yTickFormat: (value) => value.toFixed(2),
+        tooltipValueLabel: "Adjustment factor",
+        tooltipValueFormatter: (value) => value.toFixed(3),
+    });
+}
+
+function initGradePaceExplanationChart() {
+    if (!gradePaceChartContainer.value || !gradePaceExplanationSamples.value.length) {
+        return;
+    }
+
+    renderExplanationChart({
+        container: gradePaceChartContainer.value,
+        data: gradePaceExplanationSamples.value,
+        yLabel: gradePaceAxisLabel.value,
+        yTickFormat: (value) => formatPace(value),
+        tooltipValueLabel: "Plan pace",
+        tooltipValueFormatter: (value) =>
+            `${formatPace(value)}${tooltipPaceUnitLabel.value}`,
+    });
+}
+
+function initGradeExplanationCharts() {
+    if (!gradeExplanationModalOpen.value) return;
+    initGradeAdjustmentExplanationChart();
+    initGradePaceExplanationChart();
+}
+
+function disconnectGradeExplanationResizeObservers() {
+    if (gradeAdjustmentResizeObserver) {
+        gradeAdjustmentResizeObserver.disconnect();
+        gradeAdjustmentResizeObserver = null;
+    }
+    if (gradePaceResizeObserver) {
+        gradePaceResizeObserver.disconnect();
+        gradePaceResizeObserver = null;
+    }
+}
+
+function setupGradeExplanationResizeObservers() {
+    disconnectGradeExplanationResizeObservers();
+
+    if (gradeAdjustmentChartContainer.value) {
+        gradeAdjustmentResizeObserver = new ResizeObserver(() => {
+            initGradeAdjustmentExplanationChart();
+        });
+        gradeAdjustmentResizeObserver.observe(gradeAdjustmentChartContainer.value);
+    }
+
+    if (gradePaceChartContainer.value) {
+        gradePaceResizeObserver = new ResizeObserver(() => {
+            initGradePaceExplanationChart();
+        });
+        gradePaceResizeObserver.observe(gradePaceChartContainer.value);
+    }
 }
 
 function buildHoverSnapshotAtDistance(distance: number): HoverSnapshot | null {
@@ -1757,6 +2227,9 @@ function handleResize() {
     if (hasPaceData.value && props.showPaceChart) {
         initPaceChart();
     }
+    if (gradeExplanationModalOpen.value) {
+        initGradeExplanationCharts();
+    }
 }
 
 // Watch for data changes
@@ -1914,6 +2387,41 @@ watch(
     },
 );
 
+watch(
+    gradeExplanationModalOpen,
+    async (open) => {
+        if (!open) {
+            disconnectGradeExplanationResizeObservers();
+            return;
+        }
+
+        await nextTick();
+        initGradeExplanationCharts();
+        setupGradeExplanationResizeObservers();
+    },
+);
+
+watch(
+    [gradeExplanationSamples, gradePaceExplanationSamples, gradePaceAxisLabel],
+    () => {
+        if (!gradeExplanationModalOpen.value) return;
+
+        nextTick(() => {
+            initGradeExplanationCharts();
+        });
+    },
+    { deep: true },
+);
+
+watch(
+    () => [hasPaceData.value, props.showPaceChart],
+    ([hasPace, showPaceChart]) => {
+        if ((!hasPace || !showPaceChart) && gradeExplanationModalRequested.value) {
+            emit("grade-explanation-close");
+        }
+    },
+);
+
 // Watch for chart hover sync changes
 watch([chartHoverDistance, chartHoverSource], ([distance, source]) => {
     if (distance === null || source === null) {
@@ -2044,6 +2552,7 @@ onUnmounted(() => {
         paceResizeObserver.disconnect();
         paceResizeObserver = null;
     }
+    disconnectGradeExplanationResizeObservers();
 });
 // Local formatter for HH:MM:SS
 function formatElapsedTimeLocal(totalSeconds: number): string {
@@ -2529,6 +3038,85 @@ function getActivityPaceAtDistance(distance: number): number | null {
             </div>
             <div v-else ref="paceChartContainer" class="pace-chart" />
         </div>
+
+        <ModalWindow
+            :open="gradeExplanationModalOpen"
+            max-width="900px"
+            max-height="85vh"
+            width="100%"
+            @close="closeGradeExplanationModal"
+        >
+            <div class="grade-explanation-modal">
+                <div class="grade-explanation-header">
+                    <div class="flex items-center gap-3">
+                        <Icon
+                            name="lucide:info"
+                            class="h-5 w-5 text-(--main-color) scale-125"
+                        />
+                        <h2 class="text-xl font-semibold text-(--main-color)">
+                            Grade-Adjusted Pace Details
+                        </h2>
+                    </div>
+                    <button
+                        type="button"
+                        class="grade-explanation-close"
+                        aria-label="Close grade pace details"
+                        @click="closeGradeExplanationModal"
+                    >
+                        <Icon name="lucide:x" class="h-6 w-6 scale-150" />
+                    </button>
+                </div>
+
+                <div class="grade-explanation-body custom-scrollbar">
+                    <section class="grade-explanation-intro">
+                        <p>
+                            These charts summarize the same grade-aware pacing
+                            model used elsewhere in Shpacer. Grade is converted
+                            into a pace factor with the shared
+                            <code>paceAdjustment(gradient)</code> function,
+                            which uses a piecewise curve: linear tails for
+                            extreme grades and a 4th-degree polynomial through
+                            the middle range.
+                        </p>
+                        <p>
+                            For plan pacing, Shpacer then applies reverse
+                            normalization so the grade-adjusted paces still sum
+                            to the plan's target overall pace or finish time.
+                            The second chart shows that normalized
+                            grade-to-pace relationship for the current plan.
+                        </p>
+                    </section>
+
+                    <section class="grade-explanation-section">
+                        <div class="grade-explanation-copy">
+                            <h3>Grade to adjustment factor</h3>
+                            <p>
+                                This fixed curve is the shared piecewise
+                                equation used to convert grade into a pace
+                                multiplier.
+                            </p>
+                        </div>
+                        <div
+                            ref="gradeAdjustmentChartContainer"
+                            class="grade-explanation-chart"
+                        />
+                    </section>
+
+                    <section class="grade-explanation-section">
+                        <div class="grade-explanation-copy">
+                            <h3>Grade to plan pace</h3>
+                            <p>
+                                {{ gradePaceExplanationSummary }}
+                            </p>
+                        </div>
+                        <div
+                            ref="gradePaceChartContainer"
+                            class="grade-explanation-chart"
+                        />
+                    </section>
+                </div>
+            </div>
+        </ModalWindow>
     </div>
 </template>
 
@@ -2582,6 +3170,95 @@ function getActivityPaceAtDistance(distance: number): number | null {
     overflow: hidden;
 }
 
+.grade-explanation-modal {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    color: var(--main-color);
+}
+
+.grade-explanation-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--sub-color) 45%, transparent);
+}
+
+.grade-explanation-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem;
+    color: var(--sub-color);
+    transition: color 0.2s ease;
+}
+
+.grade-explanation-close:hover {
+    color: var(--main-color);
+}
+
+.grade-explanation-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    overflow-y: auto;
+    max-height: calc(85vh - 130px);
+    padding-right: 0.25rem;
+}
+
+.grade-explanation-intro {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid color-mix(in srgb, var(--main-color) 18%, transparent);
+    border-radius: 0.75rem;
+    background: color-mix(in srgb, var(--main-color) 6%, var(--bg-color));
+}
+
+.grade-explanation-intro p {
+    margin: 0;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--sub-color);
+}
+
+.grade-explanation-intro code {
+    font-size: 0.82rem;
+    color: var(--main-color);
+}
+
+.grade-explanation-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0.9rem;
+    border: 1px solid color-mix(in srgb, var(--sub-color) 35%, transparent);
+    border-radius: 0.75rem;
+    background: color-mix(in srgb, var(--sub-alt-color) 55%, transparent);
+}
+
+.grade-explanation-copy h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.grade-explanation-copy p {
+    margin: 0.35rem 0 0;
+    font-size: 0.875rem;
+    color: var(--sub-color);
+    line-height: 1.45;
+}
+
+.grade-explanation-chart {
+    width: 100%;
+    min-height: 240px;
+    position: relative;
+}
+
 /* Ensure embedded SVGs fill their containers without overflowing */
 .elevation-chart > svg,
 .pace-chart > svg {
@@ -2616,6 +3293,40 @@ function getActivityPaceAtDistance(distance: number): number | null {
 
 .elevation-tooltip.tooltip-visible.tooltip-from-map {
     opacity: 0.8;
+}
+
+.grade-explanation-chart :deep(.explanation-tooltip) {
+    min-width: 110px;
+    z-index: 2;
+    background: color-mix(in srgb, var(--bg-color) 92%, transparent);
+    border: 1px solid var(--main-color);
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    padding: 2px 4px;
+    font-size: 0.75rem;
+}
+
+.grade-explanation-chart :deep(.tooltip-distance) {
+    font-weight: 600;
+    color: var(--main-color);
+    margin-bottom: 2px;
+}
+
+.grade-explanation-chart :deep(.tooltip-metric) {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--main-color);
+}
+
+.grade-explanation-chart :deep(.tooltip-label) {
+    white-space: nowrap;
+}
+
+.grade-explanation-chart :deep(.tooltip-value) {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
 }
 
 .tooltip-distance {

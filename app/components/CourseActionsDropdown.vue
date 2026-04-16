@@ -37,6 +37,7 @@ interface Emits {
       | "toggle-share"
       | "toggle-plan-share"
       | "info-course"
+      | "show-pace-explanation"
       | "copy-course"
       | "copy-share-link"
       | "copy-plan-share-link",
@@ -157,7 +158,7 @@ const actions = computed<ActionItem[]>(() => {
   if (_props.course) {
     list.push(
       ...(_props.currentPlan
-        ? [
+          ? [
             {
               name: "Export Plan CSV",
               action: () => {
@@ -173,6 +174,14 @@ const actions = computed<ActionItem[]>(() => {
                 popupVisible.value = false;
               },
               icon: "lucide:file-text",
+            } as ActionItem,
+            {
+              name: "Pace Chart Details",
+              action: () => {
+                emit("show-pace-explanation");
+                popupVisible.value = false;
+              },
+              icon: "lucide:info",
             } as ActionItem,
           ]
         : []),

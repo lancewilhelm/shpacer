@@ -129,6 +129,25 @@ We render a continuous “actual pace needed” series along the route with cons
 
 This yields a smooth, normalized pace curve that still sums (in time) to the target.
 
+## Pace chart explanation modal
+
+The course page menu now includes a pace-chart details action. It opens a modal with two explanatory charts:
+
+- Grade (%) -> adjustment factor
+  - Shows the shared `paceAdjustment(gradient)` curve directly over the full `[-50, 50]` grade domain.
+  - This is a fixed mathematical view of the piecewise grade-adjustment function, not course-specific data.
+- Grade (%) -> plan pace
+  - Shows an explanatory line derived from the active plan pace and pace units.
+  - If grade adjustment is disabled for the plan, the line is flat.
+  - If the plan is in `pace` or `time` mode, the line applies a grade-only normalization scale derived from the course’s actual grade distribution.
+  - If the plan is in `normalized` mode, no extra normalization is applied.
+
+Important limitation:
+
+- The second modal chart is intentionally not a point-by-point course plot.
+- It ignores distance-based pacing strategy effects such as the linear start-to-finish strategy, because its x-axis is grade rather than course position.
+- The main pace chart remains the authoritative visualization for the actual course-derived pace trace.
+
 ## Implementation summary (key locations)
 
 - Segment arrivals and normalization:

@@ -379,6 +379,13 @@ const currentActivity = computed<SelectCourseActivity | null>(() =>
       null
     : null,
 );
+
+watch(currentPlan, (plan) => {
+  if (!plan) {
+    paceExplanationModalOpen.value = false;
+  }
+});
+
 const activityPlanDetail = ref<CourseActivityPlanDetail | null>(null);
 const activityPlanDetailPending = ref(false);
 
@@ -525,6 +532,7 @@ useHead({
 // Course edit modal state
 const courseEditModalOpen = ref(false);
 const courseInfoModalOpen = ref(false);
+const paceExplanationModalOpen = ref(false);
 
 async function toggleCoursePublic() {
   if (!course.value) return;
@@ -2093,6 +2101,16 @@ function closeCourseInfoModal() {
   courseInfoModalOpen.value = false;
 }
 
+function openPaceExplanationModal() {
+  if (!currentPlan.value) return;
+  mobilePanelTab.value = "charts";
+  paceExplanationModalOpen.value = true;
+}
+
+function closePaceExplanationModal() {
+  paceExplanationModalOpen.value = false;
+}
+
 function handleCourseUpdated(updatedCourse: SelectCourse) {
   if (courseData.value) {
     courseData.value.course = updatedCourse;
@@ -2463,6 +2481,7 @@ onUnmounted(() => {
                 @copy-share-link="handleCopyShareLink"
                 @copy-plan-share-link="copyPlanShareLink"
                 @info-course="openCourseInfoModal"
+                @show-pace-explanation="openPaceExplanationModal"
                 @copy-course="cloneCourse"
               />
             </div>
@@ -2939,10 +2958,12 @@ onUnmounted(() => {
                   :plan="effectivePlanForTiming"
                   :activity="currentActivity"
                   :show-pace-chart="!!currentPlan"
+                  :show-grade-explanation-modal="paceExplanationModalOpen"
                   @elevation-hover="handleElevationHover"
                   @elevation-leave="handleElevationLeave"
                   @pace-hover="handlePaceHover"
                   @pace-leave="handlePaceLeave"
+                  @grade-explanation-close="closePaceExplanationModal"
                   @waypoint-click="handleElevationWaypointClick"
                 />
                 <div
@@ -3032,12 +3053,14 @@ onUnmounted(() => {
                   :plan="effectivePlanForTiming"
                   :activity="currentActivity"
                   :show-pace-chart="!!currentPlan"
+                  :show-grade-explanation-modal="paceExplanationModalOpen"
                   :highlight-segment="stableHighlightSegment"
                   highlight-color="#ff0000"
                   @elevation-hover="handleElevationHover"
                   @elevation-leave="handleElevationLeave"
                   @pace-hover="handlePaceHover"
                   @pace-leave="handlePaceLeave"
+                  @grade-explanation-close="closePaceExplanationModal"
                   @waypoint-click="handleElevationWaypointClick"
                 />
                 <div
