@@ -3,10 +3,7 @@ import { formatDistance, formatElevation } from "~/utils/courseMetrics";
 import { getDistanceUnitSSR, getElevationUnitSSR } from "~/utils/units";
 import { getTagsByIds } from "~/utils/waypointTags";
 import { getWaypointColorFromOrder } from "~/utils/waypoints";
-import {
-    calculateWaypointSegments,
-    getSegmentAfterWaypoint,
-} from "~/utils/waypointSegments";
+import { calculateWaypointSegments } from "~/utils/waypointSegments";
 import type { WaypointSegment } from "~/utils/waypointSegments";
 import { extractElevationProfile } from "~/utils/elevationProfile";
 import type { ElevationPoint } from "~/utils/elevationProfile";
@@ -134,6 +131,39 @@ const waypointSegments = computed(() => {
     return calculateWaypointSegments(waypoints.value, elevationProfile.value);
 });
 
+const waypointSegmentsByStart = computed<Map<string, WaypointSegment>>(() => {
+    return new Map(
+        waypointSegments.value.map((segment) => [segment.fromWaypoint, segment]),
+    );
+});
+
+const cumulativeElevationByWaypoint = computed(() => {
+    const cumulative = new Map<
+        string,
+        { elevationGain: number; elevationLoss: number }
+    >();
+    const sortedWaypoints = [...(waypoints.value || [])].sort(
+        (a, b) => a.order - b.order,
+    );
+
+    let elevationGain = 0;
+    let elevationLoss = 0;
+
+    for (const waypoint of sortedWaypoints) {
+        cumulative.set(waypoint.id, { elevationGain, elevationLoss });
+
+        const segment = waypointSegmentsByStart.value.get(waypoint.id);
+        if (!segment) {
+            continue;
+        }
+
+        elevationGain += segment.elevationGain;
+        elevationLoss += segment.elevationLoss;
+    }
+
+    return cumulative;
+});
+
 function handleWaypointClick(waypoint: Waypoint) {
     emit("waypoint-select", waypoint);
 }
@@ -153,6 +183,15 @@ function formatWaypointDistance(meters: number) {
 function formatWaypointElevation(meters: number | null) {
     if (meters === null) return "";
     return formatElevation(meters, getElevationUnitSSR());
+}
+
+function getCumulativeElevationForWaypoint(waypointId: string) {
+    return (
+        cumulativeElevationByWaypoint.value.get(waypointId) || {
+            elevationGain: 0,
+            elevationLoss: 0,
+        }
+    );
 }
 
 function getWaypointPrimaryColor(waypoint: Waypoint): string {
@@ -222,7 +261,7 @@ function formatSegmentElevation(meters: number) {
 }
 
 function getSegmentForWaypoint(waypointId: string): WaypointSegment | null {
-    return getSegmentAfterWaypoint(waypointId, waypointSegments.value);
+    return waypointSegmentsByStart.value.get(waypointId) || null;
 }
 
 // Time calculation functions
@@ -458,9 +497,12 @@ function getActivityComparison(waypointId: string) {
 
                                     <!-- Distance and Elevation -->
                                     <div
-                                        class="flex items-center gap-4 text-(--sub-color) text-sm mb-1"
+                                        class="flex items-center gap-4 flex-wrap text-(--sub-color) text-sm mb-1"
                                     >
-                                        <span class="flex items-center gap-1">
+                                        <span
+                                            v-tooltip="'Distance from start'"
+                                            class="flex items-center gap-1"
+                                        >
                                             <Icon
                                                 name="lucide:arrow-right-to-line"
                                                 class="h-3 w-3 -translate-y-0.25"
@@ -476,6 +518,7 @@ function getActivityComparison(waypointId: string) {
                                             v-if="
                                                 waypoint.elevation !== undefined
                                             "
+                                            v-tooltip="'Waypoint elevation'"
                                             class="flex items-center gap-1"
                                         >
                                             <Icon
@@ -485,6 +528,50 @@ function getActivityComparison(waypointId: string) {
                                             {{
                                                 formatWaypointElevation(
                                                     waypoint.elevation,
+                                                )
+                                            }}
+                                        </span>
+
+                                        <span
+                                            v-if="
+                                                getCumulativeElevationForWaypoint(
+                                                    waypoint.id,
+                                                ).elevationGain > 0
+                                            "
+                                            v-tooltip="'Cumulative elevation gain'"
+                                            class="flex items-center gap-1 text-(--sub-color)"
+                                        >
+                                            <Icon
+                                                name="lucide:arrow-up"
+                                                class="h-3 w-3 -translate-y-0.25"
+                                            />
+                                            {{
+                                                formatSegmentElevation(
+                                                    getCumulativeElevationForWaypoint(
+                                                        waypoint.id,
+                                                    ).elevationGain,
+                                                )
+                                            }}
+                                        </span>
+
+                                        <span
+                                            v-if="
+                                                getCumulativeElevationForWaypoint(
+                                                    waypoint.id,
+                                                ).elevationLoss > 0
+                                            "
+                                            v-tooltip="'Cumulative elevation loss'"
+                                            class="flex items-center gap-1 text-(--sub-color)"
+                                        >
+                                            <Icon
+                                                name="lucide:arrow-down"
+                                                class="h-3 w-3 -translate-y-0.25"
+                                            />
+                                            {{
+                                                formatSegmentElevation(
+                                                    getCumulativeElevationForWaypoint(
+                                                        waypoint.id,
+                                                    ).elevationLoss,
                                                 )
                                             }}
                                         </span>

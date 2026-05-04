@@ -133,7 +133,7 @@ Characteristics:
   - Title, description
   - Distance / elevation stats
   - Race date (if any)
-  - Ordered waypoint list
+  - Ordered waypoint list, including each waypoint's elevation plus cumulative gain/loss up to that point
 - Footer disclaimer: read‑only.
 
 ### 5.2 Owner UI (Enable / Disable)
