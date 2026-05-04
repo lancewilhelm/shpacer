@@ -73,7 +73,10 @@ Course Selection → Map Display → Interactive Exploration → Waypoint Manage
    - In-map click prompts are anchored near the cursor and clamped to stay fully visible within map bounds
    - In-map click prompts dismiss when clicking outside the prompt
    - Waypoint creation and waypoint repositioning reject duplicate route positions (same course distance as an existing waypoint)
+   - Waypoint distance edits in the edit modal auto-apply on blur or Enter while remaining local until the user saves
+   - The waypoint edit map follows the selected waypoint when its route position changes
    - Exiting manual waypoint creation resets the map to the same full-course fit used on initial waypoint-tab render
+   - Clearing waypoint edits or canceling new waypoint creation resets the map to the full-course bounds view
    - Drag waypoints to reposition
 4. **Waypoint Management**: Edit names, tags, and properties
 5. **Export/Share**: Download original files or share course data

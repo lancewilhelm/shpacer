@@ -79,8 +79,7 @@ const selectedWaypointForEdit = ref<Waypoint | null>(null);
 const originalWaypointState = ref<Waypoint | null>(null); // Store original state for reset
 const editingWaypointDistance = ref<string>("");
 const editingStepSize = ref<number>(0.1); // Default step size: 0.1 miles or 0.1 km
-const preventMapCentering = ref<boolean>(false);
-const stableMapCenter = ref<[number, number] | null>(null); // Stable center during edits
+const stableMapCenter = ref<[number, number] | null>(null); // Active focus target during waypoint edits
 const resetWaypointMapToCourseBoundsKey = ref(0);
 const WAYPOINT_DISTANCE_DUPLICATE_TOLERANCE_METERS = 0.5;
 const waypointUpdateError = ref("");
@@ -491,6 +490,61 @@ function findNearestAvailableWaypointDistance(
   return null;
 }
 
+function buildWaypointRouteState(
+  distance: number,
+  positionOverride?: { lat: number; lng: number },
+): Pick<Waypoint, "lat" | "lng" | "distance" | "elevation" | "order"> | null {
+  const position = positionOverride ?? calculatePositionFromDistance(distance);
+  if (!position) return null;
+
+  return {
+    lat: position.lat,
+    lng: position.lng,
+    distance,
+    elevation: calculateElevationAtDistance(distance),
+    order: Math.floor(distance),
+  };
+}
+
+function replaceEditableWaypoint(updatedWaypoint: Waypoint): Waypoint {
+  editableWaypoints.value = [...editableWaypoints.value]
+    .filter((waypoint) => waypoint.id !== updatedWaypoint.id)
+    .concat(updatedWaypoint)
+    .sort((a, b) => a.distance - b.distance);
+
+  const refreshedWaypoint =
+    editableWaypoints.value.find((waypoint) => waypoint.id === updatedWaypoint.id) ??
+    updatedWaypoint;
+
+  if (newWaypointBeingCreated.value?.id === refreshedWaypoint.id) {
+    newWaypointBeingCreated.value = {
+      ...newWaypointBeingCreated.value,
+      ...refreshedWaypoint,
+    };
+  }
+
+  if (selectedWaypointForEdit.value?.id === refreshedWaypoint.id) {
+    selectedWaypointForEdit.value = refreshedWaypoint;
+  }
+
+  stableMapCenter.value = [refreshedWaypoint.lat, refreshedWaypoint.lng];
+  return refreshedWaypoint;
+}
+
+function applyWaypointRouteUpdate(
+  waypoint: Waypoint,
+  distance: number,
+  positionOverride?: { lat: number; lng: number },
+): Waypoint | null {
+  const routeState = buildWaypointRouteState(distance, positionOverride);
+  if (!routeState) return null;
+
+  return replaceEditableWaypoint({
+    ...waypoint,
+    ...routeState,
+  });
+}
+
 // Initialize form data when course changes
 watchEffect(() => {
   if (props.course) {
@@ -600,12 +654,12 @@ watch(
 
 // Computed properties for map display
 const mapCenter = computed((): [number, number] => {
-  // Use stable center during waypoint editing to prevent map jumping
+  // Follow the current waypoint focus target while editing.
   if (stableMapCenter.value) {
     return stableMapCenter.value;
   }
 
-  if (selectedWaypointForEdit.value && !preventMapCentering.value) {
+  if (selectedWaypointForEdit.value) {
     return [
       selectedWaypointForEdit.value.lat,
       selectedWaypointForEdit.value.lng,
@@ -655,7 +709,7 @@ const mapCenter = computed((): [number, number] => {
 
 const mapZoom = computed((): number => {
   if (selectedWaypointForEdit.value) {
-    return 15; // Closer zoom when a waypoint is selected (regardless of preventMapCentering)
+    return 15; // Closer zoom when a waypoint is selected.
   }
   return 10; // Default zoom to show course overview
 });
@@ -716,7 +770,6 @@ function closeModal() {
   selectedWaypointForEdit.value = null;
   originalWaypointState.value = null;
   stableMapCenter.value = null;
-  preventMapCentering.value = false;
   activeTab.value = "course";
   emit("close");
 }
@@ -1015,8 +1068,7 @@ async function createWaypoint(
     );
 
     // Add to local array and sort by distance
-    editableWaypoints.value.push(response.waypoint);
-    editableWaypoints.value.sort((a, b) => a.distance - b.distance);
+    replaceEditableWaypoint(response.waypoint);
 
     emit("waypoint-created", response.waypoint);
 
@@ -1059,33 +1111,28 @@ function startManualWaypointCreation() {
     ? distanceInMeters * 0.000621371
     : distanceInMeters / 1000;
 
-  const position = calculatePositionFromDistance(distanceInMeters);
-  if (!position) {
+  const routeState = buildWaypointRouteState(distanceInMeters);
+  if (!routeState) {
     waypointUpdateError.value =
       "Unable to calculate position for new waypoint.";
     return;
   }
 
-  // Calculate elevation at the initial distance
-  const elevation = calculateElevationAtDistance(distanceInMeters);
-
   newWaypointBeingCreated.value = {
     id: "temp-new-waypoint",
     name: "New Waypoint",
-    lat: position.lat,
-    lng: position.lng,
-    distance: distanceInMeters,
-    elevation: elevation,
-    order: Math.floor(distanceInMeters),
+    description: null,
+    ...routeState,
     tags: [], // Start with no tags
   };
 
   // Add to editable waypoints temporarily so it shows on the map
-  editableWaypoints.value.push(newWaypointBeingCreated.value as Waypoint);
-  editableWaypoints.value.sort((a, b) => a.distance - b.distance);
+  const editableWaypoint = replaceEditableWaypoint(
+    newWaypointBeingCreated.value as Waypoint,
+  );
 
   // Set this as the selected waypoint for editing
-  selectedWaypointForEdit.value = newWaypointBeingCreated.value as Waypoint;
+  selectedWaypointForEdit.value = editableWaypoint;
   editingWaypointDistance.value = distanceInUserUnits.toFixed(
     distanceUnitIsMiles.value ? 3 : 1,
   );
@@ -1181,7 +1228,6 @@ function cancelMapClickCreation() {
 
 function resetWaypointMapToInitialCourseView() {
   stableMapCenter.value = null;
-  preventMapCentering.value = false;
   resetWaypointMapToCourseBoundsKey.value++;
 }
 
@@ -1232,8 +1278,7 @@ async function saveNewWaypoint() {
     }
 
     // Add the real waypoint and sort by distance
-    editableWaypoints.value.push(response.waypoint);
-    editableWaypoints.value.sort((a, b) => a.distance - b.distance);
+    replaceEditableWaypoint(response.waypoint);
 
     emit("waypoint-created", response.waypoint);
 
@@ -1273,10 +1318,7 @@ function selectWaypointForEdit(waypoint: Waypoint) {
   // Store the original state for potential reset
   originalWaypointState.value = { ...waypoint };
 
-  // Set stable map center to current view to prevent jumping
-  if (!stableMapCenter.value) {
-    stableMapCenter.value = [waypoint.lat, waypoint.lng];
-  }
+  stableMapCenter.value = [waypoint.lat, waypoint.lng];
 
   selectedWaypointForEdit.value = waypoint;
 }
@@ -1318,62 +1360,23 @@ function handleMapWaypointClick(waypoint: Waypoint) {
 
 function applyWaypointPositionFromMapCandidate(candidate: TrackClickCandidate) {
   if (!selectedWaypointForEdit.value) return;
-
-  // Set stable map center if not already set
-  if (!stableMapCenter.value) {
-    stableMapCenter.value = [
-      selectedWaypointForEdit.value.lat,
-      selectedWaypointForEdit.value.lng,
-    ];
-  }
-
-  // Set flag to prevent map centering during line click placement
-  preventMapCentering.value = true;
-
-  const elevationAtClick = calculateElevationAtDistance(candidate.distance);
-
-  // Update the waypoint to this position
-  selectedWaypointForEdit.value.lat = candidate.lat;
-  selectedWaypointForEdit.value.lng = candidate.lng;
-  selectedWaypointForEdit.value.distance = candidate.distance;
-  selectedWaypointForEdit.value.order = Math.floor(candidate.distance);
-  selectedWaypointForEdit.value.elevation = elevationAtClick;
-
-  // If we're creating a new waypoint, also update the creation object and the temporary waypoint in the list
-  if (
-    newWaypointBeingCreated.value &&
-    selectedWaypointForEdit.value.id === newWaypointBeingCreated.value.id
-  ) {
-    newWaypointBeingCreated.value.lat = candidate.lat;
-    newWaypointBeingCreated.value.lng = candidate.lng;
-    newWaypointBeingCreated.value.distance = candidate.distance;
-    newWaypointBeingCreated.value.order = Math.floor(candidate.distance);
-    newWaypointBeingCreated.value.elevation = elevationAtClick;
-
-    // Update the temporary waypoint in the editable list and re-sort
-    const tempIndex = editableWaypoints.value.findIndex(
-      (w) => w.id === newWaypointBeingCreated.value?.id,
-    );
-    if (tempIndex !== -1) {
-      editableWaypoints.value[tempIndex] = {
-        ...(newWaypointBeingCreated.value as Waypoint),
-      };
-      editableWaypoints.value.sort((a, b) => a.distance - b.distance);
-    }
-  }
+  const updatedWaypoint = applyWaypointRouteUpdate(
+    selectedWaypointForEdit.value,
+    candidate.distance,
+    {
+      lat: candidate.lat,
+      lng: candidate.lng,
+    },
+  );
+  if (!updatedWaypoint) return;
 
   // Update the distance input field in user's preferred units
   const distanceInUserUnits = distanceUnitIsMiles.value
-    ? candidate.distance * 0.000621371 // Convert meters to miles
-    : candidate.distance / 1000; // Convert meters to kilometers
+    ? updatedWaypoint.distance * 0.000621371 // Convert meters to miles
+    : updatedWaypoint.distance / 1000; // Convert meters to kilometers
   editingWaypointDistance.value = distanceInUserUnits.toFixed(
     distanceUnitIsMiles.value ? 3 : 1,
   );
-
-  // Reset the flag after a short delay to allow normal centering again
-  setTimeout(() => {
-    preventMapCentering.value = false;
-  }, 100);
 }
 
 function handleMapLineClick(coords: { lat: number; lng: number }) {
@@ -1592,14 +1595,6 @@ function adjustWaypointDistance(
   waypoint: Waypoint,
   direction: "forward" | "backward",
 ) {
-  // Set stable map center if not already set
-  if (!stableMapCenter.value && waypoint) {
-    stableMapCenter.value = [waypoint.lat, waypoint.lng];
-  }
-
-  // Set flag to prevent map centering during nudge
-  preventMapCentering.value = true;
-
   // Convert step size from user units to meters
   const stepSizeInMeters = distanceUnitIsMiles.value
     ? editingStepSize.value * 1609.34 // Convert miles to meters
@@ -1609,70 +1604,20 @@ function adjustWaypointDistance(
     direction === "forward" ? stepSizeInMeters : -stepSizeInMeters;
   const newDistance = Math.max(0, waypoint.distance + adjustment);
 
-  // Calculate new position based on distance
-  const newPosition = calculatePositionFromDistance(newDistance);
-  if (newPosition) {
-    // Calculate elevation at the new distance
-    const newElevation = calculateElevationAtDistance(newDistance);
+  const updatedWaypoint = applyWaypointRouteUpdate(waypoint, newDistance);
+  if (!updatedWaypoint) return;
 
-    // Update the waypoint locally (this will affect the map display)
-    waypoint.distance = newDistance;
-    waypoint.order = Math.floor(newDistance);
-    waypoint.lat = newPosition.lat;
-    waypoint.lng = newPosition.lng;
-    waypoint.elevation = newElevation;
-
-    // If we're creating a new waypoint, also update the creation object and the temporary waypoint in the list
-    if (
-      newWaypointBeingCreated.value &&
-      waypoint.id === newWaypointBeingCreated.value.id
-    ) {
-      newWaypointBeingCreated.value.distance = newDistance;
-      newWaypointBeingCreated.value.order = Math.floor(newDistance);
-      newWaypointBeingCreated.value.lat = newPosition.lat;
-      newWaypointBeingCreated.value.lng = newPosition.lng;
-      newWaypointBeingCreated.value.elevation = newElevation;
-
-      // Update the temporary waypoint in the editable list and re-sort
-      const tempIndex = editableWaypoints.value.findIndex(
-        (w) => w.id === newWaypointBeingCreated.value?.id,
-      );
-      if (tempIndex !== -1) {
-        editableWaypoints.value[tempIndex] = {
-          ...(newWaypointBeingCreated.value as Waypoint),
-        };
-        editableWaypoints.value.sort((a, b) => a.distance - b.distance);
-      }
-    }
-
-    // Update the distance input field in user's preferred units
-    const distanceInUserUnits = distanceUnitIsMiles.value
-      ? newDistance * 0.000621371 // Convert meters to miles
-      : newDistance / 1000; // Convert meters to kilometers
-    editingWaypointDistance.value = distanceInUserUnits.toFixed(
-      distanceUnitIsMiles.value ? 3 : 1,
-    );
-  }
-
-  // Reset the flag after a short delay to allow normal centering again
-  setTimeout(() => {
-    preventMapCentering.value = false;
-  }, 100);
+  // Update the distance input field in user's preferred units
+  const distanceInUserUnits = distanceUnitIsMiles.value
+    ? updatedWaypoint.distance * 0.000621371 // Convert meters to miles
+    : updatedWaypoint.distance / 1000; // Convert meters to kilometers
+  editingWaypointDistance.value = distanceInUserUnits.toFixed(
+    distanceUnitIsMiles.value ? 3 : 1,
+  );
 }
 
 function updateWaypointFromDistanceInput() {
   if (!selectedWaypointForEdit.value) return;
-
-  // Set stable map center if not already set
-  if (!stableMapCenter.value) {
-    stableMapCenter.value = [
-      selectedWaypointForEdit.value.lat,
-      selectedWaypointForEdit.value.lng,
-    ];
-  }
-
-  // Set flag to prevent map centering during distance input update
-  preventMapCentering.value = true;
 
   const inputDistance = parseFloat(editingWaypointDistance.value);
   if (isNaN(inputDistance) || inputDistance < 0) {
@@ -1683,11 +1628,6 @@ function updateWaypointFromDistanceInput() {
     editingWaypointDistance.value = distanceInUserUnits.toFixed(
       distanceUnitIsMiles.value ? 3 : 1,
     );
-
-    // Reset the flag
-    setTimeout(() => {
-      preventMapCentering.value = false;
-    }, 100);
     return;
   }
 
@@ -1696,44 +1636,7 @@ function updateWaypointFromDistanceInput() {
     ? inputDistance * 1609.34 // Convert miles to meters
     : inputDistance * 1000; // Convert kilometers to meters
 
-  // Calculate new position based on distance
-  const newPosition = calculatePositionFromDistance(newDistanceInMeters);
-  if (newPosition) {
-    // Calculate elevation at the new distance
-    const newElevation = calculateElevationAtDistance(newDistanceInMeters);
-
-    // Update the waypoint locally
-    selectedWaypointForEdit.value.distance = newDistanceInMeters;
-    selectedWaypointForEdit.value.order = Math.floor(newDistanceInMeters);
-    selectedWaypointForEdit.value.lat = newPosition.lat;
-    selectedWaypointForEdit.value.lng = newPosition.lng;
-    selectedWaypointForEdit.value.elevation = newElevation;
-
-    // If we're creating a new waypoint, also update the creation object and the temporary waypoint in the list
-    if (newWaypointBeingCreated.value) {
-      newWaypointBeingCreated.value.distance = newDistanceInMeters;
-      newWaypointBeingCreated.value.order = Math.floor(newDistanceInMeters);
-      newWaypointBeingCreated.value.lat = newPosition.lat;
-      newWaypointBeingCreated.value.lng = newPosition.lng;
-      newWaypointBeingCreated.value.elevation = newElevation;
-
-      // Update the temporary waypoint in the editable list and re-sort
-      const tempIndex = editableWaypoints.value.findIndex(
-        (w) => w.id === newWaypointBeingCreated.value?.id,
-      );
-      if (tempIndex !== -1) {
-        editableWaypoints.value[tempIndex] = {
-          ...(newWaypointBeingCreated.value as Waypoint),
-        };
-        editableWaypoints.value.sort((a, b) => a.distance - b.distance);
-      }
-    }
-  }
-
-  // Reset the flag after a short delay to allow normal centering again
-  setTimeout(() => {
-    preventMapCentering.value = false;
-  }, 100);
+  applyWaypointRouteUpdate(selectedWaypointForEdit.value, newDistanceInMeters);
 }
 
 function saveWaypointChanges() {
@@ -2021,7 +1924,7 @@ function canMoveBackward(waypoint: Waypoint): boolean {
               :zoom="mapZoom"
               :waypoints="editableWaypoints"
               :selected-waypoint="selectedWaypointForEdit"
-              :auto-zoom-to-waypoint="!preventMapCentering"
+              :auto-zoom-to-waypoint="!!selectedWaypointForEdit"
               :map-click-location="mapClickPreviewLocation"
               :reset-to-course-bounds-key="resetWaypointMapToCourseBoundsKey"
               @waypoint-click="handleMapWaypointClick"
@@ -2208,7 +2111,7 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                                     </div> -->
 
                   <!-- Distance Input -->
-                  <div class="flex items-center gap-2 mb-2">
+                  <div class="mb-2">
                     <input
                       v-model="editingWaypointDistance"
                       type="number"
@@ -2223,12 +2126,6 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                       @blur="updateWaypointFromDistanceInput"
                       @keyup.enter="updateWaypointFromDistanceInput"
                     />
-                    <button
-                      class="px-3 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity text-sm"
-                      @click="updateWaypointFromDistanceInput"
-                    >
-                      Update
-                    </button>
                   </div>
 
                   <!-- Step Size Control -->
