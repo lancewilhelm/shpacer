@@ -944,9 +944,14 @@ function getActivityComparison(waypointId: string) {
                                                         waypoint.id,
                                                     )
                                                 "
-                                                class="flex items-center gap-4 justify-center mt-1 text-(--main-color)"
+                                                class="flex items-center gap-4 justify-center mt-1"
                                             >
-                                                <div class="flex items-center gap-1">
+                                                <span
+                                                    v-tooltip="
+                                                        'Actual segment time'
+                                                    "
+                                                    class="flex items-center gap-1"
+                                                >
                                                     <Icon
                                                         name="lucide:flag"
                                                         class="w-3 h-3 -translate-y-0.25"
@@ -969,13 +974,19 @@ function getActivityComparison(waypointId: string) {
                                                                 : "—"
                                                         }}
                                                     </span>
-                                                </div>
-                                                <div class="flex items-center gap-1">
+                                                </span>
+                                                <span
+                                                    v-tooltip="
+                                                        'Segment delta versus plan'
+                                                    "
+                                                    class="flex items-center gap-1 text-xs text-(--sub-color)"
+                                                >
                                                     <Icon
                                                         name="lucide:git-compare-arrows"
                                                         class="w-3 h-3 -translate-y-0.25"
                                                     />
                                                     <span>
+                                                        Delta
                                                         {{
                                                             formatSignedDuration(
                                                                 getActivityComparison(
@@ -986,7 +997,7 @@ function getActivityComparison(waypointId: string) {
                                                             )
                                                         }}
                                                     </span>
-                                                </div>
+                                                </span>
                                             </div>
                                         </div>
                                     </div>
