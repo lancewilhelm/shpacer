@@ -1,6 +1,6 @@
-# Splits, Units, and Map Highlighting
+# Splits, Units, and Route Highlighting
 
-This document explains how split distance units are resolved and how map highlighting behaves when selecting splits. It covers the interaction between course defaults, user settings, and the UI components that render splits and highlights.
+This document explains how split distance units are resolved and how route highlighting behaves when selecting split rows or interwaypoint segments. It covers the interaction between course defaults, user settings, and the UI components that render these views and highlights.
 
 ## Overview
 
@@ -8,7 +8,8 @@ This document explains how split distance units are resolved and how map highlig
   - If the user’s distance unit is set to “follow course,” splits use the course’s default distance unit.
   - If the user overrides the distance unit, splits use the override.
 - Splits are generated at even unit boundaries (every 1 mile or every 1 km).
-- Clicking a split (or a range of splits) highlights the corresponding segment on the map and can auto-fit the map view to that segment.
+- Clicking a split (or a range of splits) highlights the corresponding route segment on the map and chart and can auto-fit the map view to that segment.
+- Clicking an interwaypoint segment in the Waypoints tab highlights that waypoint-to-waypoint route segment using the same map/chart highlight pipeline.
 
 ## Unit Resolution
 
@@ -52,18 +53,24 @@ Result:
 Notes on pacing:
 - The “Pace” column uses the plan’s `paceUnit` (`min_per_mi` or `min_per_km`) for display. This is independent from the course/user distance unit choice for split sizes.
 
-## Split Selection and Map Highlighting
+## Route Selection and Highlighting
 
 - `SplitsTable.vue` emits:
   - `split-click` with `{ start, end, index }` for single-row selection.
   - `split-range-click` with `{ startIndex, endIndex, start, end }` for shift-click range selection.
   - `split-cancel` to clear selection.
 
+- `WaypointList.vue` emits:
+  - `segment-click` with `{ fromWaypointId, toWaypointId, start, end }` for single interwaypoint segment selection.
+  - `segment-cancel` when the selected segment row is clicked again.
+
 - `pages/courses/[id].vue`:
-  - Maintains `selectedSplitIndex`, `selectedSplitRange`, and `splitHighlight` (`{ start, end, mid }`).
-  - Computes `stableHighlightSegment` (start/end only) for the map.
-  - Passes `:highlight-segment="stableHighlightSegment"` to the map and sets `:fit-highlight="waypointPanelTab === 'splits' && !!splitHighlight"` so auto-fit only happens when the Splits tab is active and a split is selected.
-  - Deselecting a split clears the highlight and remounts the map to re-fit to the full track.
+  - Maintains split row selection state plus a shared route highlight model with a `source` of either `split` or `waypoint-segment`.
+  - Computes `stableHighlightSegment` (start/end only) for the map and chart.
+  - Passes `:highlight-segment="stableHighlightSegment"` to the map and chart and sets `:fit-highlight="shouldFitHighlightSegment"` so auto-fit applies to either source when that detail view is active.
+  - Clears waypoint selection when a waypoint segment is selected, and clears waypoint-segment selection when a waypoint is selected.
+  - Deselecting a split or waypoint segment clears the highlight and remounts the map to re-fit to the full track.
+  - Keeps `waypointPanelTab` synchronized with the mobile Waypoints/Splits buttons so map/chart stay aligned with the last selected detail view on mobile.
 
 - `LeafletMap.vue`:
   - Draws the highlighted segment as a polyline between the provided `highlightSegment.start` and `highlightSegment.end` distance offsets (meters).
@@ -82,9 +89,18 @@ Notes on pacing:
   - Synthetic split waypoints land every 1 mile.
   - Map highlighting behaves identically.
 
+- In the Waypoints tab:
+  - Clicking a waypoint-to-waypoint segment row highlights that exact route segment on both map and chart.
+  - Clicking the same segment row again clears the highlight and restores the full-track fit.
+  - Clicking a waypoint clears any active waypoint-segment highlight.
+
 - With no selection:
   - The map shows the full track (no highlight).
-  - Selecting and then re-clicking the same split clears the selection and restores the full track view.
+  - Selecting and then re-clicking the same split or waypoint segment clears the selection and restores the full track view.
+
+- On mobile:
+  - Selecting a split or waypoint segment in its list view persists the corresponding highlight when switching to Map or Charts.
+  - The map marker style follows the last active detail tab (`waypoints` vs `splits`).
 
 ## How to Test
 
@@ -102,9 +118,13 @@ Notes on pacing:
    - Ensure the correct segment is highlighted on the map.
    - Shift-click two rows to create a range selection; verify the entire combined segment is highlighted.
    - Click the selected row again to clear the highlight and return to the full-track view.
-5. Switch between tabs (Waypoints/Splits) and verify:
-   - Auto-fit to highlighted segment only occurs when the Splits tab is active.
-   - Waypoint labels use “S” / numbers / “F” when `displayMarkersAsSplits` is active.
+5. Switch to the Waypoints tab and:
+   - Click an interwaypoint segment row and verify the correct route section is highlighted on the map and chart.
+   - Click the same segment again and verify the highlight clears and the map returns to the full track.
+   - Click a waypoint after selecting a segment and verify the segment highlight clears.
+6. On mobile:
+   - Select a split, switch to Map, and verify the highlight and split markers are preserved.
+   - Select an interwaypoint segment, switch to Map or Charts, and verify the same segment remains highlighted.
 
 ## Troubleshooting
 
@@ -113,10 +133,11 @@ Notes on pacing:
   - Confirm `SplitsTable` receives `:course-defaults="course || null"` so SSR-safe unit helpers resolve correctly.
 
 - Map does not auto-fit on selection:
-  - Auto-fit happens only when the Splits tab is active and a split is selected (`fitHighlight` passed true). Check that `waypointPanelTab` is “splits.”
+  - Auto-fit happens when the highlighted route source matches the active detail view. Check that `waypointPanelTab` matches the selected detail source (`splits` or `waypoints`).
 
 - Highlight doesn’t change on click:
-  - Verify that `SplitsTable` emits `split-click` and the page updates `splitHighlight`.
+  - Verify that `SplitsTable` emits `split-click` and the page updates the shared route highlight state.
+  - Verify that `WaypointList` emits `segment-click` for interwaypoint rows.
   - Check that `LeafletMap` receives `:highlight-segment` and that `geoJsonData` is present.
 
 ## Relevant Components
@@ -125,10 +146,13 @@ Notes on pacing:
   - Resolves and renders split units; emits selection events.
 
 - `pages/courses/[id].vue`
-  - Coordinates unit resolution for splits, generates synthetic split waypoints, manages selection state, passes highlight info to the map.
+  - Coordinates unit resolution for splits, generates synthetic split waypoints, manages selection state, passes highlight info to the map and chart.
+
+- `components/WaypointList.vue`
+  - Renders interwaypoint segment rows and emits waypoint-segment selection events.
 
 - `components/LeafletMap.vue`
-  - Renders split-style waypoint markers and draws highlighted segments with optional auto-fit.
+  - Renders split-style waypoint markers when appropriate and draws highlighted route segments with optional auto-fit.
 
 - `utils/units.ts`
   - SSR-safe helpers to resolve units using course defaults and user settings.

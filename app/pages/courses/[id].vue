@@ -41,6 +41,21 @@ type Waypoint = {
   order: number;
 };
 
+type RouteSegmentHighlightSource = "split" | "waypoint-segment";
+
+type RouteSegmentHighlight = {
+  start: number;
+  end: number;
+  source: RouteSegmentHighlightSource;
+};
+
+type SelectedWaypointSegment = {
+  fromWaypointId: string;
+  toWaypointId: string;
+  start: number;
+  end: number;
+};
+
 // Auth guard removed: this page now supports unified public (read‑only) and member modes.
 // Access/security is handled by the unified /api/courses/:id endpoint which supplies
 // `mode` ("public" | "member") and a capabilities map for gating UI & mutations.
@@ -1694,14 +1709,13 @@ const displayWaypoints = computed<Waypoint[]>(() => {
     : waypoints.value;
 });
 
-// Split highlight state and helpers
-const splitHighlight = ref<{ start: number; end: number; mid: number } | null>(
-  null,
-);
+// Route segment highlight state and helpers
+const routeSegmentHighlight = ref<RouteSegmentHighlight | null>(null);
 const selectedSplitIndex = ref<number | null>(null);
 const selectedSplitRange = ref<{ startIndex: number; endIndex: number } | null>(
   null,
 );
+const selectedWaypointSegment = ref<SelectedWaypointSegment | null>(null);
 const mapResetKey = ref(0);
 
 onMounted(() => {
@@ -1747,11 +1761,70 @@ watch(
   { immediate: true, deep: false },
 );
 
+function isHighlightSourceActive(source: RouteSegmentHighlightSource): boolean {
+  if (source === "split") return waypointPanelTab.value === "splits";
+  return waypointPanelTab.value === "waypoints";
+}
+
 const stableHighlightSegment = computed(() => {
-  if (waypointPanelTab.value !== "splits" || !splitHighlight.value) return null;
-  return { start: splitHighlight.value.start, end: splitHighlight.value.end };
+  if (
+    !routeSegmentHighlight.value ||
+    !isHighlightSourceActive(routeSegmentHighlight.value.source)
+  ) {
+    return null;
+  }
+  return {
+    start: routeSegmentHighlight.value.start,
+    end: routeSegmentHighlight.value.end,
+  };
 });
+
+const shouldFitHighlightSegment = computed(
+  () => !!stableHighlightSegment.value,
+);
 /* Removed highlight-controlled center/zoom to avoid snapping map view during other interactions */
+
+function clearWaypointSegmentSelection(options?: { resetMap?: boolean }) {
+  const resetMap = options?.resetMap ?? true;
+  const hadSelection =
+    !!selectedWaypointSegment.value ||
+    routeSegmentHighlight.value?.source === "waypoint-segment";
+
+  selectedWaypointSegment.value = null;
+
+  if (routeSegmentHighlight.value?.source === "waypoint-segment") {
+    routeSegmentHighlight.value = null;
+  }
+
+  if (hadSelection) {
+    elevationHoverPoint.value = null;
+    if (resetMap) {
+      mapResetKey.value++;
+    }
+  }
+}
+
+function clearSplitSelection(options?: { resetMap?: boolean }) {
+  const resetMap = options?.resetMap ?? true;
+  const hadSelection =
+    selectedSplitIndex.value !== null ||
+    selectedSplitRange.value !== null ||
+    routeSegmentHighlight.value?.source === "split";
+
+  selectedSplitIndex.value = null;
+  selectedSplitRange.value = null;
+
+  if (routeSegmentHighlight.value?.source === "split") {
+    routeSegmentHighlight.value = null;
+  }
+
+  if (hadSelection) {
+    elevationHoverPoint.value = null;
+    if (resetMap) {
+      mapResetKey.value++;
+    }
+  }
+}
 
 function handleSplitClick(payload: {
   start: number;
@@ -1760,19 +1833,19 @@ function handleSplitClick(payload: {
 }) {
   // Toggle selection: deselect if clicking the same row
   if (selectedSplitIndex.value === payload.index) {
-    selectedSplitIndex.value = null;
-    selectedSplitRange.value = null;
-    splitHighlight.value = null;
-    elevationHoverPoint.value = null; // do not pin cursor on deselect
-    mapResetKey.value++; // remount map to refit to full track
+    clearSplitSelection();
     return;
   }
 
   // Select this single split and highlight segment; clear any range selection
+  clearWaypointSegmentSelection({ resetMap: false });
   selectedSplitRange.value = null;
   selectedSplitIndex.value = payload.index;
-  const mid = (payload.start + payload.end) / 2;
-  splitHighlight.value = { start: payload.start, end: payload.end, mid };
+  routeSegmentHighlight.value = {
+    start: payload.start,
+    end: payload.end,
+    source: "split",
+  };
 }
 
 function handleSplitRangeClick(payload: {
@@ -1781,21 +1854,36 @@ function handleSplitRangeClick(payload: {
   start: number;
   end: number;
 }) {
+  clearWaypointSegmentSelection({ resetMap: false });
   selectedSplitIndex.value = null;
   selectedSplitRange.value = {
     startIndex: Math.min(payload.startIndex, payload.endIndex),
     endIndex: Math.max(payload.startIndex, payload.endIndex),
   };
-  const mid = (payload.start + payload.end) / 2;
-  splitHighlight.value = { start: payload.start, end: payload.end, mid };
+  routeSegmentHighlight.value = {
+    start: payload.start,
+    end: payload.end,
+    source: "split",
+  };
 }
 
 function handleSplitCancel() {
-  selectedSplitIndex.value = null;
-  selectedSplitRange.value = null;
-  splitHighlight.value = null;
-  elevationHoverPoint.value = null;
-  mapResetKey.value++;
+  clearSplitSelection();
+}
+
+function handleWaypointSegmentClick(payload: SelectedWaypointSegment) {
+  clearSplitSelection({ resetMap: false });
+  selectedWaypoint.value = null;
+  selectedWaypointSegment.value = payload;
+  routeSegmentHighlight.value = {
+    start: payload.start,
+    end: payload.end,
+    source: "waypoint-segment",
+  };
+}
+
+function handleWaypointSegmentCancel() {
+  clearWaypointSegmentSelection();
 }
 
 // -------- Plan Stats (header) helpers --------
@@ -2042,6 +2130,7 @@ const publicViewLabel = computed(() => {
 
 // Handle waypoint events
 function handleWaypointSelect(waypoint: Waypoint) {
+  clearWaypointSegmentSelection();
   // Toggle selection: if the same waypoint is clicked, deselect it
   if (selectedWaypoint.value?.id === waypoint.id) {
     selectedWaypoint.value = null;
@@ -2059,6 +2148,7 @@ function handleWaypointLeave() {
 }
 
 function handleWaypointClick(waypoint: Waypoint) {
+  clearWaypointSegmentSelection();
   // Toggle selection: if the same waypoint is clicked, deselect it
   if (selectedWaypoint.value?.id === waypoint.id) {
     selectedWaypoint.value = null;
@@ -2105,6 +2195,15 @@ function openPaceExplanationModal() {
   if (!currentPlan.value) return;
   mobilePanelTab.value = "charts";
   paceExplanationModalOpen.value = true;
+}
+
+function setWaypointDetailTab(tab: "waypoints" | "splits") {
+  waypointPanelTab.value = tab;
+}
+
+function setMobileWaypointDetailTab(tab: "waypoints" | "splits") {
+  waypointPanelTab.value = tab;
+  mobilePanelTab.value = tab;
 }
 
 function closePaceExplanationModal() {
@@ -2733,7 +2832,7 @@ onUnmounted(() => {
                 'text-(--sub-color) hover:text-(--main-color)':
                   mobilePanelTab !== 'waypoints',
               }"
-              @click="mobilePanelTab = 'waypoints'"
+              @click="setMobileWaypointDetailTab('waypoints')"
             >
               Waypoints
             </button>
@@ -2745,7 +2844,7 @@ onUnmounted(() => {
                 'text-(--sub-color) hover:text-(--main-color)':
                   mobilePanelTab !== 'splits',
               }"
-              @click="mobilePanelTab = 'splits'"
+              @click="setMobileWaypointDetailTab('splits')"
             >
               Splits
             </button>
@@ -2913,9 +3012,7 @@ onUnmounted(() => {
                     :elevation-hover-point="elevationHoverPoint"
                     :highlight-segment="stableHighlightSegment"
                     highlight-color="#ff0000"
-                    :fit-highlight="
-                      waypointPanelTab === 'splits' && !!splitHighlight
-                    "
+                    :fit-highlight="shouldFitHighlightSegment"
                     @map-hover="handleMapHover"
                     @map-leave="handleMapLeave"
                     @waypoint-click="handleWaypointClick"
@@ -2961,6 +3058,8 @@ onUnmounted(() => {
                   :activity="currentActivity"
                   :show-pace-chart="!!currentPlan"
                   :show-grade-explanation-modal="paceExplanationModalOpen"
+                  :highlight-segment="stableHighlightSegment"
+                  highlight-color="#ff0000"
                   @elevation-hover="handleElevationHover"
                   @elevation-leave="handleElevationLeave"
                   @pace-hover="handlePaceHover"
@@ -2989,6 +3088,7 @@ onUnmounted(() => {
               :read-only="mode === 'public' || !capabilities.canEditWaypoints"
               :waypoints="waypoints"
               :selected-waypoint="selectedWaypoint"
+              :selected-segment="selectedWaypointSegment"
               :current-plan-id="currentPlanId"
               :current-plan="effectivePlanForTiming"
               :activity-comparison-waypoints="activityPlanDetail?.waypoints || []"
@@ -3002,6 +3102,8 @@ onUnmounted(() => {
               @waypoint-select="handleWaypointSelect"
               @waypoint-hover="handleWaypointHover"
               @waypoint-leave="handleWaypointLeave"
+              @segment-click="handleWaypointSegmentClick"
+              @segment-cancel="handleWaypointSegmentCancel"
               @save-waypoint-note="saveWaypointNote"
               @delete-waypoint-note="deleteWaypointNote"
               @save-waypoint-stoppage-time="saveWaypointStoppageTime"
@@ -3093,9 +3195,7 @@ onUnmounted(() => {
                     :elevation-hover-point="elevationHoverPoint"
                     :highlight-segment="stableHighlightSegment"
                     highlight-color="#ff0000"
-                    :fit-highlight="
-                      waypointPanelTab === 'splits' && !!splitHighlight
-                    "
+                    :fit-highlight="shouldFitHighlightSegment"
                     @map-hover="handleMapHover"
                     @map-leave="handleMapLeave"
                     @waypoint-click="handleWaypointClick"
@@ -3143,7 +3243,7 @@ onUnmounted(() => {
                     'text-(--sub-color) hover:text-(--main-color)':
                       waypointPanelTab !== 'waypoints',
                   }"
-                  @click="waypointPanelTab = 'waypoints'"
+                  @click="setWaypointDetailTab('waypoints')"
                 >
                   Waypoints
                 </button>
@@ -3155,7 +3255,7 @@ onUnmounted(() => {
                     'text-(--sub-color) hover:text-(--main-color)':
                       waypointPanelTab !== 'splits',
                   }"
-                  @click="waypointPanelTab = 'splits'"
+                  @click="setWaypointDetailTab('splits')"
                 >
                   Splits
                 </button>
@@ -3169,6 +3269,7 @@ onUnmounted(() => {
                   "
                   :waypoints="waypoints"
                   :selected-waypoint="selectedWaypoint"
+                  :selected-segment="selectedWaypointSegment"
                   :current-plan-id="currentPlanId"
                   :current-plan="effectivePlanForTiming"
                   :activity-comparison-waypoints="
@@ -3184,6 +3285,8 @@ onUnmounted(() => {
                   @waypoint-select="handleWaypointSelect"
                   @waypoint-hover="handleWaypointHover"
                   @waypoint-leave="handleWaypointLeave"
+                  @segment-click="handleWaypointSegmentClick"
+                  @segment-cancel="handleWaypointSegmentCancel"
                   @save-waypoint-note="saveWaypointNote"
                   @delete-waypoint-note="deleteWaypointNote"
                   @save-waypoint-stoppage-time="saveWaypointStoppageTime"

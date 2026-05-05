@@ -31,6 +31,11 @@ type Waypoint = {
     order: number;
 };
 
+type SelectedWaypointSegment = {
+    fromWaypointId: string;
+    toWaypointId: string;
+};
+
 interface Props {
     /**
      * When true, the list is rendered in read-only mode:
@@ -41,6 +46,7 @@ interface Props {
     readOnly?: boolean;
     waypoints?: Waypoint[];
     selectedWaypoint?: Waypoint | null;
+    selectedSegment?: SelectedWaypointSegment | null;
     currentPlanId?: string | null;
     currentPlan?: SelectPlan | null;
     activityComparisonWaypoints?: CourseActivityWaypointComparison[];
@@ -55,6 +61,15 @@ interface Emits {
     "waypoint-select": [waypoint: Waypoint];
     "waypoint-hover": [waypoint: Waypoint];
     "waypoint-leave": [];
+    "segment-click": [
+        payload: {
+            fromWaypointId: string;
+            toWaypointId: string;
+            start: number;
+            end: number;
+        },
+    ];
+    "segment-cancel": [];
     "save-waypoint-note": [waypointId: string, notes: string];
     "delete-waypoint-note": [waypointId: string];
     "save-waypoint-stoppage-time": [waypointId: string, stoppageTime: number];
@@ -64,6 +79,7 @@ interface Emits {
 const _props = withDefaults(defineProps<Props>(), {
     waypoints: () => [],
     selectedWaypoint: null,
+    selectedSegment: null,
     currentPlanId: null,
     currentPlan: null,
     activityComparisonWaypoints: () => [],
@@ -77,6 +93,7 @@ const _props = withDefaults(defineProps<Props>(), {
 const {
     waypoints,
     selectedWaypoint,
+    selectedSegment,
     currentPlanId,
     currentPlan,
     activityComparisonWaypoints,
@@ -137,6 +154,10 @@ const waypointSegmentsByStart = computed<Map<string, WaypointSegment>>(() => {
     );
 });
 
+const waypointById = computed<Map<string, Waypoint>>(() => {
+    return new Map((waypoints.value || []).map((waypoint) => [waypoint.id, waypoint]));
+});
+
 const cumulativeElevationByWaypoint = computed(() => {
     const cumulative = new Map<
         string,
@@ -174,6 +195,39 @@ function handleWaypointHover(waypoint: Waypoint) {
 
 function handleWaypointLeave() {
     emit("waypoint-leave");
+}
+
+function isSegmentSelected(segment: WaypointSegment): boolean {
+    return (
+        selectedSegment.value?.fromWaypointId === segment.fromWaypoint &&
+        selectedSegment.value?.toWaypointId === segment.toWaypoint
+    );
+}
+
+function getSegmentTextClass(segment: WaypointSegment): string {
+    return isSegmentSelected(segment)
+        ? "text-(--main-color)"
+        : "text-(--sub-color)";
+}
+
+function handleSegmentClick(segment: WaypointSegment) {
+    if (isSegmentSelected(segment)) {
+        emit("segment-cancel");
+        return;
+    }
+
+    const fromWaypoint = waypointById.value.get(segment.fromWaypoint);
+    const toWaypoint = waypointById.value.get(segment.toWaypoint);
+    if (!fromWaypoint || !toWaypoint) {
+        return;
+    }
+
+    emit("segment-click", {
+        fromWaypointId: segment.fromWaypoint,
+        toWaypointId: segment.toWaypoint,
+        start: Math.min(fromWaypoint.distance, toWaypoint.distance),
+        end: Math.max(fromWaypoint.distance, toWaypoint.distance),
+    });
 }
 
 function formatWaypointDistance(meters: number) {
@@ -711,15 +765,41 @@ function getActivityComparison(waypointId: string) {
                         <!-- Segment Information (between this waypoint and the next) -->
                         <div
                             v-if="index < waypoints.length - 1"
-                            class="flex justify-center my-1 border-t border-b border-dotted text-(--sub-color)"
+                            class="my-1"
                         >
                             <div class="w-full">
                                 <div
                                     v-if="getSegmentForWaypoint(waypoint.id)"
-                                    class="px-2 py-1 text-xs"
+                                    class="px-2 py-1 text-xs rounded-lg border cursor-pointer transition-all duration-200"
+                                    :class="{
+                                        'bg-(--sub-alt-color) border-(--main-color) text-(--main-color)':
+                                            isSegmentSelected(
+                                                getSegmentForWaypoint(
+                                                    waypoint.id,
+                                                )!,
+                                            ),
+                                        'border-transparent text-(--sub-color) hover:bg-(--sub-alt-color)':
+                                            !isSegmentSelected(
+                                                getSegmentForWaypoint(
+                                                    waypoint.id,
+                                                )!,
+                                            ),
+                                    }"
+                                    @click="
+                                        handleSegmentClick(
+                                            getSegmentForWaypoint(waypoint.id)!,
+                                        )
+                                    "
                                 >
                                     <div
-                                        class="flex flex-wrap items-center justify-center gap-x-4 text-(--sub-color)"
+                                        class="flex flex-wrap items-center justify-center gap-x-4 border-t border-b border-dotted"
+                                        :class="
+                                            getSegmentTextClass(
+                                                getSegmentForWaypoint(
+                                                    waypoint.id,
+                                                )!,
+                                            )
+                                        "
                                     >
                                         <!-- Distance -->
                                         <div
@@ -749,7 +829,7 @@ function getActivityComparison(waypointId: string) {
                                                 )!.elevationGain > 0
                                             "
                                             v-tooltip="'Elevation gain'"
-                                            class="flex items-center gap-1 text-(--sub-color)"
+                                            class="flex items-center gap-1"
                                         >
                                             <Icon
                                                 name="lucide:arrow-up"
@@ -774,7 +854,7 @@ function getActivityComparison(waypointId: string) {
                                                 )!.elevationLoss > 0
                                             "
                                             v-tooltip="'Elevation loss'"
-                                            class="flex items-center gap-1 text-(--sub-color)"
+                                            class="flex items-center gap-1"
                                         >
                                             <Icon
                                                 name="lucide:arrow-down"
