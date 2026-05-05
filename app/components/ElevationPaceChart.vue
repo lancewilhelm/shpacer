@@ -101,6 +101,11 @@ const showAreaGradient = computed<boolean>(() => {
     const v = s?.chartStyle?.showAreaGradient;
     return typeof v === "boolean" ? v : true;
 });
+const invertPaceYAxis = computed<boolean>(() => {
+    const s = userSettingsStore?.settings;
+    const v = s?.chartStyle?.invertPaceYAxis;
+    return typeof v === "boolean" ? v : false;
+});
 const chartContainer = ref<HTMLElement>();
 const paceChartContainer = ref<HTMLElement>();
 const gradeAdjustmentChartContainer = ref<HTMLElement>();
@@ -295,6 +300,14 @@ watch(
         if (chartContainer.value) {
             initChart();
         }
+        if (props.showPaceChart && paceChartContainer.value) {
+            initPaceChart();
+        }
+    },
+);
+watch(
+    () => invertPaceYAxis.value,
+    () => {
         if (props.showPaceChart && paceChartContainer.value) {
             initPaceChart();
         }
@@ -1672,7 +1685,7 @@ function initPaceChart() {
     paceYScale = d3
         .scaleLinear()
         .domain([paceRange.value.min * 0.95, paceRange.value.max * 1.05])
-        .range([innerHeight, 0]);
+        .range(invertPaceYAxis.value ? [0, innerHeight] : [innerHeight, 0]);
 
     // Optional area gradient under the pace line
     if (showAreaGradient.value && hasPaceData.value) {

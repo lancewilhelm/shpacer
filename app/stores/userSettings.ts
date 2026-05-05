@@ -36,6 +36,7 @@ export interface UserSettings {
   funboxModes: FunboxMode[];
   chartStyle: {
     showAreaGradient: boolean;
+    invertPaceYAxis: boolean;
   };
   units: {
     distance: DistanceUnitSetting;
@@ -71,6 +72,7 @@ function getDefaultSettings(): UserSettings {
     funboxModes: [],
     chartStyle: {
       showAreaGradient: true,
+      invertPaceYAxis: false,
     },
     units: {
       strategy: "override",

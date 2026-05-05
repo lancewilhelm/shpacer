@@ -368,6 +368,11 @@ function getChartSettingsOptions(): Option[] {
       icon: "lucide:chart-no-axes-combined",
       options: getChartGradientOptions(),
     },
+    {
+      label: "pace axis orientation",
+      icon: "lucide:move-vertical",
+      options: getPaceAxisOrientationOptions(),
+    },
   ];
 }
 
@@ -402,6 +407,44 @@ function getChartGradientOptions() {
       },
       active: computed(
         () => !userSettingsStore.settings.chartStyle.showAreaGradient,
+      ),
+    },
+  ];
+  return options;
+}
+
+function getPaceAxisOrientationOptions() {
+  const userSettingsStore = useUserSettingsStore();
+  const options = [
+    {
+      label: "fast at top",
+      action: () => {
+        userSettingsStore.updateSettings({
+          chartStyle: {
+            ...userSettingsStore.settings.chartStyle,
+            invertPaceYAxis: true,
+          },
+        });
+        useUiStore().setCommandPaletteVisible(false);
+      },
+      active: computed(
+        () => (userSettingsStore.settings.chartStyle?.invertPaceYAxis ?? false),
+      ),
+    },
+    {
+      label: "fast at bottom",
+      action: () => {
+        userSettingsStore.updateSettings({
+          chartStyle: {
+            ...userSettingsStore.settings.chartStyle,
+            invertPaceYAxis: false,
+          },
+        });
+        useUiStore().setCommandPaletteVisible(false);
+      },
+      active: computed(
+        () =>
+          !(userSettingsStore.settings.chartStyle?.invertPaceYAxis ?? false),
       ),
     },
   ];

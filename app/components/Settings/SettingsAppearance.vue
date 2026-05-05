@@ -95,10 +95,27 @@ const chartAreaGradientEnabled = computed(() => {
         userSettingsStore.settings.chartStyle?.showAreaGradient ?? true,
     );
 });
+const invertPaceYAxisEnabled = computed(() => {
+    return Boolean(
+        userSettingsStore.settings.chartStyle?.invertPaceYAxis ?? false,
+    );
+});
 
 function toggleChartAreaGradient() {
     userSettingsStore.updateSettings({
-        chartStyle: { showAreaGradient: !chartAreaGradientEnabled.value },
+        chartStyle: {
+            ...userSettingsStore.settings.chartStyle,
+            showAreaGradient: !chartAreaGradientEnabled.value,
+        },
+    });
+}
+
+function toggleInvertPaceYAxis() {
+    userSettingsStore.updateSettings({
+        chartStyle: {
+            ...userSettingsStore.settings.chartStyle,
+            invertPaceYAxis: !invertPaceYAxisEnabled.value,
+        },
     });
 }
 </script>
@@ -123,6 +140,14 @@ function toggleChartAreaGradient() {
                     title="Gradient under lines"
                     description="Fill the area under elevation and pace lines with a subtle gradient."
                     @toggle="toggleChartAreaGradient"
+                />
+                <SettingsToggleItem
+                    :value="invertPaceYAxisEnabled"
+                    title="Fast pace at top"
+                    description="Flip the pace chart Y axis so faster paces appear higher and slower paces appear lower."
+                    true-label="on"
+                    false-label="off"
+                    @toggle="toggleInvertPaceYAxis"
                 />
             </SettingsSubGroup>
         </SettingsGroup>
