@@ -54,6 +54,11 @@ export interface CourseActivityWaypointComparison {
   plannedElapsedSeconds: number | null;
   actualElapsedSeconds: number | null;
   deltaSeconds: number | null;
+}
+
+export interface CourseActivitySegmentComparison {
+  fromWaypointId: string;
+  toWaypointId: string;
   plannedSegmentSeconds: number | null;
   actualSegmentSeconds: number | null;
   segmentDeltaSeconds: number | null;
@@ -85,6 +90,7 @@ export interface CourseActivityPlanDetail {
   deltaSeconds: number | null;
   targetLabel: string | null;
   waypoints: CourseActivityWaypointComparison[];
+  segments: CourseActivitySegmentComparison[];
   splits: CourseActivitySplitComparison[];
 }
 
@@ -97,6 +103,90 @@ export function getCourseActivityMatchData(
   activity: Pick<SelectCourseActivity, "matchData">,
 ): CourseActivityMatchData {
   return activity.matchData as CourseActivityMatchData;
+}
+
+export interface CourseActivityElapsedSeries {
+  distances: number[];
+  elapsedSeconds: number[];
+}
+
+export function buildCourseActivityElapsedSeries(
+  matchData: CourseActivityMatchData,
+): CourseActivityElapsedSeries | null {
+  if (!matchData.samples.length) {
+    return null;
+  }
+
+  const distances: number[] = [];
+  const elapsedSeconds: number[] = [];
+
+  for (const sample of matchData.samples) {
+    if (
+      !Number.isFinite(sample.distanceMeters) ||
+      !Number.isFinite(sample.elapsedSeconds)
+    ) {
+      continue;
+    }
+
+    const lastDistance = distances[distances.length - 1];
+    if (lastDistance !== undefined && sample.distanceMeters < lastDistance) {
+      continue;
+    }
+
+    if (lastDistance !== undefined && sample.distanceMeters === lastDistance) {
+      elapsedSeconds[elapsedSeconds.length - 1] = Math.max(
+        elapsedSeconds[elapsedSeconds.length - 1] ?? 0,
+        sample.elapsedSeconds,
+      );
+      continue;
+    }
+
+    distances.push(sample.distanceMeters);
+    elapsedSeconds.push(sample.elapsedSeconds);
+  }
+
+  return distances.length ? { distances, elapsedSeconds } : null;
+}
+
+export function interpolateElapsedSeriesAtDistance(
+  series: CourseActivityElapsedSeries,
+  distanceMeters: number,
+): number | null {
+  const { distances, elapsedSeconds } = series;
+  if (!distances.length) return null;
+  if (distanceMeters <= distances[0]!) {
+    return elapsedSeconds[0]!;
+  }
+
+  for (let i = 1; i < distances.length; i++) {
+    const previousDistance = distances[i - 1]!;
+    const currentDistance = distances[i]!;
+    if (distanceMeters > currentDistance) continue;
+
+    const previousElapsed = elapsedSeconds[i - 1]!;
+    const currentElapsed = elapsedSeconds[i]!;
+    const span = currentDistance - previousDistance;
+    if (span <= 0) return currentElapsed;
+
+    const ratio = (distanceMeters - previousDistance) / span;
+    return previousElapsed + ratio * (currentElapsed - previousElapsed);
+  }
+
+  const lastDistance = distances[distances.length - 1]!;
+  if (distanceMeters <= lastDistance + 1) {
+    return elapsedSeconds[elapsedSeconds.length - 1]!;
+  }
+
+  return null;
+}
+
+export function getCourseActivityElapsedAtDistance(
+  matchData: CourseActivityMatchData,
+  distanceMeters: number,
+): number | null {
+  const series = buildCourseActivityElapsedSeries(matchData);
+  if (!series) return null;
+  return interpolateElapsedSeriesAtDistance(series, distanceMeters);
 }
 
 export function formatSignedDuration(deltaSeconds: number | null): string {

@@ -15,7 +15,10 @@ import { formatDistance, formatElevation } from "~/utils/courseMetrics";
 import { useUserSettingsStore } from "~/stores/userSettings";
 import { getWaypointColorFromOrder } from "~/utils/waypoints";
 import type { SelectCourseActivity, SelectPlan } from "~/utils/db/schema";
-import { getCourseActivityMatchData } from "~/utils/courseActivities";
+import {
+    buildCourseActivityElapsedSeries,
+    getCourseActivityMatchData,
+} from "~/utils/courseActivities";
 
 interface Props {
     geoJsonData: GeoJSON.FeatureCollection[];
@@ -2595,41 +2598,12 @@ const tooltipActivityPrecompute = computed(() => {
     }
 
     const matchData = getCourseActivityMatchData(props.activity);
-    if (!matchData.samples.length) {
+    const elapsedSeries = buildCourseActivityElapsedSeries(matchData);
+    if (!elapsedSeries) {
         return null;
     }
 
-    const distances: number[] = [];
-    const elapsedSeconds: number[] = [];
-
-    for (const sample of matchData.samples) {
-        if (
-            !Number.isFinite(sample.distanceMeters) ||
-            !Number.isFinite(sample.elapsedSeconds)
-        ) {
-            continue;
-        }
-
-        const lastDistance = distances[distances.length - 1];
-        if (lastDistance !== undefined && sample.distanceMeters < lastDistance) {
-            continue;
-        }
-
-        if (lastDistance !== undefined && sample.distanceMeters === lastDistance) {
-            elapsedSeconds[elapsedSeconds.length - 1] = Math.max(
-                elapsedSeconds[elapsedSeconds.length - 1] ?? 0,
-                sample.elapsedSeconds,
-            );
-            continue;
-        }
-
-        distances.push(sample.distanceMeters);
-        elapsedSeconds.push(sample.elapsedSeconds);
-    }
-
-    if (!distances.length) {
-        return null;
-    }
+    const { distances, elapsedSeconds } = elapsedSeries;
 
     const paceValues: number[] = [];
     if (distances.length >= 2) {

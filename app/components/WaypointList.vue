@@ -15,7 +15,10 @@ import {
 } from "~/utils/timeCalculations";
 import { getSegmentPacingInfo } from "~/utils/gradeAdjustedTimeCalculations";
 import type { SelectPlan, SelectWaypointStoppageTime } from "~/utils/db/schema";
-import type { CourseActivityWaypointComparison } from "~/utils/courseActivities";
+import type {
+    CourseActivitySegmentComparison,
+    CourseActivityWaypointComparison,
+} from "~/utils/courseActivities";
 import { formatSignedDuration } from "~/utils/courseActivities";
 
 // Define a waypoint type that matches what we get from the API
@@ -50,6 +53,7 @@ interface Props {
     currentPlanId?: string | null;
     currentPlan?: SelectPlan | null;
     activityComparisonWaypoints?: CourseActivityWaypointComparison[];
+    activityComparisonSegments?: CourseActivitySegmentComparison[];
     waypointStoppageTimes?: SelectWaypointStoppageTime[];
     getWaypointNote?: (waypointId: string) => string;
     getWaypointCustomStoppageTime?: (waypointId: string) => number | undefined;
@@ -83,6 +87,7 @@ const _props = withDefaults(defineProps<Props>(), {
     currentPlanId: null,
     currentPlan: null,
     activityComparisonWaypoints: () => [],
+    activityComparisonSegments: () => [],
     waypointStoppageTimes: () => [],
     getWaypointNote: () => () => "",
     getWaypointCustomStoppageTime: () => () => undefined,
@@ -97,6 +102,7 @@ const {
     currentPlanId,
     currentPlan,
     activityComparisonWaypoints,
+    activityComparisonSegments,
     waypointStoppageTimes,
     getWaypointNote,
     getWaypointCustomStoppageTime,
@@ -479,6 +485,14 @@ function getActivityComparison(waypointId: string) {
     return (
         activityComparisonWaypoints.value.find(
             (comparison) => comparison.waypointId === waypointId,
+        ) || null
+    );
+}
+
+function getSegmentActivityComparison(fromWaypointId: string) {
+    return (
+        activityComparisonSegments.value.find(
+            (comparison) => comparison.fromWaypointId === fromWaypointId,
         ) || null
     );
 }
@@ -940,7 +954,7 @@ function getActivityComparison(waypointId: string) {
 
                                             <div
                                                 v-if="
-                                                    getActivityComparison(
+                                                    getSegmentActivityComparison(
                                                         waypoint.id,
                                                     )
                                                 "
@@ -958,14 +972,14 @@ function getActivityComparison(waypointId: string) {
                                                     />
                                                     <span>
                                                         {{
-                                                            getActivityComparison(
+                                                            getSegmentActivityComparison(
                                                                 waypoint.id,
                                                             )
                                                                 ?.actualSegmentSeconds !=
                                                             null
                                                                 ? formatElapsedTime(
                                                                       Math.round(
-                                                                          getActivityComparison(
+                                                                          getSegmentActivityComparison(
                                                                               waypoint.id,
                                                                           )!
                                                                               .actualSegmentSeconds!,
@@ -989,7 +1003,7 @@ function getActivityComparison(waypointId: string) {
                                                         Delta
                                                         {{
                                                             formatSignedDuration(
-                                                                getActivityComparison(
+                                                                getSegmentActivityComparison(
                                                                     waypoint.id,
                                                                 )
                                                                     ?.segmentDeltaSeconds ??

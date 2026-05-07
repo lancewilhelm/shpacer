@@ -10,6 +10,7 @@ Shpacer can now store uploaded race activities at the course level and compare t
 - The selected activity now persists in the course URL with `?activity=...`, and an explicit no-selection state is preserved as `?activity=none`.
 - Selecting both an activity and a plan surfaces comparison stats in the header and detailed comparison in the existing waypoint and split views.
 - The elevation tooltip now compares hovered plan pace/time against the matched activity pace/time using the same distance-based smoothing window used by the pace chart.
+- Interwaypoint segment comparisons now use the same normalized matched distance-to-elapsed interpolation as the pace chart tooltip, so segment times and deltas stay aligned in overlap and out-and-back sections.
 - Creating or editing a plan after an activity upload immediately makes that plan comparable without re-uploading the activity.
 
 ## Supported Inputs

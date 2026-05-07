@@ -3092,6 +3092,7 @@ onUnmounted(() => {
               :current-plan-id="currentPlanId"
               :current-plan="effectivePlanForTiming"
               :activity-comparison-waypoints="activityPlanDetail?.waypoints || []"
+              :activity-comparison-segments="activityPlanDetail?.segments || []"
               :waypoint-stoppage-times="waypointStoppageTimes"
               :get-waypoint-note="getWaypointNote"
               :get-waypoint-custom-stoppage-time="
@@ -3274,6 +3275,9 @@ onUnmounted(() => {
                   :current-plan="effectivePlanForTiming"
                   :activity-comparison-waypoints="
                     activityPlanDetail?.waypoints || []
+                  "
+                  :activity-comparison-segments="
+                    activityPlanDetail?.segments || []
                   "
                   :waypoint-stoppage-times="waypointStoppageTimes"
                   :get-waypoint-note="getWaypointNote"

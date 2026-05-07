@@ -15,8 +15,10 @@ import {
   type CourseActivityFileType,
   type CourseActivityMatchData,
   type CourseActivityPlanDetail,
+  type CourseActivitySegmentComparison,
   type CourseActivityPlanSummary,
   type CourseActivityProvider,
+  getCourseActivityElapsedAtDistance,
   getCourseActivityMatchData,
   type ParsedActivityPoint,
 } from "~/utils/courseActivities";
@@ -453,35 +455,6 @@ function formatTargetLabel(plan: SelectPlan): string | null {
   return null;
 }
 
-function getActivityElapsedAtDistance(
-  matchData: CourseActivityMatchData,
-  distanceMeters: number,
-): number | null {
-  const samples = matchData.samples;
-  if (!samples.length) return null;
-  if (distanceMeters <= samples[0]!.distanceMeters) {
-    return samples[0]!.elapsedSeconds;
-  }
-
-  for (let i = 1; i < samples.length; i++) {
-    const previous = samples[i - 1]!;
-    const current = samples[i]!;
-    if (distanceMeters > current.distanceMeters) continue;
-
-    const span = current.distanceMeters - previous.distanceMeters;
-    if (span <= 0) return current.elapsedSeconds;
-    const ratio = (distanceMeters - previous.distanceMeters) / span;
-    return previous.elapsedSeconds + ratio * (current.elapsedSeconds - previous.elapsedSeconds);
-  }
-
-  const last = samples[samples.length - 1]!;
-  if (distanceMeters <= last.distanceMeters + 1) {
-    return last.elapsedSeconds;
-  }
-
-  return null;
-}
-
 function normalizeWaypoints(waypoints: SelectWaypoint[]): NumericWaypoint[] {
   return waypoints
     .map((waypoint) => ({
@@ -595,15 +568,12 @@ export function buildPlanComparisonDetail(options: {
     sampleStepMeters: options.sampleStepMeters,
   });
 
-  const waypointComparisons = numericWaypoints.map((waypoint, index) => {
-    const previousWaypoint = index > 0 ? numericWaypoints[index - 1] : null;
+  const waypointComparisons = numericWaypoints.map((waypoint) => {
     const plannedElapsed = plannedWaypointTimes[waypoint.id] ?? null;
-    const actualElapsed = getActivityElapsedAtDistance(matchData, waypoint.distance);
-    const previousPlanned =
-      previousWaypoint ? plannedWaypointTimes[previousWaypoint.id] ?? null : null;
-    const previousActual = previousWaypoint
-      ? getActivityElapsedAtDistance(matchData, previousWaypoint.distance)
-      : null;
+    const actualElapsed = getCourseActivityElapsedAtDistance(
+      matchData,
+      waypoint.distance,
+    );
 
     return {
       waypointId: waypoint.id,
@@ -613,23 +583,44 @@ export function buildPlanComparisonDetail(options: {
         plannedElapsed !== null && actualElapsed !== null
           ? actualElapsed - plannedElapsed
           : null,
-      plannedSegmentSeconds:
-        previousPlanned !== null && plannedElapsed !== null
-          ? plannedElapsed - previousPlanned
-          : null,
-      actualSegmentSeconds:
-        previousActual !== null && actualElapsed !== null
-          ? actualElapsed - previousActual
-          : null,
-      segmentDeltaSeconds:
-        previousPlanned !== null &&
-        plannedElapsed !== null &&
-        previousActual !== null &&
-        actualElapsed !== null
-          ? actualElapsed - previousActual - (plannedElapsed - previousPlanned)
-          : null,
     };
   });
+
+  const segmentComparisons: CourseActivitySegmentComparison[] = [];
+  for (let index = 0; index < numericWaypoints.length - 1; index++) {
+    const fromWaypoint = numericWaypoints[index]!;
+    const toWaypoint = numericWaypoints[index + 1]!;
+    const fromPlannedElapsed = plannedWaypointTimes[fromWaypoint.id] ?? null;
+    const toPlannedElapsed = plannedWaypointTimes[toWaypoint.id] ?? null;
+    const fromActualElapsed = getCourseActivityElapsedAtDistance(
+      matchData,
+      fromWaypoint.distance,
+    );
+    const toActualElapsed = getCourseActivityElapsedAtDistance(
+      matchData,
+      toWaypoint.distance,
+    );
+
+    const plannedSegmentSeconds =
+      fromPlannedElapsed !== null && toPlannedElapsed !== null
+        ? toPlannedElapsed - fromPlannedElapsed
+        : null;
+    const actualSegmentSeconds =
+      fromActualElapsed !== null && toActualElapsed !== null
+        ? toActualElapsed - fromActualElapsed
+        : null;
+
+    segmentComparisons.push({
+      fromWaypointId: fromWaypoint.id,
+      toWaypointId: toWaypoint.id,
+      plannedSegmentSeconds,
+      actualSegmentSeconds,
+      segmentDeltaSeconds:
+        plannedSegmentSeconds !== null && actualSegmentSeconds !== null
+          ? actualSegmentSeconds - plannedSegmentSeconds
+          : null,
+    });
+  }
 
   const splitRows = buildPlanSplitRows({
     geoJsonData: [options.courseGeoJson],
@@ -643,10 +634,10 @@ export function buildPlanComparisonDetail(options: {
   });
 
   const splitComparisons = splitRows.map((row, index) => {
-    const actualElapsed = getActivityElapsedAtDistance(matchData, row.end);
+    const actualElapsed = getCourseActivityElapsedAtDistance(matchData, row.end);
     const previousActual =
       index > 0
-        ? getActivityElapsedAtDistance(matchData, splitRows[index - 1]!.end)
+        ? getCourseActivityElapsedAtDistance(matchData, splitRows[index - 1]!.end)
         : 0;
     const actualSplitSeconds =
       actualElapsed !== null && previousActual !== null
@@ -700,6 +691,7 @@ export function buildPlanComparisonDetail(options: {
         : null,
     targetLabel: formatTargetLabel(options.plan),
     waypoints: waypointComparisons,
+    segments: segmentComparisons,
     splits: splitComparisons,
   };
 }
