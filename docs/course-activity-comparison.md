@@ -7,7 +7,7 @@ Shpacer can now store uploaded race activities at the course level and compare t
 - Activities are uploaded from the course page activity selector and saved separately from plans.
 - Each activity is matched back onto the course route to reduce the impact of GPS drift.
 - The course page uses compact plan and activity dropdowns instead of a dedicated activity panel.
-- The selected activity now persists in the course URL with `?activity=...`, and an explicit no-selection state is preserved as `?activity=none`.
+- The selected activity persists in the course URL with `?activity=...`, and courses with uploaded activities now default to the explicit no-selection state `?activity=none` until an activity is chosen.
 - Selecting both an activity and a plan surfaces comparison stats in the header and detailed comparison in the existing waypoint and split views.
 - The elevation tooltip now compares hovered plan pace/time against the matched activity pace/time using the same distance-based smoothing window used by the pace chart.
 - When an activity is selected, the pace chart overlays a dedicated activity pace line using the same matched-and-smoothed pace series shown in the tooltip.

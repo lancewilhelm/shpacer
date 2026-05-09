@@ -1804,8 +1804,8 @@ function initPaceChart() {
         g.append("path")
             .datum(activityPaceChartData.value)
             .attr("fill", "none")
-            .attr("stroke", "var(--yes-color)")
-            .attr("stroke-width", 2)
+            .attr("stroke", "var(--text-color)")
+            .attr("stroke-width", 1)
             .attr("d", activityPaceLine);
     }
 
@@ -2412,6 +2412,19 @@ watch(
             });
         }
         // Re-initialize pace chart if needed
+        if (hasPaceData.value && props.showPaceChart) {
+            nextTick(() => {
+                initPaceChart();
+            });
+        }
+    },
+    { deep: true },
+);
+
+// Watch for activity overlay changes and reinitialize the pace chart
+watch(
+    () => props.activity,
+    () => {
         if (hasPaceData.value && props.showPaceChart) {
             nextTick(() => {
                 initPaceChart();

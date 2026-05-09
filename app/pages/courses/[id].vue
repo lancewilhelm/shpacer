@@ -447,6 +447,15 @@ watchEffect(() => {
   }
 
   const activityIdFromUrl = route.query.activity as string | undefined;
+  if (!activityIdFromUrl) {
+    currentActivityId.value = null;
+    activitySelectionInitialized.value = true;
+    replaceCourseSelectionQuery({
+      activityParam: NO_ACTIVITY_QUERY_VALUE,
+    });
+    return;
+  }
+
   if (activityIdFromUrl === NO_ACTIVITY_QUERY_VALUE) {
     currentActivityId.value = null;
     activitySelectionInitialized.value = true;
@@ -462,22 +471,11 @@ watchEffect(() => {
       return;
     }
 
-    replaceCourseSelectionQuery({ activityParam: null });
-    return;
-  }
-
-  if (
-    currentActivityId.value &&
-    availableActivities.some((activity) => activity.id === currentActivityId.value)
-  ) {
+    currentActivityId.value = null;
     activitySelectionInitialized.value = true;
-    return;
-  }
-
-  if (!activitySelectionInitialized.value) {
-    currentActivityId.value =
-      activitiesData.value?.primaryActivityId || availableActivities[0]?.id || null;
-    activitySelectionInitialized.value = true;
+    replaceCourseSelectionQuery({
+      activityParam: NO_ACTIVITY_QUERY_VALUE,
+    });
   }
 });
 
@@ -2264,10 +2262,11 @@ async function handleActivitiesChanged() {
     currentActivityId.value &&
     !availableActivities.some((activity) => activity.id === currentActivityId.value)
   ) {
-    const nextActivityId =
-      activitiesData.value?.primaryActivityId || availableActivities[0]?.id || null;
-    currentActivityId.value = nextActivityId;
-    replaceCourseSelectionQuery({ activityParam: nextActivityId });
+    currentActivityId.value = null;
+    activitySelectionInitialized.value = true;
+    replaceCourseSelectionQuery({
+      activityParam: availableActivities.length ? NO_ACTIVITY_QUERY_VALUE : null,
+    });
   }
 }
 
