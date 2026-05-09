@@ -13,7 +13,7 @@ export const fontFamilyOptions = [
 ] as const;
 export type FontFamily = (typeof fontFamilyOptions)[number];
 
-export const funboxModes = ["confetti", "snow"];
+export const funboxModes = ["confetti", "snow"] as const;
 export type FunboxMode = (typeof funboxModes)[number];
 
 export const distanceUnits = ["follow_course", "kilometers", "miles"] as const;
@@ -43,22 +43,6 @@ export interface UserSettings {
     elevation: ElevationUnitSetting;
     strategy?: UnitStrategy;
   };
-
-  smoothing: {
-    defaults: {
-      gradeWindowMeters: number; // Wg (grade smoothing window)
-      sampleStepMeters: number; // Δ (integration sample step)
-      paceSmoothingMeters: number; // Wp (pace chart smoothing window)
-    };
-    perCourse: Record<
-      string,
-      Partial<{
-        gradeWindowMeters: number;
-        sampleStepMeters: number;
-        paceSmoothingMeters: number;
-      }>
-    >;
-  };
 }
 
 function getDefaultSettings(): UserSettings {
@@ -79,34 +63,97 @@ function getDefaultSettings(): UserSettings {
       distance: "follow_course",
       elevation: "follow_course",
     },
+  };
+}
 
-    smoothing: {
-      defaults: {
-        gradeWindowMeters: 100, // Wg default
-        sampleStepMeters: 50, // Δ default
-        paceSmoothingMeters: 300, // Wp default
-      },
-      perCourse: {},
+function normalizeUserSettings(
+  input?: Partial<UserSettings> | null,
+): UserSettings {
+  const defaults = getDefaultSettings();
+  const settings = input ?? {};
+
+  return {
+    theme: settings.theme,
+    fontFamily: settings.fontFamily ?? defaults.fontFamily,
+    favoriteThemes: Array.isArray(settings.favoriteThemes)
+      ? settings.favoriteThemes
+      : defaults.favoriteThemes,
+    themeSorting: {
+      ...defaults.themeSorting,
+      ...(settings.themeSorting ?? {}),
+    },
+    funboxModes: Array.isArray(settings.funboxModes)
+      ? settings.funboxModes
+      : defaults.funboxModes,
+    chartStyle: {
+      ...defaults.chartStyle,
+      ...(settings.chartStyle ?? {}),
+    },
+    units: {
+      ...defaults.units,
+      ...(settings.units ?? {}),
     },
   };
+}
+
+function mergeUserSettings(
+  base: UserSettings,
+  updated: Partial<UserSettings>,
+): UserSettings {
+  return normalizeUserSettings({
+    ...base,
+    ...updated,
+    themeSorting: {
+      ...(base.themeSorting ?? {}),
+      ...(updated.themeSorting ?? {}),
+    },
+    chartStyle: {
+      ...(base.chartStyle ?? {}),
+      ...(updated.chartStyle ?? {}),
+    },
+    units: {
+      ...(base.units ?? {}),
+      ...(updated.units ?? {}),
+    },
+  });
 }
 
 export const useUserSettingsStore = defineStore(
   "userSettings",
   () => {
-    const settings = ref<UserSettings>(getDefaultSettings());
+    const settings = ref<UserSettings>(normalizeUserSettings());
+
+    watch(
+      settings,
+      (value) => {
+        const normalized = normalizeUserSettings(value);
+        const currentJson = JSON.stringify(value);
+        const normalizedJson = JSON.stringify(normalized);
+        if (currentJson !== normalizedJson) {
+          settings.value = normalized;
+        }
+      },
+      { immediate: true, deep: true },
+    );
+
     function updateSettings(updated: Partial<UserSettings>) {
       if (Object.keys(updated).length === 0) return;
 
-      // Update the settings
-      settings.value = { ...settings.value, ...updated };
-
-      // Update sync status
+      settings.value = mergeUserSettings(settings.value, updated);
       updatedAt.value = new Date();
       synced.value = false;
-
-      // Trigger sync
       triggerDebouncedSync();
+    }
+
+    function applyRemoteSettings(
+      updated: Partial<UserSettings>,
+      remoteUpdatedAt?: Date | string | number | null,
+    ) {
+      if (Object.keys(updated).length === 0) return;
+
+      settings.value = mergeUserSettings(settings.value, updated);
+      updatedAt.value = remoteUpdatedAt ? new Date(remoteUpdatedAt) : new Date();
+      synced.value = true;
     }
 
     const updatedAt = ref<Date>(new Date(0));
@@ -116,12 +163,11 @@ export const useUserSettingsStore = defineStore(
     };
 
     function $reset() {
-      settings.value = getDefaultSettings();
+      settings.value = normalizeUserSettings();
       updatedAt.value = new Date(0);
       synced.value = true;
     }
 
-    // Unit helpers
     function resolveUnitsForCourse(
       course?: Partial<{
         defaultDistanceUnit: DistanceUnit;
@@ -154,117 +200,37 @@ export const useUserSettingsStore = defineStore(
       return resolveUnitsForCourse(course).elevation;
     }
 
-    // Smoothing helpers
-    function getSmoothingForCourse(courseId?: string) {
-      const d = settings.value.smoothing.defaults;
-      if (!courseId) {
-        return {
-          gradeWindowMeters: d.gradeWindowMeters,
-          sampleStepMeters: d.sampleStepMeters,
-          paceSmoothingMeters: d.paceSmoothingMeters,
-        };
-      }
-      const override = settings.value.smoothing.perCourse[courseId] || {};
-      return {
-        gradeWindowMeters: override.gradeWindowMeters ?? d.gradeWindowMeters,
-        sampleStepMeters: override.sampleStepMeters ?? d.sampleStepMeters,
-        paceSmoothingMeters:
-          override.paceSmoothingMeters ?? d.paceSmoothingMeters,
-      };
-    }
-
-    function updateSmoothingDefaults(
-      updated: Partial<{
-        gradeWindowMeters: number;
-        sampleStepMeters: number;
-        paceSmoothingMeters: number;
-      }>,
-    ) {
-      const current = settings.value.smoothing.defaults;
-      const newDefaults = { ...current, ...updated };
-      settings.value = {
-        ...settings.value,
-        smoothing: {
-          ...settings.value.smoothing,
-          defaults: newDefaults,
-        },
-      };
-      updatedAt.value = new Date();
-      synced.value = false;
-      triggerDebouncedSync();
-    }
-
-    function updateCourseSmoothing(
-      courseId: string,
-      updated: Partial<{
-        gradeWindowMeters: number;
-        sampleStepMeters: number;
-        paceSmoothingMeters: number;
-      }>,
-    ) {
-      if (!courseId) return;
-      const current = settings.value.smoothing.perCourse[courseId] || {};
-      const perCourse = {
-        ...settings.value.smoothing.perCourse,
-        [courseId]: { ...current, ...updated },
-      };
-      settings.value = {
-        ...settings.value,
-        smoothing: {
-          ...settings.value.smoothing,
-          perCourse,
-        },
-      };
-      updatedAt.value = new Date();
-      synced.value = false;
-      triggerDebouncedSync();
-    }
-
-    function clearCourseSmoothing(courseId: string) {
-      if (!courseId) return;
-      const perCourse = Object.fromEntries(
-        Object.entries(settings.value.smoothing.perCourse).filter(
-          ([key]) => key !== courseId,
-        ),
-      ) as Record<
-        string,
-        Partial<{
-          gradeWindowMeters: number;
-          sampleStepMeters: number;
-          paceSmoothingMeters: number;
-        }>
-      >;
-      settings.value = {
-        ...settings.value,
-        smoothing: {
-          ...settings.value.smoothing,
-          perCourse,
-        },
-      };
-      updatedAt.value = new Date();
-      synced.value = false;
-      triggerDebouncedSync();
-    }
-
     return {
       settings,
       updatedAt,
       updateSettings,
+      applyRemoteSettings,
       synced,
       setSynced,
       $reset,
-      // unit helpers
       resolveUnitsForCourse,
       getDistanceUnitForCourse,
       getElevationUnitForCourse,
-      // smoothing helpers
-      getSmoothingForCourse,
-      updateSmoothingDefaults,
-      updateCourseSmoothing,
-      clearCourseSmoothing,
     };
   },
   {
-    persist: true,
+    persist: [
+      {
+        storage: piniaPluginPersistedstate.cookies(),
+        pick: [
+          "settings.theme",
+          "settings.fontFamily",
+          "settings.favoriteThemes",
+          "settings.themeSorting",
+          "settings.funboxModes",
+          "settings.chartStyle",
+          "settings.units",
+        ],
+      },
+      {
+        storage: piniaPluginPersistedstate.localStorage(),
+        pick: ["settings", "updatedAt", "synced"],
+      },
+    ],
   },
 );

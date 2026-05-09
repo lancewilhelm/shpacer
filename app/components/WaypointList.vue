@@ -15,6 +15,8 @@ import {
 } from "~/utils/timeCalculations";
 import { getSegmentPacingInfo } from "~/utils/gradeAdjustedTimeCalculations";
 import type { SelectPlan, SelectWaypointStoppageTime } from "~/utils/db/schema";
+import type { CourseAnalysisSettings } from "~/utils/courseSettings";
+import { normalizeCourseAnalysisSettings } from "~/utils/courseSettings";
 import type {
     CourseActivitySegmentComparison,
     CourseActivityWaypointComparison,
@@ -47,6 +49,7 @@ interface Props {
      * - No stoppage time edits
      */
     readOnly?: boolean;
+    courseSettings?: CourseAnalysisSettings | null;
     waypoints?: Waypoint[];
     selectedWaypoint?: Waypoint | null;
     selectedSegment?: SelectedWaypointSegment | null;
@@ -82,6 +85,7 @@ interface Emits {
 
 const _props = withDefaults(defineProps<Props>(), {
     waypoints: () => [],
+    courseSettings: null,
     selectedWaypoint: null,
     selectedSegment: null,
     currentPlanId: null,
@@ -109,25 +113,18 @@ const {
     getDefaultStoppageTime,
     geoJsonData,
     readOnly,
+    courseSettings,
 } = toRefs(_props);
 
 const emit = defineEmits<Emits>();
-
-const userSettingsStore = useUserSettingsStore();
 
 // State for waypoint editing modal
 const editingWaypoint = ref<Waypoint | null>(null);
 const editModalOpen = ref(false);
 
-// Per-course smoothing settings (fallback to defaults if missing)
-const courseIdForSmoothing = computed(
-    () => currentPlan.value?.courseId || null,
+const smoothingConfig = computed(() =>
+    normalizeCourseAnalysisSettings(courseSettings.value ?? null),
 );
-const smoothingConfig = computed(() => {
-    return userSettingsStore.getSmoothingForCourse(
-        courseIdForSmoothing.value || undefined,
-    );
-});
 
 // Extract elevation profile from GeoJSON data
 const elevationProfile = computed((): ElevationPoint[] => {

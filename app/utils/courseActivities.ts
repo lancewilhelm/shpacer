@@ -110,6 +110,10 @@ export interface CourseActivityElapsedSeries {
   elapsedSeconds: number[];
 }
 
+const INITIAL_PROGRESS_TOLERANCE_METERS = 500;
+const MAX_FORWARD_PROGRESS_SPEED_METERS_PER_SECOND = 8;
+const MAX_FORWARD_PROGRESS_BUFFER_METERS = 75;
+
 export function buildCourseActivityElapsedSeries(
   matchData: CourseActivityMatchData,
 ): CourseActivityElapsedSeries | null {
@@ -129,6 +133,25 @@ export function buildCourseActivityElapsedSeries(
     }
 
     const lastDistance = distances[distances.length - 1];
+    const lastElapsed = elapsedSeconds[elapsedSeconds.length - 1];
+    const elapsedDelta =
+      lastElapsed === undefined ? 0 : Math.max(0, sample.elapsedSeconds - lastElapsed);
+    const maxForwardProgressMeters =
+      lastDistance === undefined
+        ? INITIAL_PROGRESS_TOLERANCE_METERS
+        : Math.max(
+            10,
+            elapsedDelta * MAX_FORWARD_PROGRESS_SPEED_METERS_PER_SECOND +
+              MAX_FORWARD_PROGRESS_BUFFER_METERS,
+          );
+
+    if (
+      lastDistance !== undefined &&
+      sample.distanceMeters - lastDistance > maxForwardProgressMeters
+    ) {
+      continue;
+    }
+
     if (lastDistance !== undefined && sample.distanceMeters < lastDistance) {
       continue;
     }

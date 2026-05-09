@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import type { SelectCourse } from "~/utils/db/schema";
+import type { CourseAnalysisSettings } from "~/utils/courseSettings";
+import { normalizeCourseAnalysisSettings } from "~/utils/courseSettings";
 import { getWaypointColorFromOrder } from "~/utils/waypoints";
 import { formatDistance, formatElevation } from "~/utils/courseMetrics";
 import {
-  extractElevationProfile,
-  interpolateAtDistance,
+    extractElevationProfile,
+    interpolateAtDistance,
 } from "~/utils/elevationProfile";
 import { getTagsByIds } from "~/utils/waypointTags";
 import { calculateDistance } from "~/utils/distance";
@@ -14,30 +16,32 @@ import WaypointTagSelector from "~/components/WaypointTagSelector.vue";
 
 // Define a waypoint type that matches what we get from the API
 type Waypoint = {
-  id: string;
-  name: string;
-  description: string | null;
-  lat: number;
-  lng: number;
-  elevation: number | null;
-  distance: number;
-  tags: string[];
-  order: number;
+    id: string;
+    name: string;
+    description: string | null;
+    lat: number;
+    lng: number;
+    elevation: number | null;
+    distance: number;
+    tags: string[];
+    order: number;
 };
 
 interface Props {
-  open: boolean;
-  course: SelectCourse | null;
-  waypoints: Waypoint[];
-  geoJsonData: GeoJSON.FeatureCollection[];
+    open: boolean;
+    course: SelectCourse | null;
+    courseSettings?: CourseAnalysisSettings | null;
+    waypoints: Waypoint[];
+    geoJsonData: GeoJSON.FeatureCollection[];
 }
 
 interface Emits {
-  close: [];
-  "course-updated": [course: SelectCourse];
-  "waypoint-updated": [waypoint: Waypoint];
-  "waypoint-deleted": [waypointId: string];
-  "waypoint-created": [waypoint: Waypoint];
+    close: [];
+    "course-updated": [course: SelectCourse];
+    "course-settings-updated": [settings: CourseAnalysisSettings];
+    "waypoint-updated": [waypoint: Waypoint];
+    "waypoint-deleted": [waypointId: string];
+    "waypoint-created": [waypoint: Waypoint];
 }
 
 const props = defineProps<Props>();
@@ -45,14 +49,16 @@ const emit = defineEmits<Emits>();
 
 const userSettingsStore = useUserSettingsStore();
 const distanceUnitIsMiles = computed(
-  () =>
-    (typeof (
-      userSettingsStore as unknown as {
-        getDistanceUnitForCourse?: unknown;
-      }
-    )?.getDistanceUnitForCourse === "function"
-      ? userSettingsStore.getDistanceUnitForCourse(props.course || undefined)
-      : (props.course?.defaultDistanceUnit ?? "miles")) === "miles",
+    () =>
+        (typeof (
+            userSettingsStore as unknown as {
+                getDistanceUnitForCourse?: unknown;
+            }
+        )?.getDistanceUnitForCourse === "function"
+            ? userSettingsStore.getDistanceUnitForCourse(
+                  props.course || undefined,
+              )
+            : (props.course?.defaultDistanceUnit ?? "miles")) === "miles",
 );
 
 // Tab state
@@ -72,6 +78,114 @@ const editDefaultElevationUnit = ref<"meters" | "feet">("meters");
 const smoothingGradeWindow = ref<number>(100);
 const smoothingSampleStep = ref<number>(50);
 const smoothingPaceWindow = ref<number>(300);
+const smoothingPaceCapMinutes = ref<string>("");
+const smoothingPaceCapSeconds = ref<string>("");
+
+const smoothingPaceCapUnitLabel = computed(() =>
+    editDefaultDistanceUnit.value === "miles" ? "min/mi" : "min/km",
+);
+
+const smoothingPaceCapUnitMeters = computed(() =>
+    editDefaultDistanceUnit.value === "miles" ? 1609.344 : 1000,
+);
+const defaultCourseSettings = computed(() => normalizeCourseAnalysisSettings());
+
+function setSmoothingPaceCapFromSecondsPerMeter(value: number | null) {
+    if (value === null || !Number.isFinite(value) || value <= 0) {
+        smoothingPaceCapMinutes.value = "";
+        smoothingPaceCapSeconds.value = "";
+        return;
+    }
+
+    const totalSeconds = Math.round(value * smoothingPaceCapUnitMeters.value);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    smoothingPaceCapMinutes.value = String(minutes);
+    smoothingPaceCapSeconds.value = String(seconds).padStart(2, "0");
+}
+
+function getSmoothingPaceCapSecondsPerMeter(): number | null {
+    const minutesRaw = String(smoothingPaceCapMinutes.value ?? "").trim();
+    const secondsRaw = String(smoothingPaceCapSeconds.value ?? "").trim();
+
+    if (!minutesRaw && !secondsRaw) {
+        return null;
+    }
+
+    const minutes = Number.parseInt(minutesRaw || "0", 10);
+    const seconds = Number.parseInt(secondsRaw || "0", 10);
+
+    if (
+        !Number.isFinite(minutes) ||
+        !Number.isFinite(seconds) ||
+        minutes < 0 ||
+        seconds < 0 ||
+        seconds > 59
+    ) {
+        return null;
+    }
+
+    const totalSeconds = minutes * 60 + seconds;
+    if (totalSeconds <= 0) {
+        return null;
+    }
+
+    return totalSeconds / smoothingPaceCapUnitMeters.value;
+}
+
+const hasCustomGradeWindow = computed(
+    () =>
+        smoothingGradeWindow.value !==
+        defaultCourseSettings.value.gradeWindowMeters,
+);
+const hasCustomSampleStep = computed(
+    () =>
+        smoothingSampleStep.value !==
+        defaultCourseSettings.value.sampleStepMeters,
+);
+const hasCustomPaceWindow = computed(
+    () =>
+        smoothingPaceWindow.value !==
+        defaultCourseSettings.value.paceSmoothingMeters,
+);
+const hasCustomPaceCap = computed(() => {
+    const current = getSmoothingPaceCapSecondsPerMeter();
+    const defaultValue =
+        defaultCourseSettings.value.paceChartMaxDisplaySecondsPerMeter;
+    if (current === null || defaultValue === null) {
+        return current !== defaultValue;
+    }
+    return Math.abs(current - defaultValue) > 1e-9;
+});
+
+function resetSmoothingGradeWindow() {
+    smoothingGradeWindow.value = defaultCourseSettings.value.gradeWindowMeters;
+}
+
+function resetSmoothingPaceWindow() {
+    smoothingPaceWindow.value = defaultCourseSettings.value.paceSmoothingMeters;
+}
+
+function resetSmoothingPaceCap() {
+    setSmoothingPaceCapFromSecondsPerMeter(
+        defaultCourseSettings.value.paceChartMaxDisplaySecondsPerMeter,
+    );
+}
+
+function resetSmoothingSampleStep() {
+    smoothingSampleStep.value = defaultCourseSettings.value.sampleStepMeters;
+}
+
+const smoothingTooltips = {
+    gradeWindow:
+        "Controls grade estimation smoothing for this course. Set to 0 to use raw grade data.",
+    paceWindow:
+        "Controls the pace chart's visual smoothing only. Set to 0 to show raw pace variation.",
+    paceCap:
+        "Display-only cap for the chart axis and activity pace overlay. Default is 30:00/mi. Leave both fields blank to disable it for this course.",
+    sampleStep:
+        "Controls integration accuracy for adjusted pace calculations between waypoints. Smaller values are more accurate but increase processing time.",
+} as const;
 
 // Waypoint edit state
 const editableWaypoints = ref<Waypoint[]>([]);
@@ -89,99 +203,106 @@ const waypointPendingDelete = ref<Waypoint | null>(null);
 
 // Helper functions for waypoint display
 function getWaypointDisplayContent(
-  waypoint: Waypoint,
-  waypoints: Waypoint[],
+    waypoint: Waypoint,
+    waypoints: Waypoint[],
 ): string {
-  const sortedWaypoints = [...waypoints].sort((a, b) => a.order - b.order);
-  const waypointIndex = sortedWaypoints.findIndex((w) => w.id === waypoint.id);
+    const sortedWaypoints = [...waypoints].sort((a, b) => a.order - b.order);
+    const waypointIndex = sortedWaypoints.findIndex(
+        (w) => w.id === waypoint.id,
+    );
 
-  if (waypointIndex === -1) return "?";
+    if (waypointIndex === -1) return "?";
 
-  // First waypoint is Start
-  if (waypointIndex === 0) return "S";
+    // First waypoint is Start
+    if (waypointIndex === 0) return "S";
 
-  // Last waypoint is Finish
-  if (waypointIndex === sortedWaypoints.length - 1) return "F";
+    // Last waypoint is Finish
+    if (waypointIndex === sortedWaypoints.length - 1) return "F";
 
-  // Middle waypoints are numbered 1, 2, 3, etc.
-  return waypointIndex.toString();
+    // Middle waypoints are numbered 1, 2, 3, etc.
+    return waypointIndex.toString();
 }
 
 function getWaypointPrimaryColor(
-  waypoint: Waypoint,
-  waypoints: Waypoint[],
+    waypoint: Waypoint,
+    waypoints: Waypoint[],
 ): string {
-  return getWaypointColorFromOrder(waypoint, waypoints);
+    return getWaypointColorFromOrder(waypoint, waypoints);
 }
 
 function isStartOrFinishWaypoint(
-  waypoint: Waypoint,
-  waypoints: Waypoint[],
+    waypoint: Waypoint,
+    waypoints: Waypoint[],
 ): boolean {
-  const protectedWaypointIds = getProtectedEndpointWaypointIds(waypoints);
-  return protectedWaypointIds.has(waypoint.id);
+    const protectedWaypointIds = getProtectedEndpointWaypointIds(waypoints);
+    return protectedWaypointIds.has(waypoint.id);
 }
 
 function canDeleteWaypoint(waypoint: Waypoint, waypoints: Waypoint[]): boolean {
-  return !isStartOrFinishWaypoint(waypoint, waypoints);
+    return !isStartOrFinishWaypoint(waypoint, waypoints);
 }
 
 function getProtectedEndpointWaypointIds(waypoints: Waypoint[]): Set<string> {
-  const { startWaypoint, finishWaypoint } =
-    getCanonicalEndpointWaypoints(waypoints);
-  const ids = new Set<string>();
-  if (startWaypoint) ids.add(startWaypoint.id);
-  if (finishWaypoint) ids.add(finishWaypoint.id);
-  return ids;
+    const { startWaypoint, finishWaypoint } =
+        getCanonicalEndpointWaypoints(waypoints);
+    const ids = new Set<string>();
+    if (startWaypoint) ids.add(startWaypoint.id);
+    if (finishWaypoint) ids.add(finishWaypoint.id);
+    return ids;
 }
 
 function getCanonicalEndpointWaypoints(waypoints: Waypoint[]): {
-  startWaypoint: Waypoint | null;
-  finishWaypoint: Waypoint | null;
+    startWaypoint: Waypoint | null;
+    finishWaypoint: Waypoint | null;
 } {
-  if (waypoints.length === 0) {
-    return { startWaypoint: null, finishWaypoint: null };
-  }
+    if (waypoints.length === 0) {
+        return { startWaypoint: null, finishWaypoint: null };
+    }
 
-  const minDistance = Math.min(...waypoints.map((w) => w.distance));
-  const maxDistance = Math.max(...waypoints.map((w) => w.distance));
+    const minDistance = Math.min(...waypoints.map((w) => w.distance));
+    const maxDistance = Math.max(...waypoints.map((w) => w.distance));
 
-  const startCandidates = waypoints.filter((w) => w.distance === minDistance);
-  const finishCandidates = waypoints.filter((w) => w.distance === maxDistance);
+    const startCandidates = waypoints.filter((w) => w.distance === minDistance);
+    const finishCandidates = waypoints.filter(
+        (w) => w.distance === maxDistance,
+    );
 
-  return {
-    startWaypoint: pickCanonicalEndpointWaypoint(startCandidates, "start"),
-    finishWaypoint: pickCanonicalEndpointWaypoint(finishCandidates, "finish"),
-  };
+    return {
+        startWaypoint: pickCanonicalEndpointWaypoint(startCandidates, "start"),
+        finishWaypoint: pickCanonicalEndpointWaypoint(
+            finishCandidates,
+            "finish",
+        ),
+    };
 }
 
 function pickCanonicalEndpointWaypoint(
-  candidates: Waypoint[],
-  endpoint: "start" | "finish",
+    candidates: Waypoint[],
+    endpoint: "start" | "finish",
 ): Waypoint | null {
-  if (candidates.length === 0) return null;
+    if (candidates.length === 0) return null;
 
-  const preferredLabel = endpoint === "start" ? "start" : "finish";
-  const preferredLabelMatch = candidates.find(
-    (candidate) =>
-      candidate.name.trim().toLowerCase() === preferredLabel ||
-      candidate.name.trim().toLowerCase() === preferredLabel[0],
-  );
-  if (preferredLabelMatch) return preferredLabelMatch;
+    const preferredLabel = endpoint === "start" ? "start" : "finish";
+    const preferredLabelMatch = candidates.find(
+        (candidate) =>
+            candidate.name.trim().toLowerCase() === preferredLabel ||
+            candidate.name.trim().toLowerCase() === preferredLabel[0],
+    );
+    if (preferredLabelMatch) return preferredLabelMatch;
 
-  return [...candidates].sort((a, b) => a.id.localeCompare(b.id))[0] ?? null;
+    return [...candidates].sort((a, b) => a.id.localeCompare(b.id))[0] ?? null;
 }
 
 async function updateWaypointTags(tags: string[]) {
-  if (!selectedWaypointForEdit.value) return;
+    if (!selectedWaypointForEdit.value) return;
 
-  // Update the local waypoint tags
-  selectedWaypointForEdit.value.tags = tags;
+    // Update the local waypoint tags
+    selectedWaypointForEdit.value.tags = tags;
 
-  // If it's not a new waypoint being created, save to the database
-  if (!newWaypointBeingCreated.value) {
-    await updateWaypoint(selectedWaypointForEdit.value);
-  }
+    // If it's not a new waypoint being created, save to the database
+    if (!newWaypointBeingCreated.value) {
+        await updateWaypoint(selectedWaypointForEdit.value);
+    }
 }
 
 // Waypoint creation state
@@ -189,30 +310,30 @@ const creatingWaypoint = ref(false);
 const newWaypointBeingCreated = ref<Partial<Waypoint> | null>(null);
 
 type TrackClickCandidate = {
-  lat: number;
-  lng: number;
-  distance: number;
+    lat: number;
+    lng: number;
+    distance: number;
 };
 
 type TrackClickEvent = {
-  lat: number;
-  lng: number;
-  distance: number;
-  distances?: number[];
-  candidates?: TrackClickCandidate[];
-  screenX?: number;
-  screenY?: number;
+    lat: number;
+    lng: number;
+    distance: number;
+    distances?: number[];
+    candidates?: TrackClickCandidate[];
+    screenX?: number;
+    screenY?: number;
 };
 
 type MapClickAction = "create" | "move";
 type MapClickCandidateOption = TrackClickCandidate & { occupied: boolean };
 
 const mapClickLocation = ref<{
-  action: MapClickAction;
-  candidates: MapClickCandidateOption[];
-  selectedIndex: number | null;
-  screenX: number | null;
-  screenY: number | null;
+    action: MapClickAction;
+    candidates: MapClickCandidateOption[];
+    selectedIndex: number | null;
+    screenX: number | null;
+    screenY: number | null;
 } | null>(null);
 const mapPanelRef = ref<HTMLElement | null>(null);
 const mapClickPopupRef = ref<HTMLElement | null>(null);
@@ -224,1880 +345,2119 @@ const MAP_CLICK_POPUP_PADDING_PX = 12;
 const MAP_CLICK_POPUP_OFFSET_PX = 12;
 
 const mapClickPreviewLocation = computed(() => {
-  const selected = getSelectedMapClickCandidate();
-  if (!selected) return null;
-  return {
-    lat: selected.lat,
-    lng: selected.lng,
-    distance: selected.distance,
-  };
+    const selected = getSelectedMapClickCandidate();
+    if (!selected) return null;
+    return {
+        lat: selected.lat,
+        lng: selected.lng,
+        distance: selected.distance,
+    };
 });
 
-const selectedMapClickCandidate = computed(() => getSelectedMapClickCandidate());
+const selectedMapClickCandidate = computed(() =>
+    getSelectedMapClickCandidate(),
+);
 
 const mapClickPopupStyle = computed(() => {
-  if (mapClickPopupPosition.value) {
-    return {
-      left: `${mapClickPopupPosition.value.left}px`,
-      top: `${mapClickPopupPosition.value.top}px`,
-      transform: "none",
-    };
-  }
+    if (mapClickPopupPosition.value) {
+        return {
+            left: `${mapClickPopupPosition.value.left}px`,
+            top: `${mapClickPopupPosition.value.top}px`,
+            transform: "none",
+        };
+    }
 
-  const location = mapClickLocation.value;
-  if (
-    !location ||
-    typeof location.screenX !== "number" ||
-    typeof location.screenY !== "number"
-  ) {
-    return {
-      left: "50%",
-      top: "50%",
-      transform: "translate(-50%, -50%)",
-    };
-  }
+    const location = mapClickLocation.value;
+    if (
+        !location ||
+        typeof location.screenX !== "number" ||
+        typeof location.screenY !== "number"
+    ) {
+        return {
+            left: "50%",
+            top: "50%",
+            transform: "translate(-50%, -50%)",
+        };
+    }
 
-  return {
-    left: `${location.screenX}px`,
-    top: `${location.screenY}px`,
-    transform: "translate(-50%, calc(-100% - 12px))",
-  };
+    return {
+        left: `${location.screenX}px`,
+        top: `${location.screenY}px`,
+        transform: "translate(-50%, calc(-100% - 12px))",
+    };
 });
 
 function clamp(value: number, min: number, max: number): number {
-  if (max < min) return min;
-  return Math.min(Math.max(value, min), max);
+    if (max < min) return min;
+    return Math.min(Math.max(value, min), max);
 }
 
 function updateMapClickPopupPosition() {
-  const location = mapClickLocation.value;
-  const mapPanel = mapPanelRef.value;
-  const popup = mapClickPopupRef.value;
+    const location = mapClickLocation.value;
+    const mapPanel = mapPanelRef.value;
+    const popup = mapClickPopupRef.value;
 
-  if (!location || !mapPanel || !popup) {
-    mapClickPopupPosition.value = null;
-    return;
-  }
+    if (!location || !mapPanel || !popup) {
+        mapClickPopupPosition.value = null;
+        return;
+    }
 
-  const panelWidth = mapPanel.clientWidth;
-  const panelHeight = mapPanel.clientHeight;
-  const popupWidth = popup.offsetWidth;
-  const popupHeight = popup.offsetHeight;
+    const panelWidth = mapPanel.clientWidth;
+    const panelHeight = mapPanel.clientHeight;
+    const popupWidth = popup.offsetWidth;
+    const popupHeight = popup.offsetHeight;
 
-  const anchorX =
-    typeof location.screenX === "number" ? location.screenX : panelWidth / 2;
-  const anchorY =
-    typeof location.screenY === "number" ? location.screenY : panelHeight / 2;
+    const anchorX =
+        typeof location.screenX === "number"
+            ? location.screenX
+            : panelWidth / 2;
+    const anchorY =
+        typeof location.screenY === "number"
+            ? location.screenY
+            : panelHeight / 2;
 
-  const minLeft = MAP_CLICK_POPUP_PADDING_PX;
-  const maxLeft = panelWidth - popupWidth - MAP_CLICK_POPUP_PADDING_PX;
-  const left = clamp(anchorX - popupWidth / 2, minLeft, maxLeft);
+    const minLeft = MAP_CLICK_POPUP_PADDING_PX;
+    const maxLeft = panelWidth - popupWidth - MAP_CLICK_POPUP_PADDING_PX;
+    const left = clamp(anchorX - popupWidth / 2, minLeft, maxLeft);
 
-  const topAbove = anchorY - popupHeight - MAP_CLICK_POPUP_OFFSET_PX;
-  const topBelow = anchorY + MAP_CLICK_POPUP_OFFSET_PX;
-  let top = topAbove;
+    const topAbove = anchorY - popupHeight - MAP_CLICK_POPUP_OFFSET_PX;
+    const topBelow = anchorY + MAP_CLICK_POPUP_OFFSET_PX;
+    let top = topAbove;
 
-  if (
-    topAbove < MAP_CLICK_POPUP_PADDING_PX &&
-    topBelow + popupHeight <= panelHeight - MAP_CLICK_POPUP_PADDING_PX
-  ) {
-    top = topBelow;
-  }
+    if (
+        topAbove < MAP_CLICK_POPUP_PADDING_PX &&
+        topBelow + popupHeight <= panelHeight - MAP_CLICK_POPUP_PADDING_PX
+    ) {
+        top = topBelow;
+    }
 
-  const minTop = MAP_CLICK_POPUP_PADDING_PX;
-  const maxTop = panelHeight - popupHeight - MAP_CLICK_POPUP_PADDING_PX;
-  mapClickPopupPosition.value = {
-    left,
-    top: clamp(top, minTop, maxTop),
-  };
+    const minTop = MAP_CLICK_POPUP_PADDING_PX;
+    const maxTop = panelHeight - popupHeight - MAP_CLICK_POPUP_PADDING_PX;
+    mapClickPopupPosition.value = {
+        left,
+        top: clamp(top, minTop, maxTop),
+    };
 }
 
 function scheduleEnableMapClickOutsideClose() {
-  mapClickOutsideCloseEnabled.value = false;
-  if (mapClickOutsideEnableTimer) {
-    clearTimeout(mapClickOutsideEnableTimer);
-    mapClickOutsideEnableTimer = null;
-  }
+    mapClickOutsideCloseEnabled.value = false;
+    if (mapClickOutsideEnableTimer) {
+        clearTimeout(mapClickOutsideEnableTimer);
+        mapClickOutsideEnableTimer = null;
+    }
 
-  mapClickOutsideEnableTimer = setTimeout(() => {
-    mapClickOutsideCloseEnabled.value = true;
-    mapClickOutsideEnableTimer = null;
-  }, 0);
+    mapClickOutsideEnableTimer = setTimeout(() => {
+        mapClickOutsideCloseEnabled.value = true;
+        mapClickOutsideEnableTimer = null;
+    }, 0);
 }
 
 function handleDocumentPointerDown(event: PointerEvent) {
-  if (!mapClickLocation.value || !mapClickOutsideCloseEnabled.value) return;
-  const popup = mapClickPopupRef.value;
-  const target = event.target;
-  if (popup && target instanceof Node && popup.contains(target)) return;
-  mapClickLocation.value = null;
+    if (!mapClickLocation.value || !mapClickOutsideCloseEnabled.value) return;
+    const popup = mapClickPopupRef.value;
+    const target = event.target;
+    if (popup && target instanceof Node && popup.contains(target)) return;
+    mapClickLocation.value = null;
 }
 
 function getSelectedMapClickCandidate(): MapClickCandidateOption | null {
-  if (!mapClickLocation.value) return null;
-  if (mapClickLocation.value.selectedIndex === null) return null;
-  return (
-    mapClickLocation.value.candidates[mapClickLocation.value.selectedIndex] ??
-    null
-  );
+    if (!mapClickLocation.value) return null;
+    if (mapClickLocation.value.selectedIndex === null) return null;
+    return (
+        mapClickLocation.value.candidates[
+            mapClickLocation.value.selectedIndex
+        ] ?? null
+    );
 }
 
 function getStatusMessageFromError(error: unknown): string | null {
-  if (!error || typeof error !== "object") return null;
+    if (!error || typeof error !== "object") return null;
 
-  const data = (error as { data?: { statusMessage?: unknown } }).data;
-  if (data && typeof data.statusMessage === "string") {
-    return data.statusMessage;
-  }
+    const data = (error as { data?: { statusMessage?: unknown } }).data;
+    if (data && typeof data.statusMessage === "string") {
+        return data.statusMessage;
+    }
 
-  const statusMessage = (error as { statusMessage?: unknown }).statusMessage;
-  if (typeof statusMessage === "string") {
-    return statusMessage;
-  }
+    const statusMessage = (error as { statusMessage?: unknown }).statusMessage;
+    if (typeof statusMessage === "string") {
+        return statusMessage;
+    }
 
-  return null;
+    return null;
 }
 
 function hasWaypointAtDistance(
-  distance: number,
-  excludedWaypointId?: string,
+    distance: number,
+    excludedWaypointId?: string,
 ): boolean {
-  return editableWaypoints.value.some((waypoint) => {
-    if (excludedWaypointId && waypoint.id === excludedWaypointId) return false;
-    return (
-      Math.abs(waypoint.distance - distance) <=
-      WAYPOINT_DISTANCE_DUPLICATE_TOLERANCE_METERS
-    );
-  });
+    return editableWaypoints.value.some((waypoint) => {
+        if (excludedWaypointId && waypoint.id === excludedWaypointId)
+            return false;
+        return (
+            Math.abs(waypoint.distance - distance) <=
+            WAYPOINT_DISTANCE_DUPLICATE_TOLERANCE_METERS
+        );
+    });
 }
 
 function getMapClickCandidates(
-  action: MapClickAction,
-  rawCandidates: TrackClickCandidate[],
+    action: MapClickAction,
+    rawCandidates: TrackClickCandidate[],
 ): MapClickCandidateOption[] {
-  const excludedWaypointId =
-    action === "move" ? selectedWaypointForEdit.value?.id : undefined;
+    const excludedWaypointId =
+        action === "move" ? selectedWaypointForEdit.value?.id : undefined;
 
-  return rawCandidates.map((candidate) => ({
-    ...candidate,
-    occupied: hasWaypointAtDistance(candidate.distance, excludedWaypointId),
-  }));
+    return rawCandidates.map((candidate) => ({
+        ...candidate,
+        occupied: hasWaypointAtDistance(candidate.distance, excludedWaypointId),
+    }));
 }
 
 function getDefaultMapClickCandidateIndex(
-  candidates: MapClickCandidateOption[],
+    candidates: MapClickCandidateOption[],
 ): number | null {
-  const firstAvailableIndex = candidates.findIndex((candidate) => !candidate.occupied);
-  if (firstAvailableIndex !== -1) return firstAvailableIndex;
-  return null;
+    const firstAvailableIndex = candidates.findIndex(
+        (candidate) => !candidate.occupied,
+    );
+    if (firstAvailableIndex !== -1) return firstAvailableIndex;
+    return null;
 }
 
 watch(
-  () => [
-    mapClickLocation.value?.screenX,
-    mapClickLocation.value?.screenY,
-    mapClickLocation.value?.selectedIndex,
-    mapClickLocation.value?.candidates.length,
-    mapClickLocation.value?.action,
-  ],
-  async () => {
-    if (!mapClickLocation.value) {
-      mapClickPopupPosition.value = null;
-      return;
-    }
+    () => [
+        mapClickLocation.value?.screenX,
+        mapClickLocation.value?.screenY,
+        mapClickLocation.value?.selectedIndex,
+        mapClickLocation.value?.candidates.length,
+        mapClickLocation.value?.action,
+    ],
+    async () => {
+        if (!mapClickLocation.value) {
+            mapClickPopupPosition.value = null;
+            return;
+        }
 
-    await nextTick();
-    if (import.meta.client) {
-      requestAnimationFrame(() => {
+        await nextTick();
+        if (import.meta.client) {
+            requestAnimationFrame(() => {
+                updateMapClickPopupPosition();
+            });
+            return;
+        }
         updateMapClickPopupPosition();
-      });
-      return;
-    }
-    updateMapClickPopupPosition();
-  },
+    },
 );
 
 watch(
-  () => mapClickLocation.value,
-  (newLocation) => {
-    if (newLocation) {
-      scheduleEnableMapClickOutsideClose();
-      return;
-    }
+    () => mapClickLocation.value,
+    (newLocation) => {
+        if (newLocation) {
+            scheduleEnableMapClickOutsideClose();
+            return;
+        }
 
-    mapClickOutsideCloseEnabled.value = false;
-    if (mapClickOutsideEnableTimer) {
-      clearTimeout(mapClickOutsideEnableTimer);
-      mapClickOutsideEnableTimer = null;
-    }
-  },
+        mapClickOutsideCloseEnabled.value = false;
+        if (mapClickOutsideEnableTimer) {
+            clearTimeout(mapClickOutsideEnableTimer);
+            mapClickOutsideEnableTimer = null;
+        }
+    },
 );
 
 function handleWindowResize() {
-  if (!mapClickLocation.value) return;
-  updateMapClickPopupPosition();
+    if (!mapClickLocation.value) return;
+    updateMapClickPopupPosition();
 }
 
 onMounted(() => {
-  if (!import.meta.client) return;
-  window.addEventListener("resize", handleWindowResize);
-  document.addEventListener("pointerdown", handleDocumentPointerDown, true);
+    if (!import.meta.client) return;
+    window.addEventListener("resize", handleWindowResize);
+    document.addEventListener("pointerdown", handleDocumentPointerDown, true);
 });
 
 onBeforeUnmount(() => {
-  if (!import.meta.client) return;
-  window.removeEventListener("resize", handleWindowResize);
-  document.removeEventListener("pointerdown", handleDocumentPointerDown, true);
-  if (mapClickOutsideEnableTimer) {
-    clearTimeout(mapClickOutsideEnableTimer);
-    mapClickOutsideEnableTimer = null;
-  }
+    if (!import.meta.client) return;
+    window.removeEventListener("resize", handleWindowResize);
+    document.removeEventListener(
+        "pointerdown",
+        handleDocumentPointerDown,
+        true,
+    );
+    if (mapClickOutsideEnableTimer) {
+        clearTimeout(mapClickOutsideEnableTimer);
+        mapClickOutsideEnableTimer = null;
+    }
 });
 
 function findNearestAvailableWaypointDistance(
-  preferredDistance: number,
-  excludedWaypointId?: string,
+    preferredDistance: number,
+    excludedWaypointId?: string,
 ): number | null {
-  if (!hasWaypointAtDistance(preferredDistance, excludedWaypointId)) {
-    return preferredDistance;
-  }
-
-  const upperBound = Math.max(
-    props.course?.totalDistance ?? 0,
-    preferredDistance,
-    ...editableWaypoints.value
-      .filter((waypoint) => waypoint.id !== excludedWaypointId)
-      .map((waypoint) => waypoint.distance),
-  );
-
-  const stepMeters = 25;
-  for (
-    let offset = stepMeters;
-    offset <= upperBound + stepMeters;
-    offset += stepMeters
-  ) {
-    const forwardDistance = Math.min(upperBound, preferredDistance + offset);
-    if (!hasWaypointAtDistance(forwardDistance, excludedWaypointId)) {
-      return forwardDistance;
+    if (!hasWaypointAtDistance(preferredDistance, excludedWaypointId)) {
+        return preferredDistance;
     }
 
-    const backwardDistance = Math.max(0, preferredDistance - offset);
-    if (!hasWaypointAtDistance(backwardDistance, excludedWaypointId)) {
-      return backwardDistance;
-    }
-  }
+    const upperBound = Math.max(
+        props.course?.totalDistance ?? 0,
+        preferredDistance,
+        ...editableWaypoints.value
+            .filter((waypoint) => waypoint.id !== excludedWaypointId)
+            .map((waypoint) => waypoint.distance),
+    );
 
-  return null;
+    const stepMeters = 25;
+    for (
+        let offset = stepMeters;
+        offset <= upperBound + stepMeters;
+        offset += stepMeters
+    ) {
+        const forwardDistance = Math.min(
+            upperBound,
+            preferredDistance + offset,
+        );
+        if (!hasWaypointAtDistance(forwardDistance, excludedWaypointId)) {
+            return forwardDistance;
+        }
+
+        const backwardDistance = Math.max(0, preferredDistance - offset);
+        if (!hasWaypointAtDistance(backwardDistance, excludedWaypointId)) {
+            return backwardDistance;
+        }
+    }
+
+    return null;
 }
 
 function buildWaypointRouteState(
-  distance: number,
-  positionOverride?: { lat: number; lng: number },
+    distance: number,
+    positionOverride?: { lat: number; lng: number },
 ): Pick<Waypoint, "lat" | "lng" | "distance" | "elevation" | "order"> | null {
-  const position = positionOverride ?? calculatePositionFromDistance(distance);
-  if (!position) return null;
+    const position =
+        positionOverride ?? calculatePositionFromDistance(distance);
+    if (!position) return null;
 
-  return {
-    lat: position.lat,
-    lng: position.lng,
-    distance,
-    elevation: calculateElevationAtDistance(distance),
-    order: Math.floor(distance),
-  };
+    return {
+        lat: position.lat,
+        lng: position.lng,
+        distance,
+        elevation: calculateElevationAtDistance(distance),
+        order: Math.floor(distance),
+    };
 }
 
 function replaceEditableWaypoint(updatedWaypoint: Waypoint): Waypoint {
-  editableWaypoints.value = [...editableWaypoints.value]
-    .filter((waypoint) => waypoint.id !== updatedWaypoint.id)
-    .concat(updatedWaypoint)
-    .sort((a, b) => a.distance - b.distance);
+    editableWaypoints.value = [...editableWaypoints.value]
+        .filter((waypoint) => waypoint.id !== updatedWaypoint.id)
+        .concat(updatedWaypoint)
+        .sort((a, b) => a.distance - b.distance);
 
-  const refreshedWaypoint =
-    editableWaypoints.value.find((waypoint) => waypoint.id === updatedWaypoint.id) ??
-    updatedWaypoint;
+    const refreshedWaypoint =
+        editableWaypoints.value.find(
+            (waypoint) => waypoint.id === updatedWaypoint.id,
+        ) ?? updatedWaypoint;
 
-  if (newWaypointBeingCreated.value?.id === refreshedWaypoint.id) {
-    newWaypointBeingCreated.value = {
-      ...newWaypointBeingCreated.value,
-      ...refreshedWaypoint,
-    };
-  }
+    if (newWaypointBeingCreated.value?.id === refreshedWaypoint.id) {
+        newWaypointBeingCreated.value = {
+            ...newWaypointBeingCreated.value,
+            ...refreshedWaypoint,
+        };
+    }
 
-  if (selectedWaypointForEdit.value?.id === refreshedWaypoint.id) {
-    selectedWaypointForEdit.value = refreshedWaypoint;
-  }
+    if (selectedWaypointForEdit.value?.id === refreshedWaypoint.id) {
+        selectedWaypointForEdit.value = refreshedWaypoint;
+    }
 
-  stableMapCenter.value = [refreshedWaypoint.lat, refreshedWaypoint.lng];
-  return refreshedWaypoint;
+    stableMapCenter.value = [refreshedWaypoint.lat, refreshedWaypoint.lng];
+    return refreshedWaypoint;
 }
 
 function applyWaypointRouteUpdate(
-  waypoint: Waypoint,
-  distance: number,
-  positionOverride?: { lat: number; lng: number },
+    waypoint: Waypoint,
+    distance: number,
+    positionOverride?: { lat: number; lng: number },
 ): Waypoint | null {
-  const routeState = buildWaypointRouteState(distance, positionOverride);
-  if (!routeState) return null;
+    const routeState = buildWaypointRouteState(distance, positionOverride);
+    if (!routeState) return null;
 
-  return replaceEditableWaypoint({
-    ...waypoint,
-    ...routeState,
-  });
+    return replaceEditableWaypoint({
+        ...waypoint,
+        ...routeState,
+    });
 }
 
 // Initialize form data when course changes
 watchEffect(() => {
-  if (props.course) {
-    editName.value = props.course.name;
-    editDescription.value = props.course.description || "";
-    editDefaultDistanceUnit.value =
-      props.course?.defaultDistanceUnit ?? "kilometers";
-    editDefaultElevationUnit.value =
-      props.course?.defaultElevationUnit ?? "meters";
+    if (props.course) {
+        editName.value = props.course.name;
+        editDescription.value = props.course.description || "";
+        editDefaultDistanceUnit.value =
+            props.course?.defaultDistanceUnit ?? "kilometers";
+        editDefaultElevationUnit.value =
+            props.course?.defaultElevationUnit ?? "meters";
 
-    const raceDate = props.course.raceDate;
-    if (raceDate) {
-      const dateObj = new Date(raceDate);
-      const year = dateObj.getUTCFullYear();
-      const month = String(dateObj.getUTCMonth() + 1).padStart(2, "0");
-      const day = String(dateObj.getUTCDate()).padStart(2, "0");
-      editRaceDate.value = `${year}-${month}-${day}`;
+        const raceDate = props.course.raceDate;
+        if (raceDate) {
+            const dateObj = new Date(raceDate);
+            const year = dateObj.getUTCFullYear();
+            const month = String(dateObj.getUTCMonth() + 1).padStart(2, "0");
+            const day = String(dateObj.getUTCDate()).padStart(2, "0");
+            editRaceDate.value = `${year}-${month}-${day}`;
 
-      const hours = String(dateObj.getUTCHours()).padStart(2, "0");
-      const minutes = String(dateObj.getUTCMinutes()).padStart(2, "0");
-      editStartTime.value = `${hours}:${minutes}`;
-    } else {
-      editRaceDate.value = "";
-      editStartTime.value = "";
+            const hours = String(dateObj.getUTCHours()).padStart(2, "0");
+            const minutes = String(dateObj.getUTCMinutes()).padStart(2, "0");
+            editStartTime.value = `${hours}:${minutes}`;
+        } else {
+            editRaceDate.value = "";
+            editStartTime.value = "";
+        }
     }
-  }
 });
 
 // Initialize per-course smoothing fields when course or settings change
 watch(
-  () => [props.course?.id, userSettingsStore.settings],
-  () => {
-    const s = userSettingsStore.getSmoothingForCourse(props.course?.id);
-    smoothingGradeWindow.value = s.gradeWindowMeters;
-    smoothingSampleStep.value = s.sampleStepMeters;
-    smoothingPaceWindow.value = s.paceSmoothingMeters;
-  },
-  { immediate: true, deep: true },
+    () => [
+        props.course?.id,
+        props.courseSettings,
+        editDefaultDistanceUnit.value,
+    ],
+    () => {
+        const s = normalizeCourseAnalysisSettings(props.courseSettings ?? null);
+        smoothingGradeWindow.value = s.gradeWindowMeters;
+        smoothingSampleStep.value = s.sampleStepMeters;
+        smoothingPaceWindow.value = s.paceSmoothingMeters;
+        setSmoothingPaceCapFromSecondsPerMeter(
+            s.paceChartMaxDisplaySecondsPerMeter,
+        );
+    },
+    { immediate: true, deep: true },
 );
 
 // Initialize waypoints when they change
 watchEffect(() => {
-  editableWaypoints.value = [...props.waypoints];
+    editableWaypoints.value = [...props.waypoints];
 });
 
 // Initialize distance input when waypoint selection changes
 watch(selectedWaypointForEdit, (newWaypoint) => {
-  if (newWaypoint) {
-    // Convert from meters to user's preferred units
-    const distanceInUserUnits = distanceUnitIsMiles.value
-      ? newWaypoint.distance * 0.000621371 // Convert meters to miles
-      : newWaypoint.distance / 1000; // Convert meters to kilometers
-    editingWaypointDistance.value = distanceInUserUnits.toFixed(
-      distanceUnitIsMiles.value ? 3 : 1,
-    );
-  } else {
-    editingWaypointDistance.value = "";
-  }
+    if (newWaypoint) {
+        // Convert from meters to user's preferred units
+        const distanceInUserUnits = distanceUnitIsMiles.value
+            ? newWaypoint.distance * 0.000621371 // Convert meters to miles
+            : newWaypoint.distance / 1000; // Convert meters to kilometers
+        editingWaypointDistance.value = distanceInUserUnits.toFixed(
+            distanceUnitIsMiles.value ? 3 : 1,
+        );
+    } else {
+        editingWaypointDistance.value = "";
+    }
 });
 
 // Watch for tab changes to invalidate map size
 watch(activeTab, (newTab) => {
-  if (newTab === "waypoints") {
-    // Give the DOM time to render the waypoints tab
-    nextTick(() => {
-      // Force Leaflet to recalculate map size after tab switch
-      setTimeout(() => {
-        if (import.meta.client) {
-          // Try to find the map instance and invalidate its size
-          const mapElement = document.querySelector(
-            ".leaflet-container",
-          ) as HTMLElement & {
-            _leaflet_map?: { invalidateSize: () => void };
-          };
-          if (mapElement && mapElement._leaflet_map) {
-            mapElement._leaflet_map.invalidateSize();
-          }
-        }
-      }, 100);
-    });
-  }
+    if (newTab === "waypoints") {
+        // Give the DOM time to render the waypoints tab
+        nextTick(() => {
+            // Force Leaflet to recalculate map size after tab switch
+            setTimeout(() => {
+                if (import.meta.client) {
+                    // Try to find the map instance and invalidate its size
+                    const mapElement = document.querySelector(
+                        ".leaflet-container",
+                    ) as HTMLElement & {
+                        _leaflet_map?: { invalidateSize: () => void };
+                    };
+                    if (mapElement && mapElement._leaflet_map) {
+                        mapElement._leaflet_map.invalidateSize();
+                    }
+                }
+            }, 100);
+        });
+    }
 });
 
 // Watch for modal opening to ensure map size is correct
 watch(
-  () => props.open,
-  (isOpen) => {
-    if (isOpen) {
-      // Give time for modal to fully open and render
-      nextTick(() => {
-        setTimeout(() => {
-          if (import.meta.client && activeTab.value === "waypoints") {
-            const mapElement = document.querySelector(
-              ".leaflet-container",
-            ) as HTMLElement & {
-              _leaflet_map?: { invalidateSize: () => void };
-            };
-            if (mapElement && mapElement._leaflet_map) {
-              mapElement._leaflet_map.invalidateSize();
-            }
-          }
-        }, 200);
-      });
-    }
-  },
+    () => props.open,
+    (isOpen) => {
+        if (isOpen) {
+            // Give time for modal to fully open and render
+            nextTick(() => {
+                setTimeout(() => {
+                    if (import.meta.client && activeTab.value === "waypoints") {
+                        const mapElement = document.querySelector(
+                            ".leaflet-container",
+                        ) as HTMLElement & {
+                            _leaflet_map?: { invalidateSize: () => void };
+                        };
+                        if (mapElement && mapElement._leaflet_map) {
+                            mapElement._leaflet_map.invalidateSize();
+                        }
+                    }
+                }, 200);
+            });
+        }
+    },
 );
 
 // Computed properties for map display
 const mapCenter = computed((): [number, number] => {
-  // Follow the current waypoint focus target while editing.
-  if (stableMapCenter.value) {
-    return stableMapCenter.value;
-  }
-
-  if (selectedWaypointForEdit.value) {
-    return [
-      selectedWaypointForEdit.value.lat,
-      selectedWaypointForEdit.value.lng,
-    ];
-  }
-
-  // Default to first waypoint or course center
-  if (editableWaypoints.value.length > 0) {
-    const firstWaypoint = editableWaypoints.value[0];
-    if (firstWaypoint && firstWaypoint.lat !== 0 && firstWaypoint.lng !== 0) {
-      return [firstWaypoint.lat, firstWaypoint.lng];
+    // Follow the current waypoint focus target while editing.
+    if (stableMapCenter.value) {
+        return stableMapCenter.value;
     }
-  }
 
-  // If we have geo data, try to extract center from it
-  if (props.geoJsonData.length > 0) {
-    const geoJson = props.geoJsonData[0];
-    if (geoJson && geoJson.features.length > 0) {
-      const firstFeature = geoJson.features[0];
-      if (firstFeature && firstFeature.geometry.type === "LineString") {
-        const coords = firstFeature.geometry.coordinates[0];
-        if (
-          coords &&
-          coords.length >= 2 &&
-          typeof coords[0] === "number" &&
-          typeof coords[1] === "number"
-        ) {
-          return [coords[1], coords[0]]; // Note: GeoJSON is [lng, lat], Leaflet expects [lat, lng]
-        }
-      } else if (firstFeature && firstFeature.geometry.type === "Point") {
-        const coords = firstFeature.geometry.coordinates;
-        if (
-          coords &&
-          coords.length >= 2 &&
-          typeof coords[0] === "number" &&
-          typeof coords[1] === "number"
-        ) {
-          return [coords[1], coords[0]];
-        }
-      }
+    if (selectedWaypointForEdit.value) {
+        return [
+            selectedWaypointForEdit.value.lat,
+            selectedWaypointForEdit.value.lng,
+        ];
     }
-  }
 
-  // Fallback center - California coordinates since this appears to be a trail race
-  return [39.1612, -120.7401]; // Nevada City, CA area
+    // Default to first waypoint or course center
+    if (editableWaypoints.value.length > 0) {
+        const firstWaypoint = editableWaypoints.value[0];
+        if (
+            firstWaypoint &&
+            firstWaypoint.lat !== 0 &&
+            firstWaypoint.lng !== 0
+        ) {
+            return [firstWaypoint.lat, firstWaypoint.lng];
+        }
+    }
+
+    // If we have geo data, try to extract center from it
+    if (props.geoJsonData.length > 0) {
+        const geoJson = props.geoJsonData[0];
+        if (geoJson && geoJson.features.length > 0) {
+            const firstFeature = geoJson.features[0];
+            if (firstFeature && firstFeature.geometry.type === "LineString") {
+                const coords = firstFeature.geometry.coordinates[0];
+                if (
+                    coords &&
+                    coords.length >= 2 &&
+                    typeof coords[0] === "number" &&
+                    typeof coords[1] === "number"
+                ) {
+                    return [coords[1], coords[0]]; // Note: GeoJSON is [lng, lat], Leaflet expects [lat, lng]
+                }
+            } else if (firstFeature && firstFeature.geometry.type === "Point") {
+                const coords = firstFeature.geometry.coordinates;
+                if (
+                    coords &&
+                    coords.length >= 2 &&
+                    typeof coords[0] === "number" &&
+                    typeof coords[1] === "number"
+                ) {
+                    return [coords[1], coords[0]];
+                }
+            }
+        }
+    }
+
+    // Fallback center - California coordinates since this appears to be a trail race
+    return [39.1612, -120.7401]; // Nevada City, CA area
 });
 
 const mapZoom = computed((): number => {
-  if (selectedWaypointForEdit.value) {
-    return 15; // Closer zoom when a waypoint is selected.
-  }
-  return 10; // Default zoom to show course overview
+    if (selectedWaypointForEdit.value) {
+        return 15; // Closer zoom when a waypoint is selected.
+    }
+    return 10; // Default zoom to show course overview
 });
 
 // Extract elevation profile from GeoJSON data
 const _elevationProfile = computed((): ElevationPoint[] => {
-  if (!props.geoJsonData || props.geoJsonData.length === 0) {
-    return [];
-  }
+    if (!props.geoJsonData || props.geoJsonData.length === 0) {
+        return [];
+    }
 
-  // Combine all GeoJSON features
-  const combinedGeoJson: GeoJSON.FeatureCollection = {
-    type: "FeatureCollection",
-    features: props.geoJsonData.flatMap((collection) => collection.features),
-  };
+    // Combine all GeoJSON features
+    const combinedGeoJson: GeoJSON.FeatureCollection = {
+        type: "FeatureCollection",
+        features: props.geoJsonData.flatMap(
+            (collection) => collection.features,
+        ),
+    };
 
-  return extractElevationProfile(combinedGeoJson);
+    return extractElevationProfile(combinedGeoJson);
 });
 
 const editPublic = ref(!!props.course?.public);
 // Re-sync toggle when course changes (e.g., modal reopened or updated)
 watch(
-  () => props.course?.id,
-  () => {
-    if (props.course) {
-      editPublic.value = !!props.course.public;
-    }
-  },
+    () => props.course?.id,
+    () => {
+        if (props.course) {
+            editPublic.value = !!props.course.public;
+        }
+    },
 );
 function closeModal() {
-  updateError.value = "";
-  waypointUpdateError.value = "";
-  updatingWaypointIds.value.clear();
-  deletingWaypointIds.value.clear();
-  waypointPendingDelete.value = null;
+    updateError.value = "";
+    waypointUpdateError.value = "";
+    updatingWaypointIds.value.clear();
+    deletingWaypointIds.value.clear();
+    waypointPendingDelete.value = null;
 
-  // Clean up temporary waypoint if it exists
-  if (newWaypointBeingCreated.value) {
-    const index = editableWaypoints.value.findIndex(
-      (w) => w.id === newWaypointBeingCreated.value?.id,
-    );
-    if (index !== -1) {
-      editableWaypoints.value.splice(index, 1);
+    // Clean up temporary waypoint if it exists
+    if (newWaypointBeingCreated.value) {
+        const index = editableWaypoints.value.findIndex(
+            (w) => w.id === newWaypointBeingCreated.value?.id,
+        );
+        if (index !== -1) {
+            editableWaypoints.value.splice(index, 1);
+        }
+        newWaypointBeingCreated.value = null;
     }
-    newWaypointBeingCreated.value = null;
-  }
 
-  // Reset waypoint editing state
-  if (originalWaypointState.value && selectedWaypointForEdit.value) {
-    const index = editableWaypoints.value.findIndex(
-      (w) => w.id === selectedWaypointForEdit.value?.id,
-    );
-    if (index !== -1) {
-      editableWaypoints.value[index] = { ...originalWaypointState.value };
+    // Reset waypoint editing state
+    if (originalWaypointState.value && selectedWaypointForEdit.value) {
+        const index = editableWaypoints.value.findIndex(
+            (w) => w.id === selectedWaypointForEdit.value?.id,
+        );
+        if (index !== -1) {
+            editableWaypoints.value[index] = { ...originalWaypointState.value };
+        }
     }
-  }
 
-  selectedWaypointForEdit.value = null;
-  originalWaypointState.value = null;
-  stableMapCenter.value = null;
-  activeTab.value = "course";
-  emit("close");
+    selectedWaypointForEdit.value = null;
+    originalWaypointState.value = null;
+    stableMapCenter.value = null;
+    activeTab.value = "course";
+    emit("close");
 }
 
 async function saveCourseChanges() {
-  if (!props.course || !editName.value.trim()) {
-    return;
-  }
-
-  isUpdating.value = true;
-  updateError.value = "";
-
-  try {
-    let raceDateTime = null;
-    if (editRaceDate.value) {
-      const raw = (editStartTime.value || "").trim();
-      let time = "00:00:00";
-      if (raw) {
-        const parts = raw.split(":").map((p) => parseInt(p, 10));
-        if (parts.length === 2) {
-          const h = parts[0];
-          const m = parts[1];
-          if (
-            typeof h === "number" &&
-            typeof m === "number" &&
-            Number.isFinite(h) &&
-            Number.isFinite(m) &&
-            h >= 0 &&
-            h <= 23 &&
-            m >= 0 &&
-            m <= 59
-          ) {
-            time = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
-          }
-        } else if (parts.length === 3) {
-          const h = parts[0];
-          const m = parts[1];
-          const s = parts[2];
-          if (
-            typeof h === "number" &&
-            typeof m === "number" &&
-            typeof s === "number" &&
-            Number.isFinite(h) &&
-            Number.isFinite(m) &&
-            Number.isFinite(s) &&
-            h >= 0 &&
-            h <= 23 &&
-            m >= 0 &&
-            m <= 59 &&
-            s >= 0 &&
-            s <= 59
-          ) {
-            time = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-          }
-        }
-      }
-      raceDateTime = `${editRaceDate.value}T${time}`;
+    if (!props.course || !editName.value.trim()) {
+        return;
     }
 
-    const response = await $fetch<{ course: SelectCourse }>(
-      `/api/courses/${props.course.id}`,
-      {
-        method: "PUT",
-        body: {
-          name: editName.value.trim(),
-          description: editDescription.value.trim() || undefined,
-          raceDate: raceDateTime,
-          public: editPublic.value,
-          defaultDistanceUnit: editDefaultDistanceUnit.value,
-          defaultElevationUnit: editDefaultElevationUnit.value,
+    isUpdating.value = true;
+    updateError.value = "";
+
+    try {
+        let raceDateTime = null;
+        if (editRaceDate.value) {
+            const raw = (editStartTime.value || "").trim();
+            let time = "00:00:00";
+            if (raw) {
+                const parts = raw.split(":").map((p) => parseInt(p, 10));
+                if (parts.length === 2) {
+                    const h = parts[0];
+                    const m = parts[1];
+                    if (
+                        typeof h === "number" &&
+                        typeof m === "number" &&
+                        Number.isFinite(h) &&
+                        Number.isFinite(m) &&
+                        h >= 0 &&
+                        h <= 23 &&
+                        m >= 0 &&
+                        m <= 59
+                    ) {
+                        time = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
+                    }
+                } else if (parts.length === 3) {
+                    const h = parts[0];
+                    const m = parts[1];
+                    const s = parts[2];
+                    if (
+                        typeof h === "number" &&
+                        typeof m === "number" &&
+                        typeof s === "number" &&
+                        Number.isFinite(h) &&
+                        Number.isFinite(m) &&
+                        Number.isFinite(s) &&
+                        h >= 0 &&
+                        h <= 23 &&
+                        m >= 0 &&
+                        m <= 59 &&
+                        s >= 0 &&
+                        s <= 59
+                    ) {
+                        time = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+                    }
+                }
+            }
+            raceDateTime = `${editRaceDate.value}T${time}`;
+        }
+
+        const response = await $fetch<{ course: SelectCourse }>(
+            `/api/courses/${props.course.id}`,
+            {
+                method: "PUT",
+                body: {
+                    name: editName.value.trim(),
+                    description: editDescription.value.trim() || undefined,
+                    raceDate: raceDateTime,
+                    public: editPublic.value,
+                    defaultDistanceUnit: editDefaultDistanceUnit.value,
+                    defaultElevationUnit: editDefaultElevationUnit.value,
+                },
+            },
+        );
+
+        await saveCourseSmoothing();
+        emit("course-updated", response.course);
+    } catch (error) {
+        console.error("Error updating course:", error);
+        updateError.value = "Failed to update course. Please try again.";
+    } finally {
+        isUpdating.value = false;
+    }
+}
+
+async function saveCourseSmoothing() {
+    if (!props.course) return;
+
+    const response = await $fetch<{ settings: CourseAnalysisSettings }>(
+        `/api/courses/${props.course.id}/settings`,
+        {
+            method: "PUT",
+            body: {
+                settings: {
+                    gradeWindowMeters:
+                        smoothingGradeWindow.value === 0
+                            ? 0
+                            : Number(smoothingGradeWindow.value) || 100,
+                    sampleStepMeters:
+                        smoothingSampleStep.value === 0
+                            ? 0
+                            : Number(smoothingSampleStep.value) || 50,
+                    paceSmoothingMeters:
+                        smoothingPaceWindow.value === 0
+                            ? 0
+                            : Number(smoothingPaceWindow.value) || 300,
+                    paceChartMaxDisplaySecondsPerMeter:
+                        getSmoothingPaceCapSecondsPerMeter(),
+                },
+            },
         },
-      },
     );
 
-    emit("course-updated", response.course);
-  } catch (error) {
-    console.error("Error updating course:", error);
-    updateError.value = "Failed to update course. Please try again.";
-  } finally {
-    isUpdating.value = false;
-  }
-}
-
-function saveCourseSmoothing() {
-  if (!props.course) return;
-
-  userSettingsStore.updateCourseSmoothing(props.course.id, {
-    gradeWindowMeters:
-      smoothingGradeWindow.value === 0
-        ? 0
-        : Number(smoothingGradeWindow.value) || 100,
-    sampleStepMeters:
-      smoothingSampleStep.value === 0
-        ? 0
-        : Number(smoothingSampleStep.value) || 50,
-    paceSmoothingMeters:
-      smoothingPaceWindow.value === 0
-        ? 0
-        : Number(smoothingPaceWindow.value) || 300,
-  });
-}
-
-function resetCourseSmoothing() {
-  if (!props.course) return;
-
-  userSettingsStore.clearCourseSmoothing(props.course.id);
-
-  const defaults = userSettingsStore.getSmoothingForCourse();
-  smoothingGradeWindow.value = defaults.gradeWindowMeters;
-  smoothingSampleStep.value = defaults.sampleStepMeters;
-  smoothingPaceWindow.value = defaults.paceSmoothingMeters;
+    emit("course-settings-updated", response.settings);
 }
 
 async function updateWaypoint(waypoint: Waypoint) {
-  if (!props.course) return;
+    if (!props.course) return;
 
-  if (hasWaypointAtDistance(waypoint.distance, waypoint.id)) {
-    waypointUpdateError.value =
-      "A waypoint already exists at this course position. Choose a different position.";
-    return;
-  }
-
-  updatingWaypointIds.value.add(waypoint.id);
-  waypointUpdateError.value = "";
-
-  try {
-    const response = await $fetch<{ waypoint: Waypoint }>(
-      `/api/courses/${props.course.id}/waypoints`,
-      {
-        method: "PUT",
-        body: {
-          id: waypoint.id,
-          name: waypoint.name,
-          distance: waypoint.distance,
-          lat: waypoint.lat,
-          lng: waypoint.lng,
-          tags: waypoint.tags || [],
-        },
-      },
-    );
-
-    // Update the local waypoint
-    const index = editableWaypoints.value.findIndex(
-      (w) => w.id === waypoint.id,
-    );
-    if (index !== -1) {
-      editableWaypoints.value[index] = response.waypoint;
-      // Sort waypoints by distance to update numbering
-      editableWaypoints.value.sort((a, b) => a.distance - b.distance);
+    if (hasWaypointAtDistance(waypoint.distance, waypoint.id)) {
+        waypointUpdateError.value =
+            "A waypoint already exists at this course position. Choose a different position.";
+        return;
     }
 
-    emit("waypoint-updated", response.waypoint);
-  } catch (error) {
-    console.error("Error updating waypoint:", error);
-    waypointUpdateError.value =
-      getStatusMessageFromError(error) ||
-      `Failed to update waypoint "${waypoint.name}". Please try again.`;
-  } finally {
-    updatingWaypointIds.value.delete(waypoint.id);
-  }
+    updatingWaypointIds.value.add(waypoint.id);
+    waypointUpdateError.value = "";
+
+    try {
+        const response = await $fetch<{ waypoint: Waypoint }>(
+            `/api/courses/${props.course.id}/waypoints`,
+            {
+                method: "PUT",
+                body: {
+                    id: waypoint.id,
+                    name: waypoint.name,
+                    distance: waypoint.distance,
+                    lat: waypoint.lat,
+                    lng: waypoint.lng,
+                    tags: waypoint.tags || [],
+                },
+            },
+        );
+
+        // Update the local waypoint
+        const index = editableWaypoints.value.findIndex(
+            (w) => w.id === waypoint.id,
+        );
+        if (index !== -1) {
+            editableWaypoints.value[index] = response.waypoint;
+            // Sort waypoints by distance to update numbering
+            editableWaypoints.value.sort((a, b) => a.distance - b.distance);
+        }
+
+        emit("waypoint-updated", response.waypoint);
+    } catch (error) {
+        console.error("Error updating waypoint:", error);
+        waypointUpdateError.value =
+            getStatusMessageFromError(error) ||
+            `Failed to update waypoint "${waypoint.name}". Please try again.`;
+    } finally {
+        updatingWaypointIds.value.delete(waypoint.id);
+    }
 }
 
 async function deleteWaypoint(waypoint: Waypoint) {
-  if (!props.course) return;
+    if (!props.course) return;
 
-  // Don't allow deleting start/finish waypoints
-  if (isStartOrFinishWaypoint(waypoint, editableWaypoints.value)) {
-    waypointUpdateError.value = "Cannot delete start or finish waypoints.";
-    return;
-  }
-
-  deletingWaypointIds.value.add(waypoint.id);
-  waypointUpdateError.value = "";
-
-  try {
-    await $fetch(`/api/courses/${props.course.id}/waypoints/${waypoint.id}`, {
-      method: "DELETE",
-    });
-
-    // Remove from local array
-    const index = editableWaypoints.value.findIndex(
-      (w) => w.id === waypoint.id,
-    );
-    if (index !== -1) {
-      editableWaypoints.value.splice(index, 1);
+    // Don't allow deleting start/finish waypoints
+    if (isStartOrFinishWaypoint(waypoint, editableWaypoints.value)) {
+        waypointUpdateError.value = "Cannot delete start or finish waypoints.";
+        return;
     }
 
-    // Clear selection if this waypoint was selected
-    if (selectedWaypointForEdit.value?.id === waypoint.id) {
-      selectedWaypointForEdit.value = null;
-    }
+    deletingWaypointIds.value.add(waypoint.id);
+    waypointUpdateError.value = "";
 
-    emit("waypoint-deleted", waypoint.id);
-  } catch (error) {
-    console.error("Error deleting waypoint:", error);
-    waypointUpdateError.value =
-      getStatusMessageFromError(error) ||
-      `Failed to delete waypoint "${waypoint.name}". Please try again.`;
-  } finally {
-    deletingWaypointIds.value.delete(waypoint.id);
-  }
+    try {
+        await $fetch(
+            `/api/courses/${props.course.id}/waypoints/${waypoint.id}`,
+            {
+                method: "DELETE",
+            },
+        );
+
+        // Remove from local array
+        const index = editableWaypoints.value.findIndex(
+            (w) => w.id === waypoint.id,
+        );
+        if (index !== -1) {
+            editableWaypoints.value.splice(index, 1);
+        }
+
+        // Clear selection if this waypoint was selected
+        if (selectedWaypointForEdit.value?.id === waypoint.id) {
+            selectedWaypointForEdit.value = null;
+        }
+
+        emit("waypoint-deleted", waypoint.id);
+    } catch (error) {
+        console.error("Error deleting waypoint:", error);
+        waypointUpdateError.value =
+            getStatusMessageFromError(error) ||
+            `Failed to delete waypoint "${waypoint.name}". Please try again.`;
+    } finally {
+        deletingWaypointIds.value.delete(waypoint.id);
+    }
 }
 
 function openDeleteWaypointConfirmation(waypoint: Waypoint) {
-  if (deletingWaypointIds.value.has(waypoint.id)) return;
+    if (deletingWaypointIds.value.has(waypoint.id)) return;
 
-  if (isStartOrFinishWaypoint(waypoint, editableWaypoints.value)) {
-    waypointUpdateError.value = "Cannot delete start or finish waypoints.";
-    return;
-  }
+    if (isStartOrFinishWaypoint(waypoint, editableWaypoints.value)) {
+        waypointUpdateError.value = "Cannot delete start or finish waypoints.";
+        return;
+    }
 
-  waypointPendingDelete.value = waypoint;
+    waypointPendingDelete.value = waypoint;
 }
 
 function closeDeleteWaypointConfirmation() {
-  waypointPendingDelete.value = null;
+    waypointPendingDelete.value = null;
 }
 
 async function confirmDeleteWaypoint() {
-  const waypoint = waypointPendingDelete.value;
-  if (!waypoint) return;
+    const waypoint = waypointPendingDelete.value;
+    if (!waypoint) return;
 
-  waypointPendingDelete.value = null;
-  await deleteWaypoint(waypoint);
+    waypointPendingDelete.value = null;
+    await deleteWaypoint(waypoint);
 }
 
 async function createWaypoint(
-  event?: { lat: number; lng: number; distance: number; elevation: number },
-  customName?: string,
+    event?: { lat: number; lng: number; distance: number; elevation: number },
+    customName?: string,
 ) {
-  if (!props.course) return;
+    if (!props.course) return;
 
-  creatingWaypoint.value = true;
-  waypointUpdateError.value = "";
+    creatingWaypoint.value = true;
+    waypointUpdateError.value = "";
 
-  try {
-    let lat, lng, distance, elevation;
+    try {
+        let lat, lng, distance, elevation;
 
-    if (event) {
-      // Called from elevation chart or other source with specific coordinates
-      lat = event.lat;
-      lng = event.lng;
-      distance = event.distance;
-      elevation = event.elevation;
-    } else {
-      // Called from plus button - use current map center and calculate distance
-      const currentMapCenter = mapCenter.value;
-      if (!currentMapCenter) {
+        if (event) {
+            // Called from elevation chart or other source with specific coordinates
+            lat = event.lat;
+            lng = event.lng;
+            distance = event.distance;
+            elevation = event.elevation;
+        } else {
+            // Called from plus button - use current map center and calculate distance
+            const currentMapCenter = mapCenter.value;
+            if (!currentMapCenter) {
+                waypointUpdateError.value =
+                    "Unable to determine position for new waypoint.";
+                return;
+            }
+
+            lat = currentMapCenter[0];
+            lng = currentMapCenter[1];
+            const calculatedDistance = calculateDistanceFromPosition(lat, lng);
+
+            if (calculatedDistance === null) {
+                waypointUpdateError.value =
+                    "Unable to calculate distance for new waypoint.";
+                return;
+            }
+
+            distance = calculatedDistance;
+            elevation = calculateElevationAtDistance(distance); // Calculate elevation from distance
+        }
+
+        // Generate a default name based on distance
+        const distanceInUserUnits = distanceUnitIsMiles.value
+            ? distance * 0.000621371
+            : distance / 1000; // Convert to km
+        const formattedDistance = distanceInUserUnits.toFixed(
+            distanceUnitIsMiles.value ? 1 : 1,
+        );
+        const unit = distanceUnitIsMiles.value ? "mi" : "km";
+        const defaultName =
+            customName || `Waypoint ${formattedDistance}${unit}`;
+
+        if (hasWaypointAtDistance(distance)) {
+            waypointUpdateError.value =
+                "A waypoint already exists at this course position. Choose a different position.";
+            return;
+        }
+
+        const response = await $fetch<{ waypoint: Waypoint }>(
+            `/api/courses/${props.course.id}/waypoints`,
+            {
+                method: "POST",
+                body: {
+                    name: defaultName,
+                    lat: lat,
+                    lng: lng,
+                    distance: distance,
+                    elevation: elevation,
+                },
+            },
+        );
+
+        // Add to local array and sort by distance
+        replaceEditableWaypoint(response.waypoint);
+
+        emit("waypoint-created", response.waypoint);
+
+        // Clear any creation state
+        newWaypointBeingCreated.value = null;
+        mapClickLocation.value = null;
+    } catch (error) {
+        console.error("Error creating waypoint:", error);
         waypointUpdateError.value =
-          "Unable to determine position for new waypoint.";
-        return;
-      }
-
-      lat = currentMapCenter[0];
-      lng = currentMapCenter[1];
-      const calculatedDistance = calculateDistanceFromPosition(lat, lng);
-
-      if (calculatedDistance === null) {
-        waypointUpdateError.value =
-          "Unable to calculate distance for new waypoint.";
-        return;
-      }
-
-      distance = calculatedDistance;
-      elevation = calculateElevationAtDistance(distance); // Calculate elevation from distance
+            getStatusMessageFromError(error) ||
+            "Failed to create waypoint. Please try again.";
+    } finally {
+        creatingWaypoint.value = false;
     }
-
-    // Generate a default name based on distance
-    const distanceInUserUnits = distanceUnitIsMiles.value
-      ? distance * 0.000621371
-      : distance / 1000; // Convert to km
-    const formattedDistance = distanceInUserUnits.toFixed(
-      distanceUnitIsMiles.value ? 1 : 1,
-    );
-    const unit = distanceUnitIsMiles.value ? "mi" : "km";
-    const defaultName = customName || `Waypoint ${formattedDistance}${unit}`;
-
-    if (hasWaypointAtDistance(distance)) {
-      waypointUpdateError.value =
-        "A waypoint already exists at this course position. Choose a different position.";
-      return;
-    }
-
-    const response = await $fetch<{ waypoint: Waypoint }>(
-      `/api/courses/${props.course.id}/waypoints`,
-      {
-        method: "POST",
-        body: {
-          name: defaultName,
-          lat: lat,
-          lng: lng,
-          distance: distance,
-          elevation: elevation,
-        },
-      },
-    );
-
-    // Add to local array and sort by distance
-    replaceEditableWaypoint(response.waypoint);
-
-    emit("waypoint-created", response.waypoint);
-
-    // Clear any creation state
-    newWaypointBeingCreated.value = null;
-    mapClickLocation.value = null;
-  } catch (error) {
-    console.error("Error creating waypoint:", error);
-    waypointUpdateError.value =
-      getStatusMessageFromError(error) ||
-      "Failed to create waypoint. Please try again.";
-  } finally {
-    creatingWaypoint.value = false;
-  }
 }
 
 function startManualWaypointCreation() {
-  // Create a new waypoint object for editing, starting near current map center.
-  let distanceInMeters = 0;
-  const currentMapCenter = mapCenter.value;
-  if (currentMapCenter) {
-    const projectedDistance = calculateDistanceFromPosition(
-      currentMapCenter[0],
-      currentMapCenter[1],
-    );
-    if (projectedDistance !== null) {
-      distanceInMeters = projectedDistance;
+    // Create a new waypoint object for editing, starting near current map center.
+    let distanceInMeters = 0;
+    const currentMapCenter = mapCenter.value;
+    if (currentMapCenter) {
+        const projectedDistance = calculateDistanceFromPosition(
+            currentMapCenter[0],
+            currentMapCenter[1],
+        );
+        if (projectedDistance !== null) {
+            distanceInMeters = projectedDistance;
+        }
     }
-  }
 
-  const availableDistance = findNearestAvailableWaypointDistance(distanceInMeters);
-  if (availableDistance === null) {
-    waypointUpdateError.value =
-      "Unable to find an available position for a new waypoint.";
-    return;
-  }
-  distanceInMeters = availableDistance;
+    const availableDistance =
+        findNearestAvailableWaypointDistance(distanceInMeters);
+    if (availableDistance === null) {
+        waypointUpdateError.value =
+            "Unable to find an available position for a new waypoint.";
+        return;
+    }
+    distanceInMeters = availableDistance;
 
-  const distanceInUserUnits = distanceUnitIsMiles.value
-    ? distanceInMeters * 0.000621371
-    : distanceInMeters / 1000;
+    const distanceInUserUnits = distanceUnitIsMiles.value
+        ? distanceInMeters * 0.000621371
+        : distanceInMeters / 1000;
 
-  const routeState = buildWaypointRouteState(distanceInMeters);
-  if (!routeState) {
-    waypointUpdateError.value =
-      "Unable to calculate position for new waypoint.";
-    return;
-  }
+    const routeState = buildWaypointRouteState(distanceInMeters);
+    if (!routeState) {
+        waypointUpdateError.value =
+            "Unable to calculate position for new waypoint.";
+        return;
+    }
 
-  newWaypointBeingCreated.value = {
-    id: "temp-new-waypoint",
-    name: "New Waypoint",
-    description: null,
-    ...routeState,
-    tags: [], // Start with no tags
-  };
+    newWaypointBeingCreated.value = {
+        id: "temp-new-waypoint",
+        name: "New Waypoint",
+        description: null,
+        ...routeState,
+        tags: [], // Start with no tags
+    };
 
-  // Add to editable waypoints temporarily so it shows on the map
-  const editableWaypoint = replaceEditableWaypoint(
-    newWaypointBeingCreated.value as Waypoint,
-  );
+    // Add to editable waypoints temporarily so it shows on the map
+    const editableWaypoint = replaceEditableWaypoint(
+        newWaypointBeingCreated.value as Waypoint,
+    );
 
-  // Set this as the selected waypoint for editing
-  selectedWaypointForEdit.value = editableWaypoint;
-  editingWaypointDistance.value = distanceInUserUnits.toFixed(
-    distanceUnitIsMiles.value ? 3 : 1,
-  );
+    // Set this as the selected waypoint for editing
+    selectedWaypointForEdit.value = editableWaypoint;
+    editingWaypointDistance.value = distanceInUserUnits.toFixed(
+        distanceUnitIsMiles.value ? 3 : 1,
+    );
 }
 
-function getTrackClickCandidates(event: TrackClickEvent): TrackClickCandidate[] {
-  if (event.candidates && event.candidates.length > 0) {
-    return event.candidates;
-  }
+function getTrackClickCandidates(
+    event: TrackClickEvent,
+): TrackClickCandidate[] {
+    if (event.candidates && event.candidates.length > 0) {
+        return event.candidates;
+    }
 
-  if (typeof event.distance === "number" && Number.isFinite(event.distance)) {
-    const snappedPosition = calculatePositionFromDistance(event.distance);
+    if (typeof event.distance === "number" && Number.isFinite(event.distance)) {
+        const snappedPosition = calculatePositionFromDistance(event.distance);
+        return [
+            {
+                lat: snappedPosition?.lat ?? event.lat,
+                lng: snappedPosition?.lng ?? event.lng,
+                distance: event.distance,
+            },
+        ];
+    }
+
+    const fallbackDistance = calculateDistanceFromPosition(
+        event.lat,
+        event.lng,
+    );
+    if (fallbackDistance === null) return [];
+
+    const fallbackPosition = calculatePositionFromDistance(fallbackDistance);
     return [
-      {
-        lat: snappedPosition?.lat ?? event.lat,
-        lng: snappedPosition?.lng ?? event.lng,
-        distance: event.distance,
-      },
+        {
+            lat: fallbackPosition?.lat ?? event.lat,
+            lng: fallbackPosition?.lng ?? event.lng,
+            distance: fallbackDistance,
+        },
     ];
-  }
-
-  const fallbackDistance = calculateDistanceFromPosition(event.lat, event.lng);
-  if (fallbackDistance === null) return [];
-
-  const fallbackPosition = calculatePositionFromDistance(fallbackDistance);
-  return [
-    {
-      lat: fallbackPosition?.lat ?? event.lat,
-      lng: fallbackPosition?.lng ?? event.lng,
-      distance: fallbackDistance,
-    },
-  ];
 }
 
 function handleMapTrackClick(event: TrackClickEvent) {
-  const action: MapClickAction = selectedWaypointForEdit.value ? "move" : "create";
-  const rawCandidates = getTrackClickCandidates(event);
-  if (rawCandidates.length === 0) return;
+    const action: MapClickAction = selectedWaypointForEdit.value
+        ? "move"
+        : "create";
+    const rawCandidates = getTrackClickCandidates(event);
+    if (rawCandidates.length === 0) return;
 
-  const candidates = getMapClickCandidates(action, rawCandidates);
-  const defaultIndex = getDefaultMapClickCandidateIndex(candidates);
+    const candidates = getMapClickCandidates(action, rawCandidates);
+    const defaultIndex = getDefaultMapClickCandidateIndex(candidates);
 
-  if (action === "move" && candidates.length === 1) {
-    const candidate = candidates[0];
-    if (!candidate) return;
-    if (candidate.occupied) {
-      waypointUpdateError.value =
-        "A waypoint already exists at this course position. Choose a different position.";
-      return;
+    if (action === "move" && candidates.length === 1) {
+        const candidate = candidates[0];
+        if (!candidate) return;
+        if (candidate.occupied) {
+            waypointUpdateError.value =
+                "A waypoint already exists at this course position. Choose a different position.";
+            return;
+        }
+        applyWaypointPositionFromMapCandidate(candidate);
+        return;
     }
-    applyWaypointPositionFromMapCandidate(candidate);
-    return;
-  }
 
-  mapClickLocation.value = {
-    action,
-    candidates,
-    selectedIndex: defaultIndex,
-    screenX:
-      typeof event.screenX === "number" && Number.isFinite(event.screenX)
-        ? event.screenX
-        : null,
-    screenY:
-      typeof event.screenY === "number" && Number.isFinite(event.screenY)
-        ? event.screenY
-        : null,
-  };
+    mapClickLocation.value = {
+        action,
+        candidates,
+        selectedIndex: defaultIndex,
+        screenX:
+            typeof event.screenX === "number" && Number.isFinite(event.screenX)
+                ? event.screenX
+                : null,
+        screenY:
+            typeof event.screenY === "number" && Number.isFinite(event.screenY)
+                ? event.screenY
+                : null,
+    };
 }
 
 function confirmMapClickAction() {
-  if (!mapClickLocation.value) return;
-  const selectedCandidate = getSelectedMapClickCandidate();
-  if (!selectedCandidate || selectedCandidate.occupied) return;
+    if (!mapClickLocation.value) return;
+    const selectedCandidate = getSelectedMapClickCandidate();
+    if (!selectedCandidate || selectedCandidate.occupied) return;
 
-  if (mapClickLocation.value.action === "move") {
-    applyWaypointPositionFromMapCandidate(selectedCandidate);
-  } else {
-    const elevation = calculateElevationAtDistance(selectedCandidate.distance);
-    createWaypoint({
-      lat: selectedCandidate.lat,
-      lng: selectedCandidate.lng,
-      distance: selectedCandidate.distance,
-      elevation: elevation,
-    });
-  }
+    if (mapClickLocation.value.action === "move") {
+        applyWaypointPositionFromMapCandidate(selectedCandidate);
+    } else {
+        const elevation = calculateElevationAtDistance(
+            selectedCandidate.distance,
+        );
+        createWaypoint({
+            lat: selectedCandidate.lat,
+            lng: selectedCandidate.lng,
+            distance: selectedCandidate.distance,
+            elevation: elevation,
+        });
+    }
 
-  mapClickLocation.value = null;
+    mapClickLocation.value = null;
 }
 
 function cancelMapClickCreation() {
-  mapClickLocation.value = null;
+    mapClickLocation.value = null;
 }
 
 function resetWaypointMapToInitialCourseView() {
-  stableMapCenter.value = null;
-  resetWaypointMapToCourseBoundsKey.value++;
+    stableMapCenter.value = null;
+    resetWaypointMapToCourseBoundsKey.value++;
 }
 
 async function saveNewWaypoint() {
-  if (!newWaypointBeingCreated.value || !props.course) return;
+    if (!newWaypointBeingCreated.value || !props.course) return;
 
-  creatingWaypoint.value = true;
-  waypointUpdateError.value = "";
+    creatingWaypoint.value = true;
+    waypointUpdateError.value = "";
 
-  try {
-    if (
-      hasWaypointAtDistance(
-        newWaypointBeingCreated.value.distance || 0,
-        newWaypointBeingCreated.value.id,
-      )
-    ) {
-      waypointUpdateError.value =
-        "A waypoint already exists at this course position. Choose a different position.";
-      return;
+    try {
+        if (
+            hasWaypointAtDistance(
+                newWaypointBeingCreated.value.distance || 0,
+                newWaypointBeingCreated.value.id,
+            )
+        ) {
+            waypointUpdateError.value =
+                "A waypoint already exists at this course position. Choose a different position.";
+            return;
+        }
+
+        // Calculate elevation for the waypoint's current distance
+        const elevation = calculateElevationAtDistance(
+            newWaypointBeingCreated.value.distance || 0,
+        );
+
+        const response = await $fetch<{ waypoint: Waypoint }>(
+            `/api/courses/${props.course.id}/waypoints`,
+            {
+                method: "POST",
+                body: {
+                    name: newWaypointBeingCreated.value.name,
+                    lat: newWaypointBeingCreated.value.lat,
+                    lng: newWaypointBeingCreated.value.lng,
+                    distance: newWaypointBeingCreated.value.distance,
+                    elevation: elevation,
+                    tags: newWaypointBeingCreated.value.tags || [],
+                },
+            },
+        );
+
+        // Remove the temporary waypoint and add the real one
+        const tempIndex = editableWaypoints.value.findIndex(
+            (w) => w.id === newWaypointBeingCreated.value?.id,
+        );
+        if (tempIndex !== -1) {
+            editableWaypoints.value.splice(tempIndex, 1);
+        }
+
+        // Add the real waypoint and sort by distance
+        replaceEditableWaypoint(response.waypoint);
+
+        emit("waypoint-created", response.waypoint);
+
+        // Clear creation state and close the panel
+        newWaypointBeingCreated.value = null;
+        selectedWaypointForEdit.value = null;
+        resetWaypointMapToInitialCourseView();
+    } catch (error) {
+        console.error("Error creating waypoint:", error);
+        waypointUpdateError.value =
+            getStatusMessageFromError(error) ||
+            "Failed to create waypoint. Please try again.";
+    } finally {
+        creatingWaypoint.value = false;
     }
-
-    // Calculate elevation for the waypoint's current distance
-    const elevation = calculateElevationAtDistance(
-      newWaypointBeingCreated.value.distance || 0,
-    );
-
-    const response = await $fetch<{ waypoint: Waypoint }>(
-      `/api/courses/${props.course.id}/waypoints`,
-      {
-        method: "POST",
-        body: {
-          name: newWaypointBeingCreated.value.name,
-          lat: newWaypointBeingCreated.value.lat,
-          lng: newWaypointBeingCreated.value.lng,
-          distance: newWaypointBeingCreated.value.distance,
-          elevation: elevation,
-          tags: newWaypointBeingCreated.value.tags || [],
-        },
-      },
-    );
-
-    // Remove the temporary waypoint and add the real one
-    const tempIndex = editableWaypoints.value.findIndex(
-      (w) => w.id === newWaypointBeingCreated.value?.id,
-    );
-    if (tempIndex !== -1) {
-      editableWaypoints.value.splice(tempIndex, 1);
-    }
-
-    // Add the real waypoint and sort by distance
-    replaceEditableWaypoint(response.waypoint);
-
-    emit("waypoint-created", response.waypoint);
-
-    // Clear creation state and close the panel
-    newWaypointBeingCreated.value = null;
-    selectedWaypointForEdit.value = null;
-    resetWaypointMapToInitialCourseView();
-  } catch (error) {
-    console.error("Error creating waypoint:", error);
-    waypointUpdateError.value =
-      getStatusMessageFromError(error) ||
-      "Failed to create waypoint. Please try again.";
-  } finally {
-    creatingWaypoint.value = false;
-  }
 }
 
 function cancelNewWaypoint() {
-  // Remove the temporary waypoint from the editable list
-  if (newWaypointBeingCreated.value) {
-    const index = editableWaypoints.value.findIndex(
-      (w) => w.id === newWaypointBeingCreated.value?.id,
-    );
-    if (index !== -1) {
-      editableWaypoints.value.splice(index, 1);
+    // Remove the temporary waypoint from the editable list
+    if (newWaypointBeingCreated.value) {
+        const index = editableWaypoints.value.findIndex(
+            (w) => w.id === newWaypointBeingCreated.value?.id,
+        );
+        if (index !== -1) {
+            editableWaypoints.value.splice(index, 1);
+        }
     }
-  }
 
-  newWaypointBeingCreated.value = null;
-  selectedWaypointForEdit.value = null;
-  editingWaypointDistance.value = "";
-  originalWaypointState.value = null;
-  resetWaypointMapToInitialCourseView();
+    newWaypointBeingCreated.value = null;
+    selectedWaypointForEdit.value = null;
+    editingWaypointDistance.value = "";
+    originalWaypointState.value = null;
+    resetWaypointMapToInitialCourseView();
 }
 
 function selectWaypointForEdit(waypoint: Waypoint) {
-  // Store the original state for potential reset
-  originalWaypointState.value = { ...waypoint };
+    // Store the original state for potential reset
+    originalWaypointState.value = { ...waypoint };
 
-  stableMapCenter.value = [waypoint.lat, waypoint.lng];
+    stableMapCenter.value = [waypoint.lat, waypoint.lng];
 
-  selectedWaypointForEdit.value = waypoint;
+    selectedWaypointForEdit.value = waypoint;
 }
 
 function clearWaypointSelection() {
-  // If we're canceling new waypoint creation, remove the temporary waypoint
-  if (newWaypointBeingCreated.value) {
-    const index = editableWaypoints.value.findIndex(
-      (w) => w.id === newWaypointBeingCreated.value?.id,
-    );
-    if (index !== -1) {
-      editableWaypoints.value.splice(index, 1);
+    // If we're canceling new waypoint creation, remove the temporary waypoint
+    if (newWaypointBeingCreated.value) {
+        const index = editableWaypoints.value.findIndex(
+            (w) => w.id === newWaypointBeingCreated.value?.id,
+        );
+        if (index !== -1) {
+            editableWaypoints.value.splice(index, 1);
+        }
+        newWaypointBeingCreated.value = null;
+    } else {
+        // Reset waypoint to original state if it wasn't saved
+        if (originalWaypointState.value && selectedWaypointForEdit.value) {
+            const index = editableWaypoints.value.findIndex(
+                (w) => w.id === selectedWaypointForEdit.value?.id,
+            );
+            if (index !== -1) {
+                // Reset to original position
+                editableWaypoints.value[index] = {
+                    ...originalWaypointState.value,
+                };
+            }
+        }
     }
-    newWaypointBeingCreated.value = null;
-  } else {
-    // Reset waypoint to original state if it wasn't saved
-    if (originalWaypointState.value && selectedWaypointForEdit.value) {
-      const index = editableWaypoints.value.findIndex(
-        (w) => w.id === selectedWaypointForEdit.value?.id,
-      );
-      if (index !== -1) {
-        // Reset to original position
-        editableWaypoints.value[index] = {
-          ...originalWaypointState.value,
-        };
-      }
-    }
-  }
 
-  // Clear state
-  selectedWaypointForEdit.value = null;
-  originalWaypointState.value = null;
-  resetWaypointMapToInitialCourseView();
+    // Clear state
+    selectedWaypointForEdit.value = null;
+    originalWaypointState.value = null;
+    resetWaypointMapToInitialCourseView();
 }
 
 function handleMapWaypointClick(waypoint: Waypoint) {
-  selectWaypointForEdit(waypoint);
+    selectWaypointForEdit(waypoint);
 }
 
 function applyWaypointPositionFromMapCandidate(candidate: TrackClickCandidate) {
-  if (!selectedWaypointForEdit.value) return;
-  const updatedWaypoint = applyWaypointRouteUpdate(
-    selectedWaypointForEdit.value,
-    candidate.distance,
-    {
-      lat: candidate.lat,
-      lng: candidate.lng,
-    },
-  );
-  if (!updatedWaypoint) return;
+    if (!selectedWaypointForEdit.value) return;
+    const updatedWaypoint = applyWaypointRouteUpdate(
+        selectedWaypointForEdit.value,
+        candidate.distance,
+        {
+            lat: candidate.lat,
+            lng: candidate.lng,
+        },
+    );
+    if (!updatedWaypoint) return;
 
-  // Update the distance input field in user's preferred units
-  const distanceInUserUnits = distanceUnitIsMiles.value
-    ? updatedWaypoint.distance * 0.000621371 // Convert meters to miles
-    : updatedWaypoint.distance / 1000; // Convert meters to kilometers
-  editingWaypointDistance.value = distanceInUserUnits.toFixed(
-    distanceUnitIsMiles.value ? 3 : 1,
-  );
+    // Update the distance input field in user's preferred units
+    const distanceInUserUnits = distanceUnitIsMiles.value
+        ? updatedWaypoint.distance * 0.000621371 // Convert meters to miles
+        : updatedWaypoint.distance / 1000; // Convert meters to kilometers
+    editingWaypointDistance.value = distanceInUserUnits.toFixed(
+        distanceUnitIsMiles.value ? 3 : 1,
+    );
 }
 
 function handleMapLineClick(coords: { lat: number; lng: number }) {
-  const distanceAtClick = calculateDistanceFromPosition(coords.lat, coords.lng);
-  if (distanceAtClick === null) return;
+    const distanceAtClick = calculateDistanceFromPosition(
+        coords.lat,
+        coords.lng,
+    );
+    if (distanceAtClick === null) return;
 
-  const snappedPosition = calculatePositionFromDistance(distanceAtClick);
-  applyWaypointPositionFromMapCandidate({
-    lat: snappedPosition?.lat ?? coords.lat,
-    lng: snappedPosition?.lng ?? coords.lng,
-    distance: distanceAtClick,
-  });
+    const snappedPosition = calculatePositionFromDistance(distanceAtClick);
+    applyWaypointPositionFromMapCandidate({
+        lat: snappedPosition?.lat ?? coords.lat,
+        lng: snappedPosition?.lng ?? coords.lng,
+        distance: distanceAtClick,
+    });
 }
 
 function calculateDistanceFromPosition(
-  lat: number,
-  lng: number,
+    lat: number,
+    lng: number,
 ): number | null {
-  if (!props.geoJsonData.length) return null;
+    if (!props.geoJsonData.length) return null;
 
-  const geoJson = props.geoJsonData[0];
-  if (!geoJson?.features?.length) return null;
+    const geoJson = props.geoJsonData[0];
+    if (!geoJson?.features?.length) return null;
 
-  const feature = geoJson.features.find(
-    (f) => f.geometry.type === "LineString",
-  );
-  if (!feature || feature.geometry.type !== "LineString") return null;
-
-  const coordinates = feature.geometry.coordinates;
-  if (!coordinates.length) return null;
-
-  let totalDistance = 0;
-  let closestDistance = 0;
-  let minDistanceToPoint = Infinity;
-
-  for (let i = 0; i < coordinates.length - 1; i++) {
-    const coord1 = coordinates[i];
-    const coord2 = coordinates[i + 1];
-
-    if (!coord1 || !coord2 || coord1.length < 2 || coord2.length < 2) continue;
-
-    // Calculate distance from clicked point to this segment
-    const distanceToSegment = distanceFromPointToLineSegment(
-      lat,
-      lng,
-      coord1[1] as number,
-      coord1[0] as number,
-      coord2[1] as number,
-      coord2[0] as number,
+    const feature = geoJson.features.find(
+        (f) => f.geometry.type === "LineString",
     );
+    if (!feature || feature.geometry.type !== "LineString") return null;
 
-    if (distanceToSegment.distance < minDistanceToPoint) {
-      minDistanceToPoint = distanceToSegment.distance;
-      closestDistance = totalDistance + distanceToSegment.distanceAlongSegment;
+    const coordinates = feature.geometry.coordinates;
+    if (!coordinates.length) return null;
+
+    let totalDistance = 0;
+    let closestDistance = 0;
+    let minDistanceToPoint = Infinity;
+
+    for (let i = 0; i < coordinates.length - 1; i++) {
+        const coord1 = coordinates[i];
+        const coord2 = coordinates[i + 1];
+
+        if (!coord1 || !coord2 || coord1.length < 2 || coord2.length < 2)
+            continue;
+
+        // Calculate distance from clicked point to this segment
+        const distanceToSegment = distanceFromPointToLineSegment(
+            lat,
+            lng,
+            coord1[1] as number,
+            coord1[0] as number,
+            coord2[1] as number,
+            coord2[0] as number,
+        );
+
+        if (distanceToSegment.distance < minDistanceToPoint) {
+            minDistanceToPoint = distanceToSegment.distance;
+            closestDistance =
+                totalDistance + distanceToSegment.distanceAlongSegment;
+        }
+
+        // Add segment distance to total
+        const segmentDistance = calculateDistanceBetweenPoints(
+            coord1[1] as number,
+            coord1[0] as number,
+            coord2[1] as number,
+            coord2[0] as number,
+        );
+        totalDistance += segmentDistance;
     }
 
-    // Add segment distance to total
-    const segmentDistance = calculateDistanceBetweenPoints(
-      coord1[1] as number,
-      coord1[0] as number,
-      coord2[1] as number,
-      coord2[0] as number,
-    );
-    totalDistance += segmentDistance;
-  }
-
-  return closestDistance;
+    return closestDistance;
 }
 
 function distanceFromPointToLineSegment(
-  px: number,
-  py: number,
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
+    px: number,
+    py: number,
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
 ): { distance: number; distanceAlongSegment: number } {
-  // Convert to a simple 2D distance calculation for simplicity
-  // This is approximate but should work for small segments
+    // Convert to a simple 2D distance calculation for simplicity
+    // This is approximate but should work for small segments
 
-  const A = px - x1;
-  const B = py - y1;
-  const C = x2 - x1;
-  const D = y2 - y1;
+    const A = px - x1;
+    const B = py - y1;
+    const C = x2 - x1;
+    const D = y2 - y1;
 
-  const dot = A * C + B * D;
-  const lenSq = C * C + D * D;
+    const dot = A * C + B * D;
+    const lenSq = C * C + D * D;
 
-  if (lenSq === 0) {
-    // The segment is actually a point
-    const distance = calculateDistanceBetweenPoints(px, py, x1, y1);
-    return { distance, distanceAlongSegment: 0 };
-  }
+    if (lenSq === 0) {
+        // The segment is actually a point
+        const distance = calculateDistanceBetweenPoints(px, py, x1, y1);
+        return { distance, distanceAlongSegment: 0 };
+    }
 
-  let param = dot / lenSq;
+    let param = dot / lenSq;
 
-  let xx: number, yy: number;
+    let xx: number, yy: number;
 
-  if (param < 0) {
-    xx = x1;
-    yy = y1;
-    param = 0;
-  } else if (param > 1) {
-    xx = x2;
-    yy = y2;
-    param = 1;
-  } else {
-    xx = x1 + param * C;
-    yy = y1 + param * D;
-  }
+    if (param < 0) {
+        xx = x1;
+        yy = y1;
+        param = 0;
+    } else if (param > 1) {
+        xx = x2;
+        yy = y2;
+        param = 1;
+    } else {
+        xx = x1 + param * C;
+        yy = y1 + param * D;
+    }
 
-  const distance = calculateDistanceBetweenPoints(px, py, xx, yy);
-  const segmentLength = calculateDistanceBetweenPoints(x1, y1, x2, y2);
-  const distanceAlongSegment = param * segmentLength;
+    const distance = calculateDistanceBetweenPoints(px, py, xx, yy);
+    const segmentLength = calculateDistanceBetweenPoints(x1, y1, x2, y2);
+    const distanceAlongSegment = param * segmentLength;
 
-  return { distance, distanceAlongSegment };
+    return { distance, distanceAlongSegment };
 }
 
 function calculatePositionFromDistance(
-  distance: number,
+    distance: number,
 ): { lat: number; lng: number } | null {
-  if (!props.geoJsonData.length) return null;
+    if (!props.geoJsonData.length) return null;
 
-  const geoJson = props.geoJsonData[0];
-  if (!geoJson?.features?.length) return null;
+    const geoJson = props.geoJsonData[0];
+    if (!geoJson?.features?.length) return null;
 
-  const feature = geoJson.features.find(
-    (f) => f.geometry.type === "LineString",
-  );
-  if (!feature || feature.geometry.type !== "LineString") return null;
-
-  const coordinates = feature.geometry.coordinates;
-  if (!coordinates.length) return null;
-
-  // If distance is 0 or negative, return first point
-  if (distance <= 0) {
-    const firstCoord = coordinates[0];
-    if (!firstCoord || firstCoord.length < 2) return null;
-    return { lat: firstCoord[1] as number, lng: firstCoord[0] as number };
-  }
-
-  let totalDistance = 0;
-  let previousCoord = coordinates[0];
-  if (!previousCoord || previousCoord.length < 2) return null;
-
-  for (let i = 1; i < coordinates.length; i++) {
-    const currentCoord = coordinates[i];
-    if (!currentCoord || currentCoord.length < 2) continue;
-
-    // Calculate distance between points using Haversine formula
-    const segmentDistance = calculateDistanceBetweenPoints(
-      previousCoord[1] as number,
-      previousCoord[0] as number, // lat, lng of previous point
-      currentCoord[1] as number,
-      currentCoord[0] as number, // lat, lng of current point
+    const feature = geoJson.features.find(
+        (f) => f.geometry.type === "LineString",
     );
+    if (!feature || feature.geometry.type !== "LineString") return null;
 
-    if (totalDistance + segmentDistance >= distance) {
-      // The target distance falls within this segment
-      const remainingDistance = distance - totalDistance;
-      const ratio = remainingDistance / segmentDistance;
+    const coordinates = feature.geometry.coordinates;
+    if (!coordinates.length) return null;
 
-      // Interpolate between the two points
-      const lat =
-        (previousCoord[1] as number) +
-        ((currentCoord[1] as number) - (previousCoord[1] as number)) * ratio;
-      const lng =
-        (previousCoord[0] as number) +
-        ((currentCoord[0] as number) - (previousCoord[0] as number)) * ratio;
-
-      return { lat, lng };
+    // If distance is 0 or negative, return first point
+    if (distance <= 0) {
+        const firstCoord = coordinates[0];
+        if (!firstCoord || firstCoord.length < 2) return null;
+        return { lat: firstCoord[1] as number, lng: firstCoord[0] as number };
     }
 
-    totalDistance += segmentDistance;
-    previousCoord = currentCoord;
-  }
+    let totalDistance = 0;
+    let previousCoord = coordinates[0];
+    if (!previousCoord || previousCoord.length < 2) return null;
 
-  // If distance exceeds route length, return last point
-  const lastCoord = coordinates[coordinates.length - 1];
-  if (!lastCoord || lastCoord.length < 2) return null;
-  return { lat: lastCoord[1] as number, lng: lastCoord[0] as number };
+    for (let i = 1; i < coordinates.length; i++) {
+        const currentCoord = coordinates[i];
+        if (!currentCoord || currentCoord.length < 2) continue;
+
+        // Calculate distance between points using Haversine formula
+        const segmentDistance = calculateDistanceBetweenPoints(
+            previousCoord[1] as number,
+            previousCoord[0] as number, // lat, lng of previous point
+            currentCoord[1] as number,
+            currentCoord[0] as number, // lat, lng of current point
+        );
+
+        if (totalDistance + segmentDistance >= distance) {
+            // The target distance falls within this segment
+            const remainingDistance = distance - totalDistance;
+            const ratio = remainingDistance / segmentDistance;
+
+            // Interpolate between the two points
+            const lat =
+                (previousCoord[1] as number) +
+                ((currentCoord[1] as number) - (previousCoord[1] as number)) *
+                    ratio;
+            const lng =
+                (previousCoord[0] as number) +
+                ((currentCoord[0] as number) - (previousCoord[0] as number)) *
+                    ratio;
+
+            return { lat, lng };
+        }
+
+        totalDistance += segmentDistance;
+        previousCoord = currentCoord;
+    }
+
+    // If distance exceeds route length, return last point
+    const lastCoord = coordinates[coordinates.length - 1];
+    if (!lastCoord || lastCoord.length < 2) return null;
+    return { lat: lastCoord[1] as number, lng: lastCoord[0] as number };
 }
 
 function calculateDistanceBetweenPoints(
-  lat1: number,
-  lng1: number,
-  lat2: number,
-  lng2: number,
+    lat1: number,
+    lng1: number,
+    lat2: number,
+    lng2: number,
 ): number {
-  return calculateDistance(lat1, lng1, lat2, lng2);
+    return calculateDistance(lat1, lng1, lat2, lng2);
 }
 
 function calculateElevationAtDistance(distance: number): number {
-  if (!props.geoJsonData.length) return 0;
+    if (!props.geoJsonData.length) return 0;
 
-  // Extract elevation profile from the GeoJSON data
-  const combinedFeatures: GeoJSON.Feature[] = [];
-  for (const geoJson of props.geoJsonData) {
-    combinedFeatures.push(...geoJson.features);
-  }
+    // Extract elevation profile from the GeoJSON data
+    const combinedFeatures: GeoJSON.Feature[] = [];
+    for (const geoJson of props.geoJsonData) {
+        combinedFeatures.push(...geoJson.features);
+    }
 
-  const combinedGeoJson: GeoJSON.FeatureCollection = {
-    type: "FeatureCollection",
-    features: combinedFeatures,
-  };
+    const combinedGeoJson: GeoJSON.FeatureCollection = {
+        type: "FeatureCollection",
+        features: combinedFeatures,
+    };
 
-  const elevationPoints = extractElevationProfile(combinedGeoJson);
+    const elevationPoints = extractElevationProfile(combinedGeoJson);
 
-  // Interpolate elevation at the specified distance
-  const interpolatedPoint = interpolateAtDistance(elevationPoints, distance);
+    // Interpolate elevation at the specified distance
+    const interpolatedPoint = interpolateAtDistance(elevationPoints, distance);
 
-  return interpolatedPoint?.elevation || 0;
+    return interpolatedPoint?.elevation || 0;
 }
 
 function adjustWaypointDistance(
-  waypoint: Waypoint,
-  direction: "forward" | "backward",
+    waypoint: Waypoint,
+    direction: "forward" | "backward",
 ) {
-  // Convert step size from user units to meters
-  const stepSizeInMeters = distanceUnitIsMiles.value
-    ? editingStepSize.value * 1609.34 // Convert miles to meters
-    : editingStepSize.value * 1000; // Convert kilometers to meters
+    // Convert step size from user units to meters
+    const stepSizeInMeters = distanceUnitIsMiles.value
+        ? editingStepSize.value * 1609.34 // Convert miles to meters
+        : editingStepSize.value * 1000; // Convert kilometers to meters
 
-  const adjustment =
-    direction === "forward" ? stepSizeInMeters : -stepSizeInMeters;
-  const newDistance = Math.max(0, waypoint.distance + adjustment);
+    const adjustment =
+        direction === "forward" ? stepSizeInMeters : -stepSizeInMeters;
+    const newDistance = Math.max(0, waypoint.distance + adjustment);
 
-  const updatedWaypoint = applyWaypointRouteUpdate(waypoint, newDistance);
-  if (!updatedWaypoint) return;
+    const updatedWaypoint = applyWaypointRouteUpdate(waypoint, newDistance);
+    if (!updatedWaypoint) return;
 
-  // Update the distance input field in user's preferred units
-  const distanceInUserUnits = distanceUnitIsMiles.value
-    ? updatedWaypoint.distance * 0.000621371 // Convert meters to miles
-    : updatedWaypoint.distance / 1000; // Convert meters to kilometers
-  editingWaypointDistance.value = distanceInUserUnits.toFixed(
-    distanceUnitIsMiles.value ? 3 : 1,
-  );
+    // Update the distance input field in user's preferred units
+    const distanceInUserUnits = distanceUnitIsMiles.value
+        ? updatedWaypoint.distance * 0.000621371 // Convert meters to miles
+        : updatedWaypoint.distance / 1000; // Convert meters to kilometers
+    editingWaypointDistance.value = distanceInUserUnits.toFixed(
+        distanceUnitIsMiles.value ? 3 : 1,
+    );
 }
 
 function updateWaypointFromDistanceInput() {
-  if (!selectedWaypointForEdit.value) return;
+    if (!selectedWaypointForEdit.value) return;
 
-  const inputDistance = parseFloat(editingWaypointDistance.value);
-  if (isNaN(inputDistance) || inputDistance < 0) {
-    // Reset to current distance if invalid
-    const distanceInUserUnits = distanceUnitIsMiles.value
-      ? selectedWaypointForEdit.value.distance * 0.000621371 // Convert meters to miles
-      : selectedWaypointForEdit.value.distance / 1000; // Convert meters to kilometers
-    editingWaypointDistance.value = distanceInUserUnits.toFixed(
-      distanceUnitIsMiles.value ? 3 : 1,
+    const inputDistance = parseFloat(editingWaypointDistance.value);
+    if (isNaN(inputDistance) || inputDistance < 0) {
+        // Reset to current distance if invalid
+        const distanceInUserUnits = distanceUnitIsMiles.value
+            ? selectedWaypointForEdit.value.distance * 0.000621371 // Convert meters to miles
+            : selectedWaypointForEdit.value.distance / 1000; // Convert meters to kilometers
+        editingWaypointDistance.value = distanceInUserUnits.toFixed(
+            distanceUnitIsMiles.value ? 3 : 1,
+        );
+        return;
+    }
+
+    // Convert from user units to meters
+    const newDistanceInMeters = distanceUnitIsMiles.value
+        ? inputDistance * 1609.34 // Convert miles to meters
+        : inputDistance * 1000; // Convert kilometers to meters
+
+    applyWaypointRouteUpdate(
+        selectedWaypointForEdit.value,
+        newDistanceInMeters,
     );
-    return;
-  }
-
-  // Convert from user units to meters
-  const newDistanceInMeters = distanceUnitIsMiles.value
-    ? inputDistance * 1609.34 // Convert miles to meters
-    : inputDistance * 1000; // Convert kilometers to meters
-
-  applyWaypointRouteUpdate(selectedWaypointForEdit.value, newDistanceInMeters);
 }
 
 function saveWaypointChanges() {
-  const waypointToSave = selectedWaypointForEdit.value;
-  if (!waypointToSave) return;
+    const waypointToSave = selectedWaypointForEdit.value;
+    if (!waypointToSave) return;
 
-  // Clear original state since we're saving
-  originalWaypointState.value = null;
+    // Clear original state since we're saving
+    originalWaypointState.value = null;
 
-  updateWaypoint(waypointToSave);
-  clearWaypointSelection();
+    updateWaypoint(waypointToSave);
+    clearWaypointSelection();
 }
 
 function canMoveForward(waypoint: Waypoint): boolean {
-  const { finishWaypoint } = getCanonicalEndpointWaypoints(
-    editableWaypoints.value,
-  );
-  if (finishWaypoint && waypoint.id === finishWaypoint.id) return false;
+    const { finishWaypoint } = getCanonicalEndpointWaypoints(
+        editableWaypoints.value,
+    );
+    if (finishWaypoint && waypoint.id === finishWaypoint.id) return false;
 
-  const course = props.course;
-  if (!course?.totalDistance) return true;
-  return waypoint.distance < course.totalDistance - 100; // Minimum distance from finish
+    const course = props.course;
+    if (!course?.totalDistance) return true;
+    return waypoint.distance < course.totalDistance - 100; // Minimum distance from finish
 }
 
 function canMoveBackward(waypoint: Waypoint): boolean {
-  const { startWaypoint } = getCanonicalEndpointWaypoints(
-    editableWaypoints.value,
-  );
-  if (startWaypoint && waypoint.id === startWaypoint.id) return false;
-  return waypoint.distance > 100; // Minimum distance from start
+    const { startWaypoint } = getCanonicalEndpointWaypoints(
+        editableWaypoints.value,
+    );
+    if (startWaypoint && waypoint.id === startWaypoint.id) return false;
+    return waypoint.distance > 100; // Minimum distance from start
 }
 </script>
 
 <template>
-  <ModalWindow :open="open" width="95vw" height="90vh" @close="closeModal">
-    <div class="w-full h-full flex flex-col">
-      <!-- Header -->
-      <div class="flex items-center justify-between">
-        <div class="text-2xl font-bold text-(--main-color)">Edit Course</div>
-        <button
-          class="p-2 text-(--sub-color) hover:text-(--main-color) transition-colors"
-          @click="closeModal"
-        >
-          <Icon name="lucide:x" class="h-6 w-6 scale-150" />
-        </button>
-      </div>
-
-      <!-- Tabs -->
-      <div class="flex border-b border-(--sub-color) mb-4">
-        <button
-          class="px-4 py-2 font-medium transition-colors border-b-2"
-          :class="
-            activeTab === 'course'
-              ? 'text-(--main-color) border-(--main-color)'
-              : 'text-(--sub-color) border-transparent hover:text-(--main-color)'
-          "
-          @click="activeTab = 'course'"
-        >
-          Course Details
-        </button>
-        <button
-          class="px-4 py-2 font-medium transition-colors border-b-2"
-          :class="
-            activeTab === 'waypoints'
-              ? 'text-(--main-color) border-(--main-color)'
-              : 'text-(--sub-color) border-transparent hover:text-(--main-color)'
-          "
-          @click="activeTab = 'waypoints'"
-        >
-          Waypoints
-        </button>
-      </div>
-
-      <!-- Course Details Tab -->
-      <div v-if="activeTab === 'course'" class="flex-1 overflow-hidden">
-        <DismissibleAlert
-          v-if="updateError"
-          class="mb-4"
-          :message="updateError"
-          tone="error"
-          @dismiss="updateError = ''"
-        />
-
-        <div class="space-y-4 h-full overflow-y-auto">
-          <div>
-            <label class="block text-sm font-medium text-(--main-color) mb-2">
-              Course Name *
-            </label>
-            <input
-              v-model="editName"
-              type="text"
-              required
-              class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
-              placeholder="Enter course name"
-            />
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-(--main-color) mb-2">
-              Description
-            </label>
-            <textarea
-              v-model="editDescription"
-              rows="3"
-              class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
-              placeholder="Enter course description (optional)"
-            />
-          </div>
-
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium text-(--main-color) mb-2">
-                Race Date
-              </label>
-              <input
-                v-model="editRaceDate"
-                type="date"
-                class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
-              />
-              <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div class="flex flex-col">
-                  <label class="text-xs uppercase text-(--sub-color) mb-1"
-                    >default distance unit</label
-                  >
-                  <select
-                    v-model="editDefaultDistanceUnit"
-                    class="px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
-                  >
-                    <option value="kilometers">kilometers</option>
-                    <option value="miles">miles</option>
-                  </select>
+    <ModalWindow :open="open" width="95vw" height="90vh" @close="closeModal">
+        <div class="w-full h-full flex flex-col">
+            <!-- Header -->
+            <div class="flex items-center justify-between">
+                <div class="text-2xl font-bold text-(--main-color)">
+                    Edit Course
                 </div>
-                <div class="flex flex-col">
-                  <label class="text-xs uppercase text-(--sub-color) mb-1"
-                    >default elevation unit</label
-                  >
-                  <select
-                    v-model="editDefaultElevationUnit"
-                    class="px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
-                  >
-                    <option value="meters">meters</option>
-                    <option value="feet">feet</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-(--main-color) mb-2">
-                Start Time
-              </label>
-              <input
-                v-model="editStartTime"
-                v-time-mask="'hhmmss'"
-                type="text"
-                inputmode="numeric"
-                placeholder="HH:MM:SS"
-                pattern="\d{1,2}:\d{2}:\d{2}"
-                class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
-              />
-            </div>
-          </div>
-
-          <!-- Public Visibility -->
-          <div
-            class="p-3 border border-(--sub-color) rounded-lg flex items-center"
-          >
-            <div class="grow text-(--main-color)">Make course public</div>
-            <button
-              :class="[
-                'flex col-start-2 row-span-2 w-[60px] border-2! border-(--sub-alt-color)! bg-(--bg-color)! rounded-full! p-0!',
-                editPublic
-                  ? 'justify-end! bg-(--main-color)!'
-                  : 'justify-start!',
-              ]"
-              @click.stop="editPublic = !editPublic"
-            >
-              <div
-                :class="[
-                  'w-[30px] h-[30px] border-4 rounded-full',
-                  editPublic
-                    ? ' bg-(--bg-color) border-(--main-color)'
-                    : 'bg-(--main-color) border-(--bg-color)',
-                ]"
-              />
-            </button>
-          </div>
-
-          <!-- Per-course smoothing controls -->
-          <div class="space-y-3 p-3 border border-(--sub-color) rounded-lg">
-            <div class="text-sm font-medium text-(--main-color)">
-              Pacing Smoothing (per-course)
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div>
-                <label class="block text-xs text-(--main-color) mb-1">
-                  Grade smoothing window (meters)
-                </label>
-                <input
-                  v-model.number="smoothingGradeWindow"
-                  type="number"
-                  min="0"
-                  step="10"
-                  class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
-                />
-              </div>
-              <div>
-                <label class="block text-xs text-(--main-color) mb-1">
-                  Pace chart smoothing (meters)
-                </label>
-                <input
-                  v-model.number="smoothingPaceWindow"
-                  type="number"
-                  min="0"
-                  step="10"
-                  class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
-                />
-              </div>
-              <div>
-                <label class="block text-xs text-(--main-color) mb-1">
-                  Integration sample step (meters)
-                </label>
-                <input
-                  v-model.number="smoothingSampleStep"
-                  type="number"
-                  min="0"
-                  step="10"
-                  class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
-                />
-              </div>
-            </div>
-
-            <div class="text-xs text-(--sub-color)">
-              These settings control grade estimation and pace smoothing for
-              this course. Set to <b>0</b> for no smoothing (use raw data).
-              Grade smoothing affects both the elevation and pace charts. Pace
-              smoothing only affects the pace chart's visual smoothness.
-              Integration sample step affects the accuracy of the adjusted pace
-              calculation between waypoints. A smaller sample step will result
-              in a more accurate pace calculation, but will also increase the
-              processing time. For large courses, a larger sample step may be
-              more efficient.
-            </div>
-            <div class="flex items-center gap-2">
-              <button
-                class="px-3 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity"
-                @click="saveCourseSmoothing"
-              >
-                Save Smoothing
-              </button>
-              <button
-                class="px-3 py-2 border border-(--sub-color) text-(--main-color) rounded-lg hover:bg-(--sub-alt-color) transition-colors"
-                @click="resetCourseSmoothing"
-              >
-                Reset to Defaults
-              </button>
-            </div>
-          </div>
-
-          <div class="flex justify-end pt-4">
-            <button
-              class="px-4 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50"
-              :disabled="isUpdating"
-              @click="saveCourseChanges"
-            >
-              {{ isUpdating ? "Saving..." : "Save Course Changes" }}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Waypoints Tab -->
-      <div
-        v-if="activeTab === 'waypoints'"
-        class="flex h-full flex-1 gap-4 overflow-hidden"
-      >
-        <!-- Left Panel: Map -->
-        <div
-          ref="mapPanelRef"
-          class="relative h-full min-w-0 flex-1 rounded-lg overflow-hidden border border-(--sub-color) bg-gray-100"
-        >
-          <ClientOnly>
-            <LeafletMap
-              :geo-json-data="geoJsonData"
-              :center="mapCenter"
-              :zoom="mapZoom"
-              :waypoints="editableWaypoints"
-              :selected-waypoint="selectedWaypointForEdit"
-              :auto-zoom-to-waypoint="!!selectedWaypointForEdit"
-              :map-click-location="mapClickPreviewLocation"
-              :reset-to-course-bounds-key="resetWaypointMapToCourseBoundsKey"
-              @waypoint-click="handleMapWaypointClick"
-              @line-click="handleMapLineClick"
-              @track-click="handleMapTrackClick"
-            />
-            <template #fallback>
-              <div
-                class="w-full h-full bg-red-200 rounded-lg flex items-center justify-center"
-              >
-                <div class="text-center">
-                  <Icon
-                    name="svg-spinners:6-dots-scale"
-                    class="text-(--main-color) scale-200 mb-2"
-                  />
-                  <p class="text-(--sub-color)">Loading map...</p>
-                </div>
-              </div>
-            </template>
-          </ClientOnly>
-
-          <!-- Map Click Popup -->
-          <div
-            v-if="mapClickLocation"
-            ref="mapClickPopupRef"
-            class="absolute bg-(--bg-color) border border-(--sub-color) rounded-lg shadow-lg p-3 z-1000"
-            :style="mapClickPopupStyle"
-          >
-            <div class="text-sm text-(--main-color) mb-2">
-              {{
-                mapClickLocation.action === "move"
-                  ? "Move waypoint to selected course position"
-                  : "Add waypoint at selected course position"
-              }}
-            </div>
-            <div class="space-y-2 mb-3">
-              <label
-                v-for="(candidate, index) in mapClickLocation.candidates"
-                :key="`${candidate.distance}-${index}`"
-                class="flex items-center justify-between gap-3 text-sm border border-(--sub-color) rounded px-2 py-1"
-                :class="{ 'opacity-60': candidate.occupied }"
-              >
-                <div class="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    name="map-click-candidate"
-                    :disabled="candidate.occupied"
-                    :checked="mapClickLocation.selectedIndex === index"
-                    @change="
-                      mapClickLocation && (mapClickLocation.selectedIndex = index)
-                    "
-                  />
-                  <span class="text-(--main-color)">
-                    {{
-                      formatDistance(
-                        candidate.distance,
-                        typeof (userSettingsStore as any)
-                          ?.getDistanceUnitForCourse === "function"
-                          ? userSettingsStore.getDistanceUnitForCourse(
-                              props.course || undefined,
-                            )
-                          : (props.course?.defaultDistanceUnit ?? "miles"),
-                      )
-                    }}
-                  </span>
-                </div>
-                <span
-                  v-if="candidate.occupied"
-                  class="text-xs text-(--error-color)"
+                <button
+                    class="p-2 text-(--sub-color) hover:text-(--main-color) transition-colors"
+                    @click="closeModal"
                 >
-                  Occupied
-                </span>
-              </label>
-            </div>
-            <p
-              v-if="mapClickLocation.selectedIndex === null"
-              class="text-xs text-(--error-color) mb-2"
-            >
-              No available distance at this click location.
-            </p>
-            <div class="flex gap-2">
-              <button
-                class="px-3 py-1 bg-(--main-color) text-(--bg-color) rounded text-sm hover:opacity-80 transition-opacity"
-                :disabled="
-                  !selectedMapClickCandidate || !!selectedMapClickCandidate.occupied
-                "
-                @click="confirmMapClickAction"
-              >
-                {{
-                  mapClickLocation.action === "move"
-                    ? "Move Waypoint"
-                    : "Add Waypoint"
-                }}
-              </button>
-              <button
-                class="px-3 py-1 border border-(--sub-color) text-(--sub-color) rounded text-sm hover:text-(--main-color) hover:border-(--main-color) transition-colors"
-                @click="cancelMapClickCreation"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Right Panel: Waypoint List or Edit -->
-        <div class="relative z-10 w-96 shrink-0 flex flex-col">
-          <DismissibleAlert
-            v-if="waypointUpdateError"
-            class="mb-4"
-            :message="waypointUpdateError"
-            tone="error"
-            @dismiss="waypointUpdateError = ''"
-          />
-
-          <!-- Waypoint Edit Panel -->
-          <div
-            v-if="selectedWaypointForEdit"
-            class="flex-1 overflow-hidden flex flex-col"
-          >
-            <div class="flex items-center justify-between mb-2 flex-shrink-0">
-              <div
-                class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white"
-                :style="{
-                  backgroundColor: getWaypointPrimaryColor(
-                    selectedWaypointForEdit,
-                    editableWaypoints,
-                  ),
-                }"
-              >
-                {{
-                  getWaypointDisplayContent(
-                    selectedWaypointForEdit,
-                    editableWaypoints,
-                  )
-                }}
-              </div>
-              <button
-                class="p-1 text-(--sub-color) hover:text-(--main-color) transition-colors"
-                @click="
-                  newWaypointBeingCreated
-                    ? cancelNewWaypoint()
-                    : clearWaypointSelection()
-                "
-              >
-                <Icon name="lucide:x" class="h-5 w-5 scale-150" />
-              </button>
+                    <Icon name="lucide:x" class="h-6 w-6 scale-150" />
+                </button>
             </div>
 
-            <div class="flex-1 overflow-y-auto">
-              <div class="space-y-4">
-                <!-- Name -->
-                <div>
-                  <input
-                    v-model="selectedWaypointForEdit.name"
-                    type="text"
-                    class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
-                    @blur="
-                      !newWaypointBeingCreated &&
-                      updateWaypoint(selectedWaypointForEdit)
+            <!-- Tabs -->
+            <div class="flex border-b border-(--sub-color) mb-4">
+                <button
+                    class="px-4 py-2 font-medium transition-colors border-b-2"
+                    :class="
+                        activeTab === 'course'
+                            ? 'text-(--main-color) border-(--main-color)'
+                            : 'text-(--sub-color) border-transparent hover:text-(--main-color)'
                     "
-                  />
+                    @click="activeTab = 'course'"
+                >
+                    Course Details
+                </button>
+                <button
+                    class="px-4 py-2 font-medium transition-colors border-b-2"
+                    :class="
+                        activeTab === 'waypoints'
+                            ? 'text-(--main-color) border-(--main-color)'
+                            : 'text-(--sub-color) border-transparent hover:text-(--main-color)'
+                    "
+                    @click="activeTab = 'waypoints'"
+                >
+                    Waypoints
+                </button>
+            </div>
+
+            <!-- Course Details Tab -->
+            <div v-if="activeTab === 'course'" class="flex-1 overflow-hidden">
+                <DismissibleAlert
+                    v-if="updateError"
+                    class="mb-4"
+                    :message="updateError"
+                    tone="error"
+                    @dismiss="updateError = ''"
+                />
+
+                <div class="space-y-4 h-full overflow-y-auto">
+                    <div>
+                        <label
+                            class="block text-sm font-medium text-(--main-color) mb-2"
+                        >
+                            Course Name *
+                        </label>
+                        <input
+                            v-model="editName"
+                            type="text"
+                            required
+                            class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
+                            placeholder="Enter course name"
+                        />
+                    </div>
+
+                    <div>
+                        <label
+                            class="block text-sm font-medium text-(--main-color) mb-2"
+                        >
+                            Description
+                        </label>
+                        <textarea
+                            v-model="editDescription"
+                            rows="3"
+                            class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
+                            placeholder="Enter course description (optional)"
+                        />
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label
+                                class="block text-sm font-medium text-(--main-color) mb-2"
+                            >
+                                Race Date
+                            </label>
+                            <input
+                                v-model="editRaceDate"
+                                type="date"
+                                class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
+                            />
+                            <div
+                                class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3"
+                            >
+                                <div class="flex flex-col">
+                                    <label
+                                        class="text-xs uppercase text-(--sub-color) mb-1"
+                                        >default distance unit</label
+                                    >
+                                    <select
+                                        v-model="editDefaultDistanceUnit"
+                                        class="px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
+                                    >
+                                        <option value="kilometers">
+                                            kilometers
+                                        </option>
+                                        <option value="miles">miles</option>
+                                    </select>
+                                </div>
+                                <div class="flex flex-col">
+                                    <label
+                                        class="text-xs uppercase text-(--sub-color) mb-1"
+                                        >default elevation unit</label
+                                    >
+                                    <select
+                                        v-model="editDefaultElevationUnit"
+                                        class="px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
+                                    >
+                                        <option value="meters">meters</option>
+                                        <option value="feet">feet</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <label
+                                class="block text-sm font-medium text-(--main-color) mb-2"
+                            >
+                                Start Time
+                            </label>
+                            <input
+                                v-model="editStartTime"
+                                v-time-mask="'hhmmss'"
+                                type="text"
+                                inputmode="numeric"
+                                placeholder="HH:MM:SS"
+                                pattern="\d{1,2}:\d{2}:\d{2}"
+                                class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
+                            />
+                        </div>
+                    </div>
+
+                    <!-- Public Visibility -->
+                    <div
+                        class="p-3 border border-(--sub-color) rounded-lg flex items-center"
+                    >
+                        <div class="grow text-(--main-color)">
+                            Make course public
+                        </div>
+                        <button
+                            :class="[
+                                'flex col-start-2 row-span-2 w-[60px] border-2! border-(--sub-alt-color)! bg-(--bg-color)! rounded-full! p-0!',
+                                editPublic
+                                    ? 'justify-end! bg-(--main-color)!'
+                                    : 'justify-start!',
+                            ]"
+                            @click.stop="editPublic = !editPublic"
+                        >
+                            <div
+                                :class="[
+                                    'w-[30px] h-[30px] border-4 rounded-full',
+                                    editPublic
+                                        ? ' bg-(--bg-color) border-(--main-color)'
+                                        : 'bg-(--main-color) border-(--bg-color)',
+                                ]"
+                            />
+                        </button>
+                    </div>
+
+                    <!-- Per-course smoothing controls -->
+                    <div class="p-2 border border-(--sub-color) rounded-lg">
+                        <div class="text-sm font-medium text-(--main-color)">
+                            Pacing Smoothing (per-course)
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+                            <div>
+                                <div
+                                    class="mb-1 flex items-center justify-between gap-2"
+                                >
+                                    <div class="flex items-center gap-1.5">
+                                        <label
+                                            class="block text-sm text-(--main-color)"
+                                        >
+                                            Grade smoothing window (meters)
+                                        </label>
+                                        <span
+                                            v-tooltip="{
+                                                content:
+                                                    smoothingTooltips.gradeWindow,
+                                                placement: 'top',
+                                                showArrow: true,
+                                            }"
+                                            class="text-(--sub-color) hover:text-(--main-color) transition-colors"
+                                        >
+                                            <Icon
+                                                name="lucide:info"
+                                                class="size-4"
+                                            />
+                                        </span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class="text-right text-xs transition-colors p-1!"
+                                        :class="
+                                            hasCustomGradeWindow
+                                                ? 'text-(--sub-color) hover:text-(--main-color)'
+                                                : 'invisible pointer-events-none'
+                                        "
+                                        @click="resetSmoothingGradeWindow"
+                                    >
+                                        Reset
+                                    </button>
+                                </div>
+                                <input
+                                    v-model.number="smoothingGradeWindow"
+                                    type="number"
+                                    min="0"
+                                    step="10"
+                                    class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
+                                />
+                            </div>
+                            <div>
+                                <div
+                                    class="mb-1 flex items-center justify-between gap-2"
+                                >
+                                    <div class="flex items-center gap-1.5">
+                                        <label
+                                            class="block text-sm text-(--main-color)"
+                                        >
+                                            Pace chart smoothing (meters)
+                                        </label>
+                                        <span
+                                            v-tooltip="{
+                                                content:
+                                                    smoothingTooltips.paceWindow,
+                                                placement: 'top',
+                                                showArrow: true,
+                                            }"
+                                            class="text-(--sub-color) hover:text-(--main-color) transition-colors"
+                                        >
+                                            <Icon
+                                                name="lucide:info"
+                                                class="size-4"
+                                            />
+                                        </span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class="text-right text-xs transition-colors p-1!"
+                                        :class="
+                                            hasCustomPaceWindow
+                                                ? 'text-(--sub-color) hover:text-(--main-color)'
+                                                : 'invisible pointer-events-none'
+                                        "
+                                        @click="resetSmoothingPaceWindow"
+                                    >
+                                        Reset
+                                    </button>
+                                </div>
+                                <input
+                                    v-model.number="smoothingPaceWindow"
+                                    type="number"
+                                    min="0"
+                                    step="10"
+                                    class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
+                                />
+                            </div>
+                            <div>
+                                <div
+                                    class="mb-1 flex items-center justify-between gap-2"
+                                >
+                                    <div class="flex items-center gap-1.5">
+                                        <label
+                                            class="block text-sm text-(--main-color)"
+                                        >
+                                            Pace chart max display pace ({{
+                                                smoothingPaceCapUnitLabel
+                                            }})
+                                        </label>
+                                        <span
+                                            v-tooltip="{
+                                                content:
+                                                    smoothingTooltips.paceCap,
+                                                placement: 'top',
+                                                showArrow: true,
+                                            }"
+                                            class="text-(--sub-color) hover:text-(--main-color) transition-colors"
+                                        >
+                                            <Icon
+                                                name="lucide:info"
+                                                class="size-4"
+                                            />
+                                        </span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class="text-right text-xs transition-colors p-1!"
+                                        :class="
+                                            hasCustomPaceCap
+                                                ? 'text-(--sub-color) hover:text-(--main-color)'
+                                                : 'invisible pointer-events-none'
+                                        "
+                                        @click="resetSmoothingPaceCap"
+                                    >
+                                        Reset
+                                    </button>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <input
+                                        v-model="smoothingPaceCapMinutes"
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        placeholder="off"
+                                        class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
+                                    />
+                                    <span class="text-(--main-color)">:</span>
+                                    <input
+                                        v-model="smoothingPaceCapSeconds"
+                                        type="number"
+                                        min="0"
+                                        max="59"
+                                        step="1"
+                                        placeholder="00"
+                                        class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <div
+                                    class="mb-1 flex items-center justify-between gap-2"
+                                >
+                                    <div class="flex items-center gap-1.5">
+                                        <label
+                                            class="block text-sm text-(--main-color)"
+                                        >
+                                            Integration sample step (meters)
+                                        </label>
+                                        <span
+                                            v-tooltip="{
+                                                content:
+                                                    smoothingTooltips.sampleStep,
+                                                placement: 'top',
+                                                showArrow: true,
+                                            }"
+                                            class="text-(--sub-color) hover:text-(--main-color) transition-colors"
+                                        >
+                                            <Icon
+                                                name="lucide:info"
+                                                class="size-4"
+                                            />
+                                        </span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class="text-right text-xs transition-colors p-1!"
+                                        :class="
+                                            hasCustomSampleStep
+                                                ? 'text-(--sub-color) hover:text-(--main-color)'
+                                                : 'invisible pointer-events-none'
+                                        "
+                                        @click="resetSmoothingSampleStep"
+                                    >
+                                        Reset
+                                    </button>
+                                </div>
+                                <input
+                                    v-model.number="smoothingSampleStep"
+                                    type="number"
+                                    min="0"
+                                    step="10"
+                                    class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end">
+                        <button
+                            class="px-4 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50"
+                            :disabled="isUpdating"
+                            @click="saveCourseChanges"
+                        >
+                            {{
+                                isUpdating ? "Saving..." : "Save Course Changes"
+                            }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Waypoints Tab -->
+            <div
+                v-if="activeTab === 'waypoints'"
+                class="flex h-full flex-1 gap-4 overflow-hidden"
+            >
+                <!-- Left Panel: Map -->
+                <div
+                    ref="mapPanelRef"
+                    class="relative h-full min-w-0 flex-1 rounded-lg overflow-hidden border border-(--sub-color) bg-gray-100"
+                >
+                    <ClientOnly>
+                        <LeafletMap
+                            :geo-json-data="geoJsonData"
+                            :center="mapCenter"
+                            :zoom="mapZoom"
+                            :waypoints="editableWaypoints"
+                            :selected-waypoint="selectedWaypointForEdit"
+                            :auto-zoom-to-waypoint="!!selectedWaypointForEdit"
+                            :map-click-location="mapClickPreviewLocation"
+                            :reset-to-course-bounds-key="
+                                resetWaypointMapToCourseBoundsKey
+                            "
+                            @waypoint-click="handleMapWaypointClick"
+                            @line-click="handleMapLineClick"
+                            @track-click="handleMapTrackClick"
+                        />
+                        <template #fallback>
+                            <div
+                                class="w-full h-full bg-red-200 rounded-lg flex items-center justify-center"
+                            >
+                                <div class="text-center">
+                                    <Icon
+                                        name="svg-spinners:6-dots-scale"
+                                        class="text-(--main-color) scale-200 mb-2"
+                                    />
+                                    <p class="text-(--sub-color)">
+                                        Loading map...
+                                    </p>
+                                </div>
+                            </div>
+                        </template>
+                    </ClientOnly>
+
+                    <!-- Map Click Popup -->
+                    <div
+                        v-if="mapClickLocation"
+                        ref="mapClickPopupRef"
+                        class="absolute bg-(--bg-color) border border-(--sub-color) rounded-lg shadow-lg p-3 z-1000"
+                        :style="mapClickPopupStyle"
+                    >
+                        <div class="text-sm text-(--main-color) mb-2">
+                            {{
+                                mapClickLocation.action === "move"
+                                    ? "Move waypoint to selected course position"
+                                    : "Add waypoint at selected course position"
+                            }}
+                        </div>
+                        <div class="space-y-2 mb-3">
+                            <label
+                                v-for="(
+                                    candidate, index
+                                ) in mapClickLocation.candidates"
+                                :key="`${candidate.distance}-${index}`"
+                                class="flex items-center justify-between gap-3 text-sm border border-(--sub-color) rounded px-2 py-1"
+                                :class="{ 'opacity-60': candidate.occupied }"
+                            >
+                                <div class="flex items-center gap-2">
+                                    <input
+                                        type="radio"
+                                        name="map-click-candidate"
+                                        :disabled="candidate.occupied"
+                                        :checked="
+                                            mapClickLocation.selectedIndex ===
+                                            index
+                                        "
+                                        @change="
+                                            mapClickLocation &&
+                                            (mapClickLocation.selectedIndex =
+                                                index)
+                                        "
+                                    />
+                                    <span class="text-(--main-color)">
+                                        {{
+                                            formatDistance(
+                                                candidate.distance,
+                                                typeof (
+                                                    userSettingsStore as any
+                                                )?.getDistanceUnitForCourse ===
+                                                    "function"
+                                                    ? userSettingsStore.getDistanceUnitForCourse(
+                                                          props.course ||
+                                                              undefined,
+                                                      )
+                                                    : (props.course
+                                                          ?.defaultDistanceUnit ??
+                                                          "miles"),
+                                            )
+                                        }}
+                                    </span>
+                                </div>
+                                <span
+                                    v-if="candidate.occupied"
+                                    class="text-xs text-(--error-color)"
+                                >
+                                    Occupied
+                                </span>
+                            </label>
+                        </div>
+                        <p
+                            v-if="mapClickLocation.selectedIndex === null"
+                            class="text-xs text-(--error-color) mb-2"
+                        >
+                            No available distance at this click location.
+                        </p>
+                        <div class="flex gap-2">
+                            <button
+                                class="px-3 py-1 bg-(--main-color) text-(--bg-color) rounded text-sm hover:opacity-80 transition-opacity"
+                                :disabled="
+                                    !selectedMapClickCandidate ||
+                                    !!selectedMapClickCandidate.occupied
+                                "
+                                @click="confirmMapClickAction"
+                            >
+                                {{
+                                    mapClickLocation.action === "move"
+                                        ? "Move Waypoint"
+                                        : "Add Waypoint"
+                                }}
+                            </button>
+                            <button
+                                class="px-3 py-1 border border-(--sub-color) text-(--sub-color) rounded text-sm hover:text-(--main-color) hover:border-(--main-color) transition-colors"
+                                @click="cancelMapClickCreation"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Distance -->
-                <div>
-                  <label
-                    class="block text-sm font-medium text-(--main-color) mb-2"
-                  >
-                    Distance on Course
-                  </label>
+                <!-- Right Panel: Waypoint List or Edit -->
+                <div class="relative z-10 w-96 shrink-0 flex flex-col">
+                    <DismissibleAlert
+                        v-if="waypointUpdateError"
+                        class="mb-4"
+                        :message="waypointUpdateError"
+                        tone="error"
+                        @dismiss="waypointUpdateError = ''"
+                    />
 
-                  <!-- Current Distance Display -->
-                  <!-- <div
+                    <!-- Waypoint Edit Panel -->
+                    <div
+                        v-if="selectedWaypointForEdit"
+                        class="flex-1 overflow-hidden flex flex-col"
+                    >
+                        <div
+                            class="flex items-center justify-between mb-2 flex-shrink-0"
+                        >
+                            <div
+                                class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white"
+                                :style="{
+                                    backgroundColor: getWaypointPrimaryColor(
+                                        selectedWaypointForEdit,
+                                        editableWaypoints,
+                                    ),
+                                }"
+                            >
+                                {{
+                                    getWaypointDisplayContent(
+                                        selectedWaypointForEdit,
+                                        editableWaypoints,
+                                    )
+                                }}
+                            </div>
+                            <button
+                                class="p-1 text-(--sub-color) hover:text-(--main-color) transition-colors"
+                                @click="
+                                    newWaypointBeingCreated
+                                        ? cancelNewWaypoint()
+                                        : clearWaypointSelection()
+                                "
+                            >
+                                <Icon
+                                    name="lucide:x"
+                                    class="h-5 w-5 scale-150"
+                                />
+                            </button>
+                        </div>
+
+                        <div class="flex-1 overflow-y-auto">
+                            <div class="space-y-4">
+                                <!-- Name -->
+                                <div>
+                                    <input
+                                        v-model="selectedWaypointForEdit.name"
+                                        type="text"
+                                        class="w-full px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
+                                        @blur="
+                                            !newWaypointBeingCreated &&
+                                            updateWaypoint(
+                                                selectedWaypointForEdit,
+                                            )
+                                        "
+                                    />
+                                </div>
+
+                                <!-- Distance -->
+                                <div>
+                                    <label
+                                        class="block text-sm font-medium text-(--main-color) mb-2"
+                                    >
+                                        Distance on Course
+                                    </label>
+
+                                    <!-- Current Distance Display -->
+                                    <!-- <div
                                         class="mb-2 text-sm text-(--sub-color) bg-(--sub-alt-color) px-3 py-2 rounded-lg"
                                     >
                                         Current:
@@ -2110,360 +2470,453 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                                         }}
                                     </div> -->
 
-                  <!-- Distance Input -->
-                  <div class="mb-2">
-                    <input
-                      v-model="editingWaypointDistance"
-                      type="number"
-                      min="0"
-                      :step="
-                        userSettingsStore.settings.units.distance === 'miles'
-                          ? '0.001'
-                          : '0.1'
-                      "
-                      class="flex-1 px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
-                      :placeholder="`Enter distance in ${distanceUnitIsMiles ? 'miles' : 'kilometers'}`"
-                      @blur="updateWaypointFromDistanceInput"
-                      @keyup.enter="updateWaypointFromDistanceInput"
-                    />
-                  </div>
+                                    <!-- Distance Input -->
+                                    <div class="mb-2">
+                                        <input
+                                            v-model="editingWaypointDistance"
+                                            type="number"
+                                            min="0"
+                                            :step="
+                                                userSettingsStore.settings.units
+                                                    .distance === 'miles'
+                                                    ? '0.001'
+                                                    : '0.1'
+                                            "
+                                            class="flex-1 px-3 py-2 border border-(--sub-color) rounded-lg bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
+                                            :placeholder="`Enter distance in ${distanceUnitIsMiles ? 'miles' : 'kilometers'}`"
+                                            @blur="
+                                                updateWaypointFromDistanceInput
+                                            "
+                                            @keyup.enter="
+                                                updateWaypointFromDistanceInput
+                                            "
+                                        />
+                                    </div>
 
-                  <!-- Step Size Control -->
-                  <div
-                    class="w-full flex items-center justify-center gap-2 mb-2"
-                  >
-                    <button
-                      v-tooltip="
-                        `Move waypoint forward ${editingStepSize} ${distanceUnitIsMiles ? 'miles' : 'kilometers'}`
-                      "
-                      class="p-2 transition-colors disabled:opacity-50 border rounded hover:bg-(--text-color)! hover:text-(--bg-color)!"
-                      :disabled="
-                        !canMoveForward(selectedWaypointForEdit) ||
-                        updatingWaypointIds.has(selectedWaypointForEdit.id)
-                      "
-                      @click="
-                        adjustWaypointDistance(
-                          selectedWaypointForEdit,
-                          'forward',
-                        )
-                      "
-                    >
-                      <Icon name="lucide:plus" />
-                    </button>
-                    <button
-                      v-tooltip="
-                        `Move waypoint backward ${editingStepSize} ${distanceUnitIsMiles ? 'miles' : 'kilometers'}`
-                      "
-                      class="p-2 transition-colors disabled:opacity-50 border rounded hover:bg-(--text-color)! hover:text-(--bg-color)!"
-                      :disabled="
-                        !canMoveBackward(selectedWaypointForEdit) ||
-                        updatingWaypointIds.has(selectedWaypointForEdit.id)
-                      "
-                      @click="
-                        adjustWaypointDistance(
-                          selectedWaypointForEdit,
-                          'backward',
-                        )
-                      "
-                    >
-                      <Icon name="lucide:minus" />
-                    </button>
-                    ±
-                    <input
-                      v-model.number="editingStepSize"
-                      type="number"
-                      min="0.001"
-                      :step="
-                        userSettingsStore.settings.units.distance === 'miles'
-                          ? '0.001'
-                          : '0.1'
-                      "
-                      class="w-20 px-2 py-1 text-xs border border-(--sub-color) rounded bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
-                    />
-                    <span class="text-xs text-(--sub-color)">{{
-                      userSettingsStore.settings.units.distance
-                    }}</span>
-                  </div>
+                                    <!-- Step Size Control -->
+                                    <div
+                                        class="w-full flex items-center justify-center gap-2 mb-2"
+                                    >
+                                        <button
+                                            v-tooltip="
+                                                `Move waypoint forward ${editingStepSize} ${distanceUnitIsMiles ? 'miles' : 'kilometers'}`
+                                            "
+                                            class="p-2 transition-colors disabled:opacity-50 border rounded hover:bg-(--text-color)! hover:text-(--bg-color)!"
+                                            :disabled="
+                                                !canMoveForward(
+                                                    selectedWaypointForEdit,
+                                                ) ||
+                                                updatingWaypointIds.has(
+                                                    selectedWaypointForEdit.id,
+                                                )
+                                            "
+                                            @click="
+                                                adjustWaypointDistance(
+                                                    selectedWaypointForEdit,
+                                                    'forward',
+                                                )
+                                            "
+                                        >
+                                            <Icon name="lucide:plus" />
+                                        </button>
+                                        <button
+                                            v-tooltip="
+                                                `Move waypoint backward ${editingStepSize} ${distanceUnitIsMiles ? 'miles' : 'kilometers'}`
+                                            "
+                                            class="p-2 transition-colors disabled:opacity-50 border rounded hover:bg-(--text-color)! hover:text-(--bg-color)!"
+                                            :disabled="
+                                                !canMoveBackward(
+                                                    selectedWaypointForEdit,
+                                                ) ||
+                                                updatingWaypointIds.has(
+                                                    selectedWaypointForEdit.id,
+                                                )
+                                            "
+                                            @click="
+                                                adjustWaypointDistance(
+                                                    selectedWaypointForEdit,
+                                                    'backward',
+                                                )
+                                            "
+                                        >
+                                            <Icon name="lucide:minus" />
+                                        </button>
+                                        ±
+                                        <input
+                                            v-model.number="editingStepSize"
+                                            type="number"
+                                            min="0.001"
+                                            :step="
+                                                userSettingsStore.settings.units
+                                                    .distance === 'miles'
+                                                    ? '0.001'
+                                                    : '0.1'
+                                            "
+                                            class="w-20 px-2 py-1 text-xs border border-(--sub-color) rounded bg-(--bg-color) text-(--main-color) focus:border-(--main-color)"
+                                        />
+                                        <span
+                                            class="text-xs text-(--sub-color)"
+                                            >{{
+                                                userSettingsStore.settings.units
+                                                    .distance
+                                            }}</span
+                                        >
+                                    </div>
 
-                  <!-- Save Button -->
-                </div>
+                                    <!-- Save Button -->
+                                </div>
 
-                <!-- Tags Selector -->
-                <div class="pt-4 border-t border-(--sub-color)">
-                  <label
-                    class="block text-sm font-medium text-(--main-color) mb-3"
-                  >
-                    Waypoint Tags
-                  </label>
-                  <WaypointTagSelector
-                    :selected-tags="selectedWaypointForEdit.tags || []"
-                    @update:selected-tags="updateWaypointTags($event)"
-                  />
-                </div>
+                                <!-- Tags Selector -->
+                                <div class="pt-4 border-t border-(--sub-color)">
+                                    <label
+                                        class="block text-sm font-medium text-(--main-color) mb-3"
+                                    >
+                                        Waypoint Tags
+                                    </label>
+                                    <WaypointTagSelector
+                                        :selected-tags="
+                                            selectedWaypointForEdit.tags || []
+                                        "
+                                        @update:selected-tags="
+                                            updateWaypointTags($event)
+                                        "
+                                    />
+                                </div>
 
-                <!-- Save and Delete Buttons -->
-                <button
-                  v-if="newWaypointBeingCreated"
-                  class="w-full px-3 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50"
-                  :disabled="creatingWaypoint"
-                  @click="saveNewWaypoint"
-                >
-                  {{ creatingWaypoint ? "Creating..." : "Create Waypoint" }}
-                </button>
-                <div
-                  v-else
-                  class="flex gap-2 pt-4 border-t border-(--sub-color)"
-                >
-                  <button
-                    class="flex-1 px-3 py-2 bg-(--main-color) text-(--bg-color) rounded-lg transition-opacity disabled:opacity-50"
-                    :disabled="
-                      updatingWaypointIds.has(selectedWaypointForEdit.id)
-                    "
-                    @click="saveWaypointChanges"
-                  >
-                    {{
-                      updatingWaypointIds.has(selectedWaypointForEdit.id)
-                        ? "Saving..."
-                        : "Save"
-                    }}
-                  </button>
-                  <button
-                    v-if="
-                      canDeleteWaypoint(
-                        selectedWaypointForEdit,
-                        editableWaypoints,
-                      )
-                    "
-                    type="button"
-                    class="w-min px-3 py-2 border border-(--error-color) text-(--error-color) rounded-lg hover:bg-(--error-color)! transition-colors disabled:opacity-50 flex items-center justify-center"
-                    :disabled="
-                      deletingWaypointIds.has(selectedWaypointForEdit.id)
-                    "
-                    @click="
-                      openDeleteWaypointConfirmation(selectedWaypointForEdit)
-                    "
-                  >
-                    <Icon name="lucide:trash-2" class="h-4 w-4" />
-                  </button>
-                </div>
+                                <!-- Save and Delete Buttons -->
+                                <button
+                                    v-if="newWaypointBeingCreated"
+                                    class="w-full px-3 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50"
+                                    :disabled="creatingWaypoint"
+                                    @click="saveNewWaypoint"
+                                >
+                                    {{
+                                        creatingWaypoint
+                                            ? "Creating..."
+                                            : "Create Waypoint"
+                                    }}
+                                </button>
+                                <div
+                                    v-else
+                                    class="flex gap-2 pt-4 border-t border-(--sub-color)"
+                                >
+                                    <button
+                                        class="flex-1 px-3 py-2 bg-(--main-color) text-(--bg-color) rounded-lg transition-opacity disabled:opacity-50"
+                                        :disabled="
+                                            updatingWaypointIds.has(
+                                                selectedWaypointForEdit.id,
+                                            )
+                                        "
+                                        @click="saveWaypointChanges"
+                                    >
+                                        {{
+                                            updatingWaypointIds.has(
+                                                selectedWaypointForEdit.id,
+                                            )
+                                                ? "Saving..."
+                                                : "Save"
+                                        }}
+                                    </button>
+                                    <button
+                                        v-if="
+                                            canDeleteWaypoint(
+                                                selectedWaypointForEdit,
+                                                editableWaypoints,
+                                            )
+                                        "
+                                        type="button"
+                                        class="w-min px-3 py-2 border border-(--error-color) text-(--error-color) rounded-lg hover:bg-(--error-color)! transition-colors disabled:opacity-50 flex items-center justify-center"
+                                        :disabled="
+                                            deletingWaypointIds.has(
+                                                selectedWaypointForEdit.id,
+                                            )
+                                        "
+                                        @click="
+                                            openDeleteWaypointConfirmation(
+                                                selectedWaypointForEdit,
+                                            )
+                                        "
+                                    >
+                                        <Icon
+                                            name="lucide:trash-2"
+                                            class="h-4 w-4"
+                                        />
+                                    </button>
+                                </div>
 
-                <!-- Update Status -->
-                <div
-                  v-if="updatingWaypointIds.has(selectedWaypointForEdit.id)"
-                  class="flex items-center gap-2 text-xs text-(--sub-color)"
-                >
-                  <Icon name="svg-spinners:6-dots-scale" class="h-3 w-3" />
-                  <span>Updating...</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Waypoint List -->
-          <div v-else class="h-full flex flex-col overflow-hidden">
-            <!-- Waypoints Header -->
-            <div
-              class="flex items-center justify-between border-b border-(--sub-color) p-2 pt-0 mb-2 flex-shrink-0"
-            >
-              <div class="text-lg font-medium text-(--main-color)">
-                Waypoints
-              </div>
-              <button
-                v-tooltip="'Add new waypoint'"
-                class="p-2 bg-(--sub-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50"
-                :disabled="creatingWaypoint"
-                @click="startManualWaypointCreation"
-              >
-                <Icon name="lucide:plus" class="h-4 w-4" />
-              </button>
-            </div>
-
-            <!-- Scrollable waypoint list -->
-            <div class="flex-1 overflow-y-auto">
-              <div class="flex">
-                <!-- Waypoint List Column -->
-                <div class="flex-1 space-y-1 p-1">
-                  <template
-                    v-for="waypoint in editableWaypoints"
-                    :key="waypoint.id"
-                  >
-                    <!-- Waypoint Item -->
-                    <div
-                      class="p-1 rounded-lg cursor-pointer transition-all duration-200 hover:bg-(--sub-alt-color) border border-transparent"
-                      @click="selectWaypointForEdit(waypoint)"
-                    >
-                      <div class="flex gap-2">
-                        <!-- Waypoint Number/Letter -->
-                        <div
-                          class="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                          :style="{
-                            backgroundColor: getWaypointPrimaryColor(
-                              waypoint,
-                              editableWaypoints,
-                            ),
-                          }"
-                        >
-                          <div class="translate-y-0.25">
-                            {{
-                              getWaypointDisplayContent(
-                                waypoint,
-                                editableWaypoints,
-                              )
-                            }}
-                          </div>
-                        </div>
-                        <div class="flex-col gap-1 w-full">
-                          <div
-                            class="flex items-start gap-2 w-full justify-between"
-                          >
-                            <!-- Waypoint Info -->
-                            <div
-                              class="font-medium text-(--main-color) truncate"
-                            >
-                              {{ waypoint.name }}
+                                <!-- Update Status -->
+                                <div
+                                    v-if="
+                                        updatingWaypointIds.has(
+                                            selectedWaypointForEdit.id,
+                                        )
+                                    "
+                                    class="flex items-center gap-2 text-xs text-(--sub-color)"
+                                >
+                                    <Icon
+                                        name="svg-spinners:6-dots-scale"
+                                        class="h-3 w-3"
+                                    />
+                                    <span>Updating...</span>
+                                </div>
                             </div>
-
-                            <!-- Delete Waypoint Button -->
-                            <button
-                              v-if="
-                                canDeleteWaypoint(waypoint, editableWaypoints)
-                              "
-                              v-tooltip="'Delete waypoint'"
-                              type="button"
-                              class="text-(--error-color) transition-colors flex-shrink-0 m-0! p-1! rounded!"
-                              :disabled="deletingWaypointIds.has(waypoint.id)"
-                              @click.stop="
-                                openDeleteWaypointConfirmation(waypoint)
-                              "
-                            >
-                              <Icon name="lucide:trash-2" class="h-3 w-3" />
-                            </button>
-                          </div>
-
-                          <!-- Distance and Elevation -->
-                          <div
-                            class="flex items-center gap-4 text-(--sub-color) text-sm mb-1"
-                          >
-                            <span class="flex items-center gap-1">
-                              <Icon
-                                name="lucide:arrow-right-to-line"
-                                class="h-3 w-3 -translate-y-0.25"
-                              />
-                              {{
-                                formatDistance(
-                                  waypoint.distance,
-                                  typeof (userSettingsStore as any)
-                                    ?.getDistanceUnitForCourse === "function"
-                                    ? userSettingsStore.getDistanceUnitForCourse()
-                                    : "miles",
-                                )
-                              }}
-                            </span>
-
-                            <span
-                              v-if="waypoint.elevation !== undefined"
-                              class="flex items-center gap-1"
-                            >
-                              <Icon
-                                name="lucide:mountain-snow"
-                                class="h-3 w-3 -translate-y-0.25"
-                              />
-                              {{
-                                formatElevation(
-                                  waypoint.elevation ?? 0,
-                                  typeof (userSettingsStore as any)
-                                    ?.getElevationUnitForCourse === "function"
-                                    ? userSettingsStore.getElevationUnitForCourse()
-                                    : "feet",
-                                )
-                              }}
-                            </span>
-                          </div>
-
-                          <!-- Tags Row -->
-                          <div
-                            v-if="waypoint.tags && waypoint.tags.length > 0"
-                            class="flex gap-1 flex-wrap"
-                          >
-                            <div
-                              v-for="tagId in waypoint.tags"
-                              :key="tagId"
-                              v-tooltip="
-                                getTagsByIds([tagId])[0]?.label || tagId
-                              "
-                              class="w-5 h-5 rounded flex items-center justify-center"
-                              :style="{
-                                backgroundColor:
-                                  getTagsByIds([tagId])[0]?.color || '#6b7280',
-                              }"
-                            >
-                              <Icon
-                                :name="
-                                  getTagsByIds([tagId])[0]?.icon ||
-                                  'lucide:map-pin'
-                                "
-                                class="h-3 w-3 text-white"
-                              />
-                            </div>
-                          </div>
                         </div>
-                      </div>
                     </div>
-                  </template>
+
+                    <!-- Waypoint List -->
+                    <div v-else class="h-full flex flex-col overflow-hidden">
+                        <!-- Waypoints Header -->
+                        <div
+                            class="flex items-center justify-between border-b border-(--sub-color) p-2 pt-0 mb-2 flex-shrink-0"
+                        >
+                            <div
+                                class="text-lg font-medium text-(--main-color)"
+                            >
+                                Waypoints
+                            </div>
+                            <button
+                                v-tooltip="'Add new waypoint'"
+                                class="p-2 bg-(--sub-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50"
+                                :disabled="creatingWaypoint"
+                                @click="startManualWaypointCreation"
+                            >
+                                <Icon name="lucide:plus" class="h-4 w-4" />
+                            </button>
+                        </div>
+
+                        <!-- Scrollable waypoint list -->
+                        <div class="flex-1 overflow-y-auto">
+                            <div class="flex">
+                                <!-- Waypoint List Column -->
+                                <div class="flex-1 space-y-1 p-1">
+                                    <template
+                                        v-for="waypoint in editableWaypoints"
+                                        :key="waypoint.id"
+                                    >
+                                        <!-- Waypoint Item -->
+                                        <div
+                                            class="p-1 rounded-lg cursor-pointer transition-all duration-200 hover:bg-(--sub-alt-color) border border-transparent"
+                                            @click="
+                                                selectWaypointForEdit(waypoint)
+                                            "
+                                        >
+                                            <div class="flex gap-2">
+                                                <!-- Waypoint Number/Letter -->
+                                                <div
+                                                    class="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                                                    :style="{
+                                                        backgroundColor:
+                                                            getWaypointPrimaryColor(
+                                                                waypoint,
+                                                                editableWaypoints,
+                                                            ),
+                                                    }"
+                                                >
+                                                    <div
+                                                        class="translate-y-0.25"
+                                                    >
+                                                        {{
+                                                            getWaypointDisplayContent(
+                                                                waypoint,
+                                                                editableWaypoints,
+                                                            )
+                                                        }}
+                                                    </div>
+                                                </div>
+                                                <div
+                                                    class="flex-col gap-1 w-full"
+                                                >
+                                                    <div
+                                                        class="flex items-start gap-2 w-full justify-between"
+                                                    >
+                                                        <!-- Waypoint Info -->
+                                                        <div
+                                                            class="font-medium text-(--main-color) truncate"
+                                                        >
+                                                            {{ waypoint.name }}
+                                                        </div>
+
+                                                        <!-- Delete Waypoint Button -->
+                                                        <button
+                                                            v-if="
+                                                                canDeleteWaypoint(
+                                                                    waypoint,
+                                                                    editableWaypoints,
+                                                                )
+                                                            "
+                                                            v-tooltip="
+                                                                'Delete waypoint'
+                                                            "
+                                                            type="button"
+                                                            class="text-(--error-color) transition-colors flex-shrink-0 m-0! p-1! rounded!"
+                                                            :disabled="
+                                                                deletingWaypointIds.has(
+                                                                    waypoint.id,
+                                                                )
+                                                            "
+                                                            @click.stop="
+                                                                openDeleteWaypointConfirmation(
+                                                                    waypoint,
+                                                                )
+                                                            "
+                                                        >
+                                                            <Icon
+                                                                name="lucide:trash-2"
+                                                                class="h-3 w-3"
+                                                            />
+                                                        </button>
+                                                    </div>
+
+                                                    <!-- Distance and Elevation -->
+                                                    <div
+                                                        class="flex items-center gap-4 text-(--sub-color) text-sm mb-1"
+                                                    >
+                                                        <span
+                                                            class="flex items-center gap-1"
+                                                        >
+                                                            <Icon
+                                                                name="lucide:arrow-right-to-line"
+                                                                class="h-3 w-3 -translate-y-0.25"
+                                                            />
+                                                            {{
+                                                                formatDistance(
+                                                                    waypoint.distance,
+                                                                    typeof (
+                                                                        userSettingsStore as any
+                                                                    )
+                                                                        ?.getDistanceUnitForCourse ===
+                                                                        "function"
+                                                                        ? userSettingsStore.getDistanceUnitForCourse()
+                                                                        : "miles",
+                                                                )
+                                                            }}
+                                                        </span>
+
+                                                        <span
+                                                            v-if="
+                                                                waypoint.elevation !==
+                                                                undefined
+                                                            "
+                                                            class="flex items-center gap-1"
+                                                        >
+                                                            <Icon
+                                                                name="lucide:mountain-snow"
+                                                                class="h-3 w-3 -translate-y-0.25"
+                                                            />
+                                                            {{
+                                                                formatElevation(
+                                                                    waypoint.elevation ??
+                                                                        0,
+                                                                    typeof (
+                                                                        userSettingsStore as any
+                                                                    )
+                                                                        ?.getElevationUnitForCourse ===
+                                                                        "function"
+                                                                        ? userSettingsStore.getElevationUnitForCourse()
+                                                                        : "feet",
+                                                                )
+                                                            }}
+                                                        </span>
+                                                    </div>
+
+                                                    <!-- Tags Row -->
+                                                    <div
+                                                        v-if="
+                                                            waypoint.tags &&
+                                                            waypoint.tags
+                                                                .length > 0
+                                                        "
+                                                        class="flex gap-1 flex-wrap"
+                                                    >
+                                                        <div
+                                                            v-for="tagId in waypoint.tags"
+                                                            :key="tagId"
+                                                            v-tooltip="
+                                                                getTagsByIds([
+                                                                    tagId,
+                                                                ])[0]?.label ||
+                                                                tagId
+                                                            "
+                                                            class="w-5 h-5 rounded flex items-center justify-center"
+                                                            :style="{
+                                                                backgroundColor:
+                                                                    getTagsByIds(
+                                                                        [tagId],
+                                                                    )[0]
+                                                                        ?.color ||
+                                                                    '#6b7280',
+                                                            }"
+                                                        >
+                                                            <Icon
+                                                                :name="
+                                                                    getTagsByIds(
+                                                                        [tagId],
+                                                                    )[0]
+                                                                        ?.icon ||
+                                                                    'lucide:map-pin'
+                                                                "
+                                                                class="h-3 w-3 text-white"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-              </div>
             </div>
-          </div>
         </div>
-      </div>
-    </div>
-  </ModalWindow>
+    </ModalWindow>
 
-  <ModalWindow
-    :open="!!waypointPendingDelete"
-    width="28rem"
-    max-width="calc(100vw - 2rem)"
-    @close="closeDeleteWaypointConfirmation"
-  >
-    <div class="space-y-4">
-      <div>
-        <h3 class="text-lg font-semibold text-(--main-color)">
-          Delete waypoint?
-        </h3>
-        <p class="mt-2 text-sm text-(--sub-color)">
-          {{
-            waypointPendingDelete
-              ? `This will permanently remove "${waypointPendingDelete.name}" from the course.`
-              : ""
-          }}
-        </p>
-      </div>
+    <ModalWindow
+        :open="!!waypointPendingDelete"
+        width="28rem"
+        max-width="calc(100vw - 2rem)"
+        @close="closeDeleteWaypointConfirmation"
+    >
+        <div class="space-y-4">
+            <div>
+                <h3 class="text-lg font-semibold text-(--main-color)">
+                    Delete waypoint?
+                </h3>
+                <p class="mt-2 text-sm text-(--sub-color)">
+                    {{
+                        waypointPendingDelete
+                            ? `This will permanently remove "${waypointPendingDelete.name}" from the course.`
+                            : ""
+                    }}
+                </p>
+            </div>
 
-      <div class="flex justify-end gap-2">
-        <button
-          type="button"
-          class="px-3 py-2 border border-(--sub-color) text-(--main-color) rounded-lg hover:bg-(--sub-alt-color) transition-colors"
-          @click="closeDeleteWaypointConfirmation"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          class="px-3 py-2 bg-(--error-color) text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
-          :disabled="
-            !!waypointPendingDelete &&
-            deletingWaypointIds.has(waypointPendingDelete.id)
-          "
-          @click="confirmDeleteWaypoint"
-        >
-          {{
-            waypointPendingDelete &&
-            deletingWaypointIds.has(waypointPendingDelete.id)
-              ? "Deleting..."
-              : "Delete Waypoint"
-          }}
-        </button>
-      </div>
-    </div>
-  </ModalWindow>
+            <div class="flex justify-end gap-2">
+                <button
+                    type="button"
+                    class="px-3 py-2 border border-(--sub-color) text-(--main-color) rounded-lg hover:bg-(--sub-alt-color) transition-colors"
+                    @click="closeDeleteWaypointConfirmation"
+                >
+                    Cancel
+                </button>
+                <button
+                    type="button"
+                    class="px-3 py-2 bg-(--error-color) text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+                    :disabled="
+                        !!waypointPendingDelete &&
+                        deletingWaypointIds.has(waypointPendingDelete.id)
+                    "
+                    @click="confirmDeleteWaypoint"
+                >
+                    {{
+                        waypointPendingDelete &&
+                        deletingWaypointIds.has(waypointPendingDelete.id)
+                            ? "Deleting..."
+                            : "Delete Waypoint"
+                    }}
+                </button>
+            </div>
+        </div>
+    </ModalWindow>
 </template>

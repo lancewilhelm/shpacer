@@ -137,8 +137,9 @@ async function processSyncResponse(response: SyncResponse, type: string) {
         new Date(userSettingsStore.updatedAt) ||
       type === "login"
     ) {
-      userSettingsStore.updateSettings(
+      userSettingsStore.applyRemoteSettings(
         unsyncedUserSettings.settings as Partial<UserSettings>,
+        unsyncedUserSettings.updatedAt,
       );
     }
   }
@@ -150,8 +151,9 @@ async function processSyncResponse(response: SyncResponse, type: string) {
         new Date(globalSettingsStore.updatedAt) ||
       type === "login"
     ) {
-      globalSettingsStore.updateSettings(
+      globalSettingsStore.applyRemoteSettings(
         unsyncedGlobalSettings.settings as Partial<GlobalSettings>,
+        unsyncedGlobalSettings.updatedAt,
       );
     }
   }

@@ -10,6 +10,9 @@ Shpacer can now store uploaded race activities at the course level and compare t
 - The selected activity now persists in the course URL with `?activity=...`, and an explicit no-selection state is preserved as `?activity=none`.
 - Selecting both an activity and a plan surfaces comparison stats in the header and detailed comparison in the existing waypoint and split views.
 - The elevation tooltip now compares hovered plan pace/time against the matched activity pace/time using the same distance-based smoothing window used by the pace chart.
+- When an activity is selected, the pace chart overlays a dedicated activity pace line using the same matched-and-smoothed pace series shown in the tooltip.
+- Course analysis settings are now loaded with the course itself from a dedicated DB-backed `user_course_settings` record instead of being persisted in `userSettings`.
+- The course pacing controls can cap the displayed activity pace on the chart so aid-station stops do not dominate the Y-axis; the default display cap is `30:00 /mi`, and the cap affects chart display only, not tooltip or comparison math.
 - Interwaypoint segment comparisons now use the same normalized matched distance-to-elapsed interpolation as the pace chart tooltip, so segment times and deltas stay aligned in overlap and out-and-back sections.
 - Creating or editing a plan after an activity upload immediately makes that plan comparable without re-uploading the activity.
 
@@ -24,12 +27,16 @@ The current implementation is private/member-only and does not expose activities
 
 - Activity matching uses the course route as the source of truth, not the raw activity distance.
 - Overlapping and out-and-back course geometry uses the existing overlap index to choose plausible route-distance candidates.
+- Matching now rejects implausible instantaneous forward jumps in route progress so a single bad overlap handoff does not collapse pace fidelity across the rest of the activity.
 - Comparison detail is computed from stored matched samples, so plan changes can be recomputed on demand.
+- Per-course smoothing and pace-cap values are course-scoped analysis settings, fetched alongside member course data and saved through `/api/courses/:id/settings`.
 
 ## Implementation References
 
 - Data model: [app/utils/db/schema.ts](/Users/lancewilhelm/projects/shpacer/app/utils/db/schema.ts)
+- Course settings defaults/normalization: [app/utils/courseSettings.ts](/Users/lancewilhelm/projects/shpacer/app/utils/courseSettings.ts)
 - Server parsing/matching/comparison: [server/utils/courseActivities.ts](/Users/lancewilhelm/projects/shpacer/server/utils/courseActivities.ts)
+- Course settings API: [server/api/courses/[id].get.ts](/Users/lancewilhelm/projects/shpacer/server/api/courses/[id].get.ts), [server/api/courses/[id]/settings.put.ts](/Users/lancewilhelm/projects/shpacer/server/api/courses/[id]/settings.put.ts)
 - Course page UI: [app/pages/courses/[id].vue](/Users/lancewilhelm/projects/shpacer/app/pages/courses/[id].vue)
 - Activity selector: [app/components/ActivitySelector.vue](/Users/lancewilhelm/projects/shpacer/app/components/ActivitySelector.vue)
 - Chart hover comparison: [app/components/ElevationPaceChart.vue](/Users/lancewilhelm/projects/shpacer/app/components/ElevationPaceChart.vue)

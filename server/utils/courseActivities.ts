@@ -37,6 +37,9 @@ const ACTIVITY_SAMPLE_MIN_METERS = 10;
 const MAX_PRIMARY_LATERAL_ERROR_METERS = 60;
 const MAX_FALLBACK_LATERAL_ERROR_METERS = 100;
 const MAX_BACKWARD_JITTER_METERS = 25;
+const INITIAL_PROGRESS_TOLERANCE_METERS = 500;
+const MAX_FORWARD_PROGRESS_SPEED_METERS_PER_SECOND = 8;
+const MAX_FORWARD_PROGRESS_BUFFER_METERS = 75;
 
 type NumericWaypoint = Pick<SelectWaypoint, "id" | "distance" | "order"> & {
   elevation: number | null;
@@ -321,6 +324,7 @@ export function matchActivityToCourse(
   const samples: CourseActivityMatchData["samples"] = [];
   let acceptedPoints = 0;
   let lastAcceptedDistance = 0;
+  let lastAcceptedElapsedSeconds = 0;
   const startTime = parseTimestamp(sampledPoints[0]?.timestamp || null);
 
   for (const point of sampledPoints) {
@@ -342,30 +346,6 @@ export function matchActivityToCourse(
       continue;
     }
 
-    const chosen =
-      viable
-        .filter(
-          (candidate) =>
-            candidate.distance >= lastAcceptedDistance - MAX_BACKWARD_JITTER_METERS,
-        )
-        .sort((a, b) => {
-          const aBackward = a.distance < lastAcceptedDistance ? lastAcceptedDistance - a.distance : 0;
-          const bBackward = b.distance < lastAcceptedDistance ? lastAcceptedDistance - b.distance : 0;
-          const aScore = a.pointerDistanceMeters + aBackward * 10 + Math.abs(a.distance - lastAcceptedDistance) * 0.02;
-          const bScore = b.pointerDistanceMeters + bBackward * 10 + Math.abs(b.distance - lastAcceptedDistance) * 0.02;
-          return aScore - bScore;
-        })[0] || viable[0];
-
-    if (!chosen) continue;
-
-    const accepted =
-      chosen.pointerDistanceMeters <= MAX_PRIMARY_LATERAL_ERROR_METERS ||
-      chosen.distance >= lastAcceptedDistance - MAX_BACKWARD_JITTER_METERS;
-    if (!accepted) {
-      diagnostics.push(`Rejected candidate at ${point.timestamp}`);
-      continue;
-    }
-
     const elapsedSeconds =
       startTime && parseTimestamp(point.timestamp)
         ? Math.max(
@@ -377,11 +357,68 @@ export function matchActivityToCourse(
           )
         : 0;
 
+    const elapsedDelta = Math.max(
+      0,
+      elapsedSeconds - lastAcceptedElapsedSeconds,
+    );
+    const maxForwardProgressMeters =
+      acceptedPoints === 0
+        ? INITIAL_PROGRESS_TOLERANCE_METERS
+        : Math.max(
+            ACTIVITY_SAMPLE_MIN_METERS,
+            elapsedDelta * MAX_FORWARD_PROGRESS_SPEED_METERS_PER_SECOND +
+              MAX_FORWARD_PROGRESS_BUFFER_METERS,
+          );
+
+    const chosen =
+      viable
+        .filter((candidate) => {
+          const forwardProgress = candidate.distance - lastAcceptedDistance;
+          return (
+            candidate.distance >=
+              lastAcceptedDistance - MAX_BACKWARD_JITTER_METERS &&
+            forwardProgress <= maxForwardProgressMeters
+          );
+        })
+        .sort((a, b) => {
+          const aBackward =
+            a.distance < lastAcceptedDistance
+              ? lastAcceptedDistance - a.distance
+              : 0;
+          const bBackward =
+            b.distance < lastAcceptedDistance
+              ? lastAcceptedDistance - b.distance
+              : 0;
+          const aScore =
+            a.pointerDistanceMeters +
+            aBackward * 10 +
+            Math.abs(a.distance - lastAcceptedDistance) * 0.02;
+          const bScore =
+            b.pointerDistanceMeters +
+            bBackward * 10 +
+            Math.abs(b.distance - lastAcceptedDistance) * 0.02;
+          return aScore - bScore;
+        })[0];
+
+    if (!chosen) {
+      diagnostics.push(`Rejected implausible progress jump at ${point.timestamp}`);
+      continue;
+    }
+
+    const accepted =
+      chosen.pointerDistanceMeters <= MAX_PRIMARY_LATERAL_ERROR_METERS ||
+      chosen.distance >= lastAcceptedDistance - MAX_BACKWARD_JITTER_METERS;
+    if (!accepted) {
+      diagnostics.push(`Rejected candidate at ${point.timestamp}`);
+      continue;
+    }
+
     const matchedDistance = Math.max(
       lastAcceptedDistance,
       Math.min(options.courseDistanceMeters, chosen.distance),
     );
     lastAcceptedDistance = matchedDistance;
+    lastAcceptedElapsedSeconds = elapsedSeconds;
     acceptedPoints += 1;
 
     samples.push({
@@ -414,6 +451,45 @@ export function matchActivityToCourse(
     endProgressRatio,
     diagnostics,
   };
+}
+
+export function hasImplausibleProgressJump(matchData: CourseActivityMatchData): boolean {
+  let lastDistance: number | undefined;
+  let lastElapsedSeconds: number | undefined;
+
+  for (const sample of matchData.samples) {
+    if (
+      !Number.isFinite(sample.distanceMeters) ||
+      !Number.isFinite(sample.elapsedSeconds)
+    ) {
+      continue;
+    }
+
+    if (lastDistance === undefined) {
+      lastDistance = sample.distanceMeters;
+      lastElapsedSeconds = sample.elapsedSeconds;
+      continue;
+    }
+
+    const elapsedDelta = Math.max(
+      0,
+      sample.elapsedSeconds - (lastElapsedSeconds ?? sample.elapsedSeconds),
+    );
+    const maxForwardProgressMeters = Math.max(
+      ACTIVITY_SAMPLE_MIN_METERS,
+      elapsedDelta * MAX_FORWARD_PROGRESS_SPEED_METERS_PER_SECOND +
+        MAX_FORWARD_PROGRESS_BUFFER_METERS,
+    );
+
+    if (sample.distanceMeters - lastDistance > maxForwardProgressMeters) {
+      return true;
+    }
+
+    lastDistance = Math.max(lastDistance, sample.distanceMeters);
+    lastElapsedSeconds = sample.elapsedSeconds;
+  }
+
+  return false;
 }
 
 export function getMatchStatusFromData(

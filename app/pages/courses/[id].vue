@@ -27,6 +27,8 @@ import {
   OSM_ATTRIBUTION,
 } from "~/utils/leafletBigImageExport";
 import type { DistanceUnit } from "~/stores/userSettings";
+import type { CourseAnalysisSettings } from "~/utils/courseSettings";
+import { normalizeCourseAnalysisSettings } from "~/utils/courseSettings";
 
 // Define the waypoint type that matches what we get from the API
 type Waypoint = {
@@ -146,7 +148,10 @@ const [courseResp, plansResp, activitiesResp] = await Promise.all([
       canDownloadOriginal: boolean;
       canSeeRawFileName: boolean;
     };
-    course: (SelectCourse & { role?: string }) | null;
+    course: (SelectCourse & {
+      role?: string;
+      courseSettings?: CourseAnalysisSettings | null;
+    }) | null;
   }>(`/api/courses/${courseId}`),
   useFetch<{ plans: SelectPlan[] }>(`/api/courses/${courseId}/plans`, {
     default: () => ({ plans: [] }),
@@ -419,7 +424,7 @@ const elevationUnit = computed<"meters" | "feet">(() =>
 );
 
 const smoothingConfig = computed(() =>
-  userSettingsStore.getSmoothingForCourse(currentPlan.value?.courseId),
+  normalizeCourseAnalysisSettings(course.value?.courseSettings ?? null),
 );
 
 watchEffect(() => {
@@ -489,17 +494,26 @@ async function refreshActivityComparisons() {
 
   activityPlanDetailPending.value = true;
   try {
-    const response = await $fetch<{ detail: CourseActivityPlanDetail }>(
-      `/api/courses/${courseId}/activities/${currentActivityId.value}/compare`,
-      {
-        query: {
-          planId: currentPlanId.value,
-          distanceUnit: distanceUnit.value,
-          gradeWindowMeters: smoothingConfig.value.gradeWindowMeters,
-          sampleStepMeters: smoothingConfig.value.sampleStepMeters,
-        },
+    const requestHeaders = import.meta.server
+      ? useRequestHeaders(["cookie", "authorization"])
+      : undefined;
+    const activityCompareUrl: string = `/api/courses/${courseId}/activities/${currentActivityId.value}/compare`;
+    const activityCompareFetch = $fetch as unknown as (
+      url: string,
+      options?: {
+        headers?: HeadersInit;
+        query?: Record<string, string | number>;
       },
-    );
+    ) => Promise<unknown>;
+    const response = (await activityCompareFetch(activityCompareUrl, {
+      headers: requestHeaders,
+      query: {
+        planId: currentPlanId.value,
+        distanceUnit: distanceUnit.value,
+        gradeWindowMeters: smoothingConfig.value.gradeWindowMeters,
+        sampleStepMeters: smoothingConfig.value.sampleStepMeters,
+      },
+    })) as { detail: CourseActivityPlanDetail };
     activityPlanDetail.value = response.detail;
   } catch (error) {
     console.error("Failed to load activity plan detail", error);
@@ -2212,9 +2226,21 @@ function closePaceExplanationModal() {
 
 function handleCourseUpdated(updatedCourse: SelectCourse) {
   if (courseData.value) {
-    courseData.value.course = updatedCourse;
+    courseData.value.course = {
+      ...courseData.value.course,
+      ...updatedCourse,
+    };
   }
   refresh(); // Refresh to get the latest data
+}
+
+function handleCourseSettingsUpdated(updatedSettings: CourseAnalysisSettings) {
+  if (courseData.value?.course) {
+    courseData.value.course = {
+      ...courseData.value.course,
+      courseSettings: updatedSettings,
+    };
+  }
 }
 
 function handleWaypointUpdated(_updatedWaypoint: Waypoint) {
@@ -3046,6 +3072,7 @@ onUnmounted(() => {
               <div class="h-full p-2">
                 <ElevationPaceChart
                   :geo-json-data="geoJsonData"
+                  :course-settings="smoothingConfig"
                   :height="Math.max(0, chartPanelHeight - 16)"
                   :map-hover-distances="mapHoverDistances"
                   :selected-waypoint-distance="
@@ -3086,6 +3113,7 @@ onUnmounted(() => {
           >
             <WaypointList
               :read-only="mode === 'public' || !capabilities.canEditWaypoints"
+              :course-settings="smoothingConfig"
               :waypoints="waypoints"
               :selected-waypoint="selectedWaypoint"
               :selected-segment="selectedWaypointSegment"
@@ -3115,6 +3143,7 @@ onUnmounted(() => {
           <div v-else class="flex-1 overflow-hidden">
             <SplitsTable
               :read-only="mode === 'public'"
+              :course-settings="smoothingConfig"
               :geo-json-data="geoJsonData"
               :current-plan="effectivePlanForTiming"
               :course-defaults="course || null"
@@ -3149,6 +3178,7 @@ onUnmounted(() => {
               <div class="h-full px-2 pt-2 pb-4">
                 <ElevationPaceChart
                   :geo-json-data="geoJsonData"
+                  :course-settings="smoothingConfig"
                   :height="Math.max(0, chartPanelHeight - 24)"
                   :map-hover-distances="mapHoverDistances"
                   :selected-waypoint-distance="
@@ -3268,6 +3298,7 @@ onUnmounted(() => {
                   :read-only="
                     mode === 'public' || !capabilities.canEditWaypoints
                   "
+                  :course-settings="smoothingConfig"
                   :waypoints="waypoints"
                   :selected-waypoint="selectedWaypoint"
                   :selected-segment="selectedWaypointSegment"
@@ -3300,6 +3331,7 @@ onUnmounted(() => {
               <div v-else class="h-full">
                 <SplitsTable
                   :read-only="mode === 'public'"
+                  :course-settings="smoothingConfig"
                   :geo-json-data="geoJsonData"
                   :current-plan="effectivePlanForTiming"
                   :course-defaults="course || null"
@@ -3332,10 +3364,12 @@ onUnmounted(() => {
     <CourseEditModal
       :open="courseEditModalOpen"
       :course="course || null"
+      :course-settings="smoothingConfig"
       :waypoints="waypoints"
       :geo-json-data="geoJsonData"
       @close="closeCourseEditModal"
       @course-updated="handleCourseUpdated"
+      @course-settings-updated="handleCourseSettingsUpdated"
       @waypoint-updated="handleWaypointUpdated"
       @waypoint-deleted="handleWaypointDeleted"
       @waypoint-created="handleWaypointCreated"

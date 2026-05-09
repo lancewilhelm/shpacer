@@ -43,6 +43,15 @@ export const useGlobalSettingsStore = defineStore(
       triggerDebouncedSync();
     }
 
+    function applyRemoteSettings(
+      updated: Partial<GlobalSettings>,
+      remoteUpdatedAt?: Date | string | number | null,
+    ) {
+      settings.value = { ...settings.value, ...updated };
+      updatedAt.value = remoteUpdatedAt ? new Date(remoteUpdatedAt) : new Date();
+      synced.value = true;
+    }
+
     const synced = ref(true);
     async function setSynced(value: boolean) {
       // await adminCheck();
@@ -61,6 +70,7 @@ export const useGlobalSettingsStore = defineStore(
       settings,
       updatedAt,
       updateSettings,
+      applyRemoteSettings,
       synced,
       setSynced,
       $reset,

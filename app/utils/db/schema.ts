@@ -6,6 +6,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 import { v4 as uuidv4 } from "uuid";
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
+import type { CourseAnalysisSettings } from "~/utils/courseSettings";
 
 // Users table for better-auth
 export const users = sqliteTable("users", {
@@ -154,6 +155,29 @@ export const courses = sqliteTable("courses", {
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+// USER COURSE SETTINGS TABLE
+export const userCourseSettings = sqliteTable(
+  "user_course_settings",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    courseId: text("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    settings: text("settings", { mode: "json" })
+      .$type<CourseAnalysisSettings>()
+      .notNull()
+      .default({} as CourseAnalysisSettings),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.userId, table.courseId] }),
+  }),
+);
 
 // WAYPOINTS TABLE
 export const waypoints = sqliteTable("waypoints", {
@@ -339,6 +363,7 @@ export const userCourses = sqliteTable(
 // TYPE
 export type InsertUserSettings = InferInsertModel<typeof userSettings>;
 export type InsertGlobalSettings = InferInsertModel<typeof globalSettings>;
+export type InsertUserCourseSettings = InferInsertModel<typeof userCourseSettings>;
 export type InsertCourse = InferInsertModel<typeof courses>;
 export type InsertWaypoint = InferInsertModel<typeof waypoints>;
 export type InsertPlan = InferInsertModel<typeof plans>;
@@ -351,6 +376,7 @@ export type InsertUserCourse = InferInsertModel<typeof userCourses>;
 
 export type SelectUserSettings = InferSelectModel<typeof userSettings>;
 export type SelectGlobalSettings = InferSelectModel<typeof globalSettings>;
+export type SelectUserCourseSettings = InferSelectModel<typeof userCourseSettings>;
 export type SelectKnowledge = InferSelectModel<typeof knowledge>;
 export type SelectCourse = InferSelectModel<typeof courses>;
 export type SelectWaypoint = InferSelectModel<typeof waypoints>;

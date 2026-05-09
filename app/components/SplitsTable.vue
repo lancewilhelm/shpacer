@@ -2,8 +2,9 @@
 import { getDistanceUnitSSR, getElevationUnitSSR } from "~/utils/units";
 import type { CourseUnitDefaults } from "~/utils/units";
 import { computed, toRefs, ref } from "vue";
-import { useUserSettingsStore } from "~/stores/userSettings";
 import type { SelectPlan } from "~/utils/db/schema";
+import type { CourseAnalysisSettings } from "~/utils/courseSettings";
+import { normalizeCourseAnalysisSettings } from "~/utils/courseSettings";
 import {
     extractElevationProfile,
     calculateGradeAtDistance,
@@ -28,6 +29,7 @@ interface Props {
     activityComparisonSplits?: CourseActivitySplitComparison[];
     readOnly?: boolean;
     courseDefaults?: Partial<CourseUnitDefaults> | null;
+    courseSettings?: CourseAnalysisSettings | null;
 }
 
 const _props = withDefaults(defineProps<Props>(), {
@@ -41,6 +43,7 @@ const _props = withDefaults(defineProps<Props>(), {
     activityComparisonSplits: () => [],
     readOnly: false,
     courseDefaults: null,
+    courseSettings: null,
 });
 const {
     geoJsonData,
@@ -52,6 +55,7 @@ const {
     selectedSplitRange,
     activityComparisonSplits,
     courseDefaults,
+    courseSettings,
 } = toRefs(_props);
 
 const emit = defineEmits<{
@@ -66,7 +70,6 @@ const emit = defineEmits<{
     ];
     "split-cancel": [];
 }>();
-const userSettingsStore = useUserSettingsStore();
 const distanceUnit = computed<DistanceUnit>(
     () =>
         getDistanceUnitSSR(
@@ -74,12 +77,8 @@ const distanceUnit = computed<DistanceUnit>(
         ) as DistanceUnit,
 );
 
-// Per-course smoothing (defaults when courseId unknown)
-const courseIdForSmoothing = computed(
-    () => currentPlan.value?.courseId || undefined,
-);
 const smoothing = computed(() =>
-    userSettingsStore.getSmoothingForCourse(courseIdForSmoothing.value),
+    normalizeCourseAnalysisSettings(courseSettings.value ?? null),
 );
 const useGradeAdjustment = computed<boolean>(
     () => currentPlan.value?.useGradeAdjustment ?? true,

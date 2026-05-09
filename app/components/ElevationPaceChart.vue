@@ -15,6 +15,8 @@ import { formatDistance, formatElevation } from "~/utils/courseMetrics";
 import { useUserSettingsStore } from "~/stores/userSettings";
 import { getWaypointColorFromOrder } from "~/utils/waypoints";
 import type { SelectCourseActivity, SelectPlan } from "~/utils/db/schema";
+import type { CourseAnalysisSettings } from "~/utils/courseSettings";
+import { normalizeCourseAnalysisSettings } from "~/utils/courseSettings";
 import {
     buildCourseActivityElapsedSeries,
     getCourseActivityMatchData,
@@ -22,6 +24,7 @@ import {
 
 interface Props {
     geoJsonData: GeoJSON.FeatureCollection[];
+    courseSettings?: CourseAnalysisSettings | null;
     height?: number;
     mapHoverDistance?: number | null;
     mapHoverDistances?: number[] | null;
@@ -60,6 +63,7 @@ interface PaceHoverEvent {
 
 const props = withDefaults(defineProps<Props>(), {
     height: 200,
+    courseSettings: null,
     mapHoverDistance: null,
     mapHoverDistances: null,
     selectedWaypointDistance: null,
@@ -435,21 +439,13 @@ const activeMapHoverDistances = computed<number[]>(() => {
     return [];
 });
 
-// Per-course smoothing configuration (grade window and pace smoothing)
-const route = useRoute();
-const courseIdForSmoothing = computed(() => {
-    const fromPlan = props.plan?.courseId;
-    const fromRoute = (route.params?.id as string) || undefined;
-    return fromPlan ?? fromRoute;
-});
-
 const smoothingConfig = computed(() => {
-    const s = userSettingsStore.getSmoothingForCourse(
-        courseIdForSmoothing.value,
-    );
+    const s = normalizeCourseAnalysisSettings(props.courseSettings ?? null);
     return {
         gradeWindowMeters: s.gradeWindowMeters,
         paceSmoothingMeters: s.paceSmoothingMeters,
+        paceChartMaxDisplaySecondsPerMeter:
+            s.paceChartMaxDisplaySecondsPerMeter,
     };
 });
 
@@ -484,6 +480,21 @@ const tooltipPaceUnitMeters = computed(() =>
 const tooltipPaceUnitLabel = computed(() =>
     tooltipPaceUnitMeters.value === 1609.344 ? "/mi" : "/km",
 );
+
+const paceChartMaxDisplayPace = computed(() => {
+    const secondsPerMeter =
+        smoothingConfig.value.paceChartMaxDisplaySecondsPerMeter;
+    if (
+        secondsPerMeter === null ||
+        secondsPerMeter === undefined ||
+        !Number.isFinite(secondsPerMeter) ||
+        secondsPerMeter <= 0
+    ) {
+        return null;
+    }
+
+    return secondsPerMeter * tooltipPaceUnitMeters.value;
+});
 
 const gradeExplanationSamples = computed<GradeCurveSample[]>(() => {
     const samples: GradeCurveSample[] = [];
@@ -617,17 +628,6 @@ const actualPaceData = computed(() => {
     return res;
 });
 
-const paceRange = computed(() => {
-    if (actualPaceData.value.length === 0) {
-        return { min: 0, max: 0 };
-    }
-    const paces = actualPaceData.value.map((d) => d.actualPace);
-    return {
-        min: Math.min(...paces),
-        max: Math.max(...paces),
-    };
-});
-
 // Format pace for display (converts seconds per mile/km to MM:SS format)
 
 function formatPace(paceInSeconds: number): string {
@@ -636,6 +636,26 @@ function formatPace(paceInSeconds: number): string {
     const seconds = totalSeconds % 60;
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
+
+function clampPaceForChart(paceInSeconds: number): number {
+    const cap = paceChartMaxDisplayPace.value;
+    if (!Number.isFinite(paceInSeconds)) {
+        return paceInSeconds;
+    }
+    if (cap === null) {
+        return paceInSeconds;
+    }
+    return Math.min(paceInSeconds, cap);
+}
+
+const planPaceChartData = computed(() =>
+    actualPaceData.value
+        .map((point) => ({
+            ...point,
+            actualPace: clampPaceForChart(point.actualPace),
+        }))
+        .filter((point) => Number.isFinite(point.actualPace)),
+);
 
 function formatSignedPaceDelta(paceDeltaSeconds: number): string {
     const sign = paceDeltaSeconds > 0 ? "+" : paceDeltaSeconds < 0 ? "-" : "";
@@ -1726,7 +1746,7 @@ function initPaceChart() {
         // Draw the filled area under the actual pace line
         const pg = paceSvg!.select("g");
         pg.append("path")
-            .datum(actualPaceData.value)
+            .datum(planPaceChartData.value)
             .attr("fill", "url(#pace-gradient)")
             .attr("d", paceArea);
     }
@@ -1758,28 +1778,45 @@ function initPaceChart() {
         }
     }
 
-    // Create line generator for actual pace
-    const actualPaceLine = d3
+    // Create line generator for plan pace
+    const planPaceLine = d3
         .line<{ distance: number; actualPace: number }>()
         .x((d) => paceXScale!(d.distance))
         .y((d) => paceYScale!(d.actualPace))
         .curve(d3.curveCardinal);
 
-    // Add actual pace line
+    // Add plan pace line
     g.append("path")
-        .datum(actualPaceData.value)
+        .datum(planPaceChartData.value)
         .attr("fill", "none")
         .attr("stroke", "var(--main-color)")
         .attr("stroke-width", 2)
-        .attr("d", actualPaceLine);
+        .attr("d", planPaceLine);
+
+    // Add activity pace line when an activity is selected
+    if (activityPaceChartData.value.length > 0) {
+        const activityPaceLine = d3
+            .line<{ distance: number; pace: number }>()
+            .x((d) => paceXScale!(d.distance))
+            .y((d) => paceYScale!(d.pace))
+            .curve(d3.curveCardinal);
+
+        g.append("path")
+            .datum(activityPaceChartData.value)
+            .attr("fill", "none")
+            .attr("stroke", "var(--yes-color)")
+            .attr("stroke-width", 2)
+            .attr("d", activityPaceLine);
+    }
 
     // Add target pace line (horizontal)
     if (props.plan && props.plan.pace) {
+        const clampedTargetPace = clampPaceForChart(props.plan.pace);
         g.append("line")
             .attr("x1", 0)
-            .attr("y1", paceYScale!(props.plan.pace))
+            .attr("y1", paceYScale!(clampedTargetPace))
             .attr("x2", innerWidth)
-            .attr("y2", paceYScale!(props.plan.pace))
+            .attr("y2", paceYScale!(clampedTargetPace))
             .style("stroke", "var(--sub-color)")
             .style("stroke-width", 1)
             .style("stroke-dasharray", "5,5")
@@ -2348,7 +2385,7 @@ watch(
 
 // Watch for smoothing changes and reinitialize charts
 watch(
-    () => userSettingsStore.settings.smoothing,
+    () => props.courseSettings,
     () => {
         if (hasElevationData.value) {
             nextTick(() => {
@@ -2668,6 +2705,48 @@ const tooltipActivityPrecompute = computed(() => {
         distances,
         elapsedSeconds,
         paceValues,
+    };
+});
+
+const activityPaceChartData = computed(() => {
+    const precompute = tooltipActivityPrecompute.value;
+    if (!props.activity || !precompute || precompute.paceValues.length === 0) {
+        return [];
+    }
+
+    return precompute.distances
+        .map((distance, index) => ({
+            distance,
+            pace: clampPaceForChart(precompute.paceValues[index] ?? NaN),
+        }))
+        .filter(
+            (point): point is { distance: number; pace: number } =>
+                point.pace !== undefined && Number.isFinite(point.pace),
+        );
+});
+
+const paceRange = computed(() => {
+    const paces: number[] = planPaceChartData.value
+        .map((point) => point.actualPace)
+        .filter((pace) => Number.isFinite(pace));
+
+    paces.push(
+        ...activityPaceChartData.value
+            .map((point) => point.pace)
+            .filter((pace) => Number.isFinite(pace)),
+    );
+
+    if (props.plan?.pace && Number.isFinite(props.plan.pace)) {
+        paces.push(clampPaceForChart(props.plan.pace));
+    }
+
+    if (paces.length === 0) {
+        return { min: 0, max: 0 };
+    }
+
+    return {
+        min: Math.min(...paces),
+        max: Math.max(...paces),
     };
 });
 

@@ -1,8 +1,14 @@
-import { courses, userCourses, waypoints } from "~/utils/db/schema";
+import {
+  courses,
+  userCourses,
+  userCourseSettings,
+  waypoints,
+} from "~/utils/db/schema";
 import { cloudDb } from "~~/server/utils/db/cloud";
 import { eq, and } from "drizzle-orm";
 import { auth } from "~/utils/auth";
 import { logger } from "~/utils/logger";
+import { normalizeCourseAnalysisSettings } from "~/utils/courseSettings";
 
 /**
  * Unified Course Endpoint
@@ -150,6 +156,19 @@ export default defineEventHandler(async (event) => {
         icon: w.icon,
       }));
 
+      const [courseSettings] = await cloudDb
+        .select({
+          settings: userCourseSettings.settings,
+        })
+        .from(userCourseSettings)
+        .where(
+          and(
+            eq(userCourseSettings.courseId, courseId),
+            eq(userCourseSettings.userId, session.user.id),
+          ),
+        )
+        .limit(1);
+
       const capabilities = deriveCapabilities({
         mode: "member",
         role: course.role as "owner" | "starred" | undefined,
@@ -162,6 +181,9 @@ export default defineEventHandler(async (event) => {
         capabilities,
         course: {
           ...course,
+          courseSettings: normalizeCourseAnalysisSettings(
+            courseSettings?.settings ?? null,
+          ),
           waypoints: formattedWaypoints,
         },
       };
