@@ -114,6 +114,7 @@ const invertPaceYAxis = computed<boolean>(() => {
     return typeof v === "boolean" ? v : false;
 });
 const chartContainer = ref<HTMLElement>();
+const activityDeltaChartContainer = ref<HTMLElement>();
 const paceChartContainer = ref<HTMLElement>();
 const gradeAdjustmentChartContainer = ref<HTMLElement>();
 const gradePaceChartContainer = ref<HTMLElement>();
@@ -181,14 +182,18 @@ function clearSecondaryMapTooltipState() {
 
 // Shared hover sync state for chart-to-chart hover
 const chartHoverDistance = ref<number | null>(null);
-const chartHoverSource = ref<"elevation" | "pace" | null>(null);
+const chartHoverSource = ref<"elevation" | "delta" | "pace" | null>(null);
 
-// Pace chart height factor as fraction of total charts height when pace chart is shown (e.g., 0.45 = 45% of total)
-const paceChartHeightFactor = 0.45;
+const PACE_ONLY_ELEVATION_HEIGHT_FACTOR = 0.55;
+const PACE_ONLY_PACE_HEIGHT_FACTOR = 0.45;
+const ACTIVITY_COMPARISON_PRIMARY_HEIGHT_FACTOR = 0.4;
+const ACTIVITY_COMPARISON_DELTA_HEIGHT_FACTOR = 0.2;
 
 // Shared axis margins and chart padding
 const AXIS_MARGIN_LEFT = 60;
 const AXIS_MARGIN_RIGHT = 20;
+const CHART_Y_AXIS_TICK_FONT_SIZE = "10px";
+const CHART_Y_AXIS_LINE_OPACITY = 1;
 
 // Elevation chart margins
 const ELEVATION_MARGIN_TOP = 20;
@@ -262,6 +267,25 @@ let paceMapHoverCrosshairs: Array<
     d3.Selection<SVGLineElement, unknown, null, undefined>
 > = [];
 
+// Activity delta chart state
+let activityDeltaSvg: d3.Selection<
+    SVGSVGElement,
+    unknown,
+    null,
+    undefined
+> | null = null;
+let activityDeltaXScale: d3.ScaleLinear<number, number> | null = null;
+let activityDeltaYScale: d3.ScaleLinear<number, number> | null = null;
+let activityDeltaCrosshair: d3.Selection<
+    SVGLineElement,
+    unknown,
+    null,
+    undefined
+> | null = null;
+let activityDeltaMapHoverCrosshairs: Array<
+    d3.Selection<SVGLineElement, unknown, null, undefined>
+> = [];
+
 // Sync crosshairs
 let elevationSyncCrosshair: d3.Selection<
     SVGLineElement,
@@ -275,15 +299,24 @@ let paceSyncCrosshair: d3.Selection<
     null,
     undefined
 > | null = null;
+let activityDeltaSyncCrosshair: d3.Selection<
+    SVGLineElement,
+    unknown,
+    null,
+    undefined
+> | null = null;
 let pendingElevationHover:
     | {
           mouseX: number;
           distance: number;
       }
     | null = null;
+let pendingActivityDeltaHoverDistance: number | null = null;
 let pendingPaceHoverDistance: number | null = null;
+let activityDeltaHoverFrame: number | null = null;
 let elevationHoverFrame: number | null = null;
 let paceHoverFrame: number | null = null;
+let activityDeltaResizeObserver: ResizeObserver | null = null;
 let gradeAdjustmentResizeObserver: ResizeObserver | null = null;
 let gradePaceResizeObserver: ResizeObserver | null = null;
 
@@ -294,9 +327,7 @@ watch(
         if (chartContainer.value) {
             initChart();
         }
-        if (props.showPaceChart && paceChartContainer.value) {
-            initPaceChart();
-        }
+        initSupplementalCharts();
     },
     { deep: true },
 );
@@ -307,17 +338,13 @@ watch(
         if (chartContainer.value) {
             initChart();
         }
-        if (props.showPaceChart && paceChartContainer.value) {
-            initPaceChart();
-        }
+        initSupplementalCharts();
     },
 );
 watch(
     () => invertPaceYAxis.value,
     () => {
-        if (props.showPaceChart && paceChartContainer.value) {
-            initPaceChart();
-        }
+        initSupplementalCharts();
     },
 );
 
@@ -665,6 +692,42 @@ function formatSignedPaceDelta(paceDeltaSeconds: number): string {
 function formatSignedElapsedTime(totalSeconds: number): string {
     const sign = totalSeconds > 0 ? "+" : totalSeconds < 0 ? "-" : "";
     return `${sign}${formatElapsedTimeLocal(Math.abs(totalSeconds))}`;
+}
+
+function formatSignedElapsedAxisTime(totalSeconds: number): string {
+    const sign = totalSeconds > 0 ? "+" : totalSeconds < 0 ? "-" : "";
+    const absSeconds = Math.max(0, Math.round(Math.abs(totalSeconds)));
+    const hours = Math.floor(absSeconds / 3600);
+    const minutes = Math.floor((absSeconds % 3600) / 60);
+    const seconds = absSeconds % 60;
+
+    if (hours > 0) {
+        return `${sign}${hours}:${minutes.toString().padStart(2, "0")}`;
+    }
+
+    return `${sign}${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function getElevationChartHeight(): number {
+    if (!(props.showPaceChart && hasPaceData.value)) {
+        return props.height;
+    }
+
+    return props.height *
+        (showActivityDeltaChart.value
+            ? ACTIVITY_COMPARISON_PRIMARY_HEIGHT_FACTOR
+            : PACE_ONLY_ELEVATION_HEIGHT_FACTOR);
+}
+
+function getPaceChartHeight(): number {
+    return props.height *
+        (showActivityDeltaChart.value
+            ? ACTIVITY_COMPARISON_PRIMARY_HEIGHT_FACTOR
+            : PACE_ONLY_PACE_HEIGHT_FACTOR);
+}
+
+function getActivityDeltaChartHeight(): number {
+    return props.height * ACTIVITY_COMPARISON_DELTA_HEIGHT_FACTOR;
 }
 
 function formatSignedGrade(grade: number): string {
@@ -1285,10 +1348,7 @@ function initChart() {
     const container = chartContainer.value;
     const containerRect = container.getBoundingClientRect();
     const width = containerRect.width;
-    const height =
-        props.showPaceChart && hasPaceData.value
-            ? props.height * (1 - paceChartHeightFactor)
-            : props.height;
+    const height = getElevationChartHeight();
 
     // Reduce bottom margin when pace chart is actually shown
     const margin = ELEVATION_CHART_MARGIN; // Increased top margin for waypoint circles
@@ -1435,12 +1495,12 @@ function initChart() {
         .call(yAxis)
         .selectAll("text")
         .style("fill", "var(--sub-color)")
-        .style("font-size", "12px");
+        .style("font-size", CHART_Y_AXIS_TICK_FONT_SIZE);
 
     // Style axis lines and ticks
     g.selectAll(".domain, .tick line")
         .style("stroke", "var(--sub-color)")
-        .style("opacity", 0.3);
+        .style("opacity", CHART_Y_AXIS_LINE_OPACITY);
 
     // Add grid lines
     g.selectAll(".grid-line-x")
@@ -1647,10 +1707,31 @@ function showPaceChartHover(distance: number) {
     }
 }
 
+function showActivityDeltaChartHover(distance: number) {
+    if (
+        !activityDeltaXScale ||
+        !activityDeltaSyncCrosshair ||
+        !showActivityDeltaChart.value
+    ) {
+        return;
+    }
+
+    const x = activityDeltaXScale(distance);
+    if (x >= 0 && x <= (activityDeltaXScale?.range?.()[1] || 0)) {
+        activityDeltaSyncCrosshair
+            .attr("x1", x)
+            .attr("x2", x)
+            .style("opacity", 0.8);
+    }
+}
+
 // Hide chart hover sync
 function hideChartHoverSync() {
     if (elevationSyncCrosshair) {
         elevationSyncCrosshair.style("opacity", 0);
+    }
+    if (activityDeltaSyncCrosshair) {
+        activityDeltaSyncCrosshair.style("opacity", 0);
     }
     if (paceSyncCrosshair) {
         paceSyncCrosshair.style("opacity", 0);
@@ -1663,6 +1744,187 @@ function hideChartHoverSync() {
             tooltipVisible.value = false;
         }
     }
+}
+
+function initActivityDeltaChart() {
+    if (!activityDeltaChartContainer.value || !showActivityDeltaChart.value) {
+        return;
+    }
+
+    d3.select(activityDeltaChartContainer.value).selectAll("*").remove();
+
+    const container = activityDeltaChartContainer.value;
+    const containerRect = container.getBoundingClientRect();
+    const width = containerRect.width;
+    const height = getActivityDeltaChartHeight();
+
+    const margin = PACE_CHART_MARGIN;
+    const innerWidth = width - margin.left - margin.right;
+    const innerHeight = height - margin.top - margin.bottom;
+
+    activityDeltaSvg = d3
+        .select(container)
+        .append("svg")
+        .attr("width", width)
+        .attr("height", height)
+        .style("background", "var(--bg-color)");
+
+    const g = activityDeltaSvg
+        .append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+    activityDeltaXScale = d3
+        .scaleLinear()
+        .domain([0, totalDistance.value])
+        .range([0, innerWidth]);
+
+    activityDeltaYScale = d3
+        .scaleLinear()
+        .domain([activityDeltaRange.value.min, activityDeltaRange.value.max])
+        .range([innerHeight, 0]);
+
+    g.selectAll(".grid-line-x")
+        .data(activityDeltaXScale.ticks(8))
+        .enter()
+        .append("line")
+        .attr("class", "grid-line-x")
+        .attr("x1", (value) => activityDeltaXScale!(value))
+        .attr("x2", (value) => activityDeltaXScale!(value))
+        .attr("y1", 0)
+        .attr("y2", innerHeight)
+        .style("stroke", "var(--sub-color)")
+        .style("stroke-width", 0.5)
+        .style("opacity", 0.1);
+
+    g.selectAll(".grid-line-y")
+        .data(activityDeltaYScale.ticks(5))
+        .enter()
+        .append("line")
+        .attr("class", "grid-line-y")
+        .attr("x1", 0)
+        .attr("x2", innerWidth)
+        .attr("y1", (value) => activityDeltaYScale!(value))
+        .attr("y2", (value) => activityDeltaYScale!(value))
+        .style("stroke", "var(--sub-color)")
+        .style("stroke-width", 0.5)
+        .style("opacity", 0.1);
+
+    g.append("line")
+        .attr("x1", 0)
+        .attr("x2", innerWidth)
+        .attr("y1", activityDeltaYScale(0))
+        .attr("y2", activityDeltaYScale(0))
+        .style("stroke", "var(--sub-color)")
+        .style("stroke-width", 1)
+        .style("stroke-dasharray", "5,5")
+        .style("opacity", 0.7);
+
+    if (props.highlightSegment && activityDeltaXScale) {
+        const segStart = Math.max(
+            0,
+            Math.min(totalDistance.value, props.highlightSegment.start),
+        );
+        const segEnd = Math.max(
+            segStart,
+            Math.min(totalDistance.value, props.highlightSegment.end),
+        );
+        const x1 = activityDeltaXScale(segStart);
+        const x2 = activityDeltaXScale(segEnd);
+        if (x2 > x1) {
+            g.append("rect")
+                .attr("class", "activity-delta-highlight-segment")
+                .attr("x", x1)
+                .attr("y", 0)
+                .attr("width", x2 - x1)
+                .attr("height", innerHeight)
+                .style("fill", props.highlightColor || "#ff0000")
+                .style("opacity", 0.15)
+                .style("pointer-events", "none");
+        }
+    }
+
+    const deltaLine = d3
+        .line<{ distance: number; deltaSeconds: number }>()
+        .x((d) => activityDeltaXScale!(d.distance))
+        .y((d) => activityDeltaYScale!(d.deltaSeconds))
+        .curve(d3.curveCardinal);
+
+    g.append("path")
+        .datum(activityDeltaChartData.value)
+        .attr("fill", "none")
+        .attr("stroke", "var(--main-color)")
+        .attr("stroke-width", 2)
+        .attr("d", deltaLine);
+
+    activityDeltaCrosshair = g
+        .append("line")
+        .attr("y1", 0)
+        .attr("y2", innerHeight)
+        .style("stroke", "var(--main-color)")
+        .style("stroke-width", 1)
+        .style("opacity", 0)
+        .style("pointer-events", "none");
+
+    activityDeltaMapHoverCrosshairs = [];
+    for (let i = 0; i < MAX_MAP_HOVER_CROSSHAIRS; i++) {
+        const line = g
+            .append("line")
+            .attr(
+                "class",
+                `activity-delta-map-hover-crosshair activity-delta-map-hover-crosshair-${i + 1}`,
+            )
+            .attr("y1", 0)
+            .attr("y2", innerHeight)
+            .style("stroke", "var(--main-color)")
+            .style("stroke-width", 1)
+            .style("opacity", 0)
+            .style("pointer-events", "none");
+        activityDeltaMapHoverCrosshairs.push(line);
+    }
+
+    activityDeltaSyncCrosshair = g
+        .append("line")
+        .attr("class", "activity-delta-sync-crosshair")
+        .attr("y1", 0)
+        .attr("y2", innerHeight)
+        .style("stroke", "var(--main-color)")
+        .style("stroke-width", 1)
+        .style("opacity", 0)
+        .style("pointer-events", "none");
+
+    const yAxis = d3
+        .axisLeft(activityDeltaYScale)
+        .ticks(5)
+        .tickFormat((value) => formatSignedElapsedAxisTime(Number(value)));
+
+    g.append("g")
+        .call(yAxis)
+        .selectAll("text")
+        .style("fill", "var(--sub-color)")
+        .style("font-size", CHART_Y_AXIS_TICK_FONT_SIZE);
+
+    g.selectAll(".domain, .tick line")
+        .style("stroke", "var(--sub-color)")
+        .style("opacity", CHART_Y_AXIS_LINE_OPACITY);
+
+    g.append("rect")
+        .attr("class", "activity-delta-overlay")
+        .attr("width", innerWidth)
+        .attr("height", innerHeight)
+        .style("fill", "none")
+        .style("pointer-events", "all")
+        .on("mousemove", handleActivityDeltaMouseMove)
+        .on("mouseleave", handleActivityDeltaMouseLeave);
+
+    g.append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("y", 0 - margin.left)
+        .attr("x", 0 - innerHeight / 2)
+        .attr("dy", "1em")
+        .style("text-anchor", "middle")
+        .style("fill", "var(--sub-color)")
+        .style("font-size", "12px")
+        .text("Delta");
 }
 
 function initPaceChart() {
@@ -1679,7 +1941,7 @@ function initPaceChart() {
     const container = paceChartContainer.value;
     const containerRect = container.getBoundingClientRect();
     const width = containerRect.width;
-    const height = props.height * paceChartHeightFactor;
+    const height = getPaceChartHeight();
 
     const margin = PACE_CHART_MARGIN;
     const innerWidth = width - margin.left - margin.right;
@@ -1898,11 +2160,16 @@ function initPaceChart() {
     g.append("g")
         .call(yAxis)
         .selectAll("text")
-        .style("fill", "var(--sub-color)");
+        .style("fill", "var(--sub-color)")
+        .style("font-size", CHART_Y_AXIS_TICK_FONT_SIZE);
 
     // Style axis lines
-    g.selectAll(".domain").style("stroke", "var(--sub-color)");
-    g.selectAll(".tick line").style("stroke", "var(--sub-color)");
+    g.selectAll(".domain")
+        .style("stroke", "var(--sub-color)")
+        .style("opacity", CHART_Y_AXIS_LINE_OPACITY);
+    g.selectAll(".tick line")
+        .style("stroke", "var(--sub-color)")
+        .style("opacity", CHART_Y_AXIS_LINE_OPACITY);
 
     // Add invisible overlay for mouse interactions
     g.append("rect")
@@ -2005,7 +2272,11 @@ function handleMouseLeave() {
     const hasVisibleMapHoverCrosshair = mapHoverCrosshairs.some(
         (line) => line.style("opacity") !== "0",
     );
-    if (!hasVisibleMapHoverCrosshair && chartHoverSource.value !== "pace") {
+    if (
+        !hasVisibleMapHoverCrosshair &&
+        chartHoverSource.value !== "pace" &&
+        chartHoverSource.value !== "delta"
+    ) {
         tooltipVisible.value = false;
         tooltipFromMap.value = false;
         clearSecondaryMapTooltipState();
@@ -2139,6 +2410,64 @@ function updateMapHoverCrosshair() {
     tooltipFromMap.value = true; // This is from map hover
 }
 
+function handleActivityDeltaMouseMove(event: MouseEvent) {
+    if (!activityDeltaXScale || !activityDeltaCrosshair) return;
+
+    const [mouseX] = d3.pointer(event);
+    pendingActivityDeltaHoverDistance = activityDeltaXScale.invert(mouseX);
+
+    if (activityDeltaHoverFrame !== null) return;
+
+    activityDeltaHoverFrame = requestAnimationFrame(() => {
+        activityDeltaHoverFrame = null;
+        const distance = pendingActivityDeltaHoverDistance;
+        pendingActivityDeltaHoverDistance = null;
+        if (
+            distance === null ||
+            !activityDeltaXScale ||
+            !activityDeltaCrosshair
+        ) {
+            return;
+        }
+
+        const snapshot = buildHoverSnapshotAtDistance(distance);
+        if (!snapshot) return;
+
+        const x = activityDeltaXScale(distance);
+        activityDeltaCrosshair.attr("x1", x).attr("x2", x).style("opacity", 0.8);
+
+        chartHoverDistance.value = distance;
+        chartHoverSource.value = "delta";
+
+        emit("pace-hover", {
+            lat: snapshot.point.lat,
+            lng: snapshot.point.lng,
+            distance,
+            elevation: snapshot.point.elevation,
+            grade: snapshot.grade,
+        });
+    });
+}
+
+function handleActivityDeltaMouseLeave() {
+    if (activityDeltaHoverFrame !== null) {
+        cancelAnimationFrame(activityDeltaHoverFrame);
+        activityDeltaHoverFrame = null;
+    }
+    pendingActivityDeltaHoverDistance = null;
+
+    if (activityDeltaCrosshair) {
+        activityDeltaCrosshair.style("opacity", 0);
+    }
+
+    if (chartHoverSource.value === "delta") {
+        chartHoverDistance.value = null;
+        chartHoverSource.value = null;
+    }
+
+    emit("pace-leave");
+}
+
 // Handle mouse movement over the pace chart
 function handlePaceMouseMove(event: MouseEvent) {
     if (!paceXScale || !paceCrosshair) return;
@@ -2218,6 +2547,38 @@ function updatePaceMapHoverCrosshair() {
     });
 }
 
+function updateActivityDeltaMapHoverCrosshair() {
+    if (!activityDeltaXScale || !showActivityDeltaChart.value) return;
+    const localActivityDeltaXScale = activityDeltaXScale;
+
+    const distances = activeMapHoverDistances.value;
+
+    activityDeltaMapHoverCrosshairs.forEach((line, index) => {
+        const distance = distances[index];
+        if (distance === undefined) {
+            line.style("opacity", 0);
+            return;
+        }
+
+        const x = localActivityDeltaXScale(distance);
+        line.attr("x1", x)
+            .attr("x2", x)
+            .style("opacity", MAP_HOVER_CROSSHAIR_OPACITY);
+    });
+}
+
+function initSupplementalCharts() {
+    if (hasPaceData.value && props.showPaceChart && paceChartContainer.value) {
+        initPaceChart();
+    }
+    if (
+        showActivityDeltaChart.value &&
+        activityDeltaChartContainer.value
+    ) {
+        initActivityDeltaChart();
+    }
+}
+
 // Update waypoint crosshair position
 function updateWaypointCrosshair() {
     if (!waypointCrosshair || !xScale || !tooltip.value) return;
@@ -2277,9 +2638,7 @@ function handleResize() {
     if (hasElevationData.value) {
         initChart();
     }
-    if (hasPaceData.value && props.showPaceChart) {
-        initPaceChart();
-    }
+    initSupplementalCharts();
     if (gradeExplanationModalOpen.value) {
         initGradeExplanationCharts();
     }
@@ -2324,32 +2683,27 @@ watch(
             });
         }
 
-        if (hasPaceData.value && props.showPaceChart) {
-            nextTick(() => {
-                const __t =
-                    typeof window !== "undefined" &&
-                    typeof performance !== "undefined"
-                        ? performance.now()
-                        : 0;
-                if (__isClient && __isDev)
-                    console.time(
-                        "ElevationPaceChart: initPaceChart (nextTick)",
-                    );
-                initPaceChart();
-                if (__isClient && __isDev) {
-                    console.timeEnd(
-                        "ElevationPaceChart: initPaceChart (nextTick)",
-                    );
-                    console.log("[ElevationPaceChart] initPaceChart complete", {
-                        ms:
-                            typeof performance !== "undefined"
-                                ? performance.now() - __t
-                                : 0,
-                        pacePoints: actualPaceData.value.length,
-                    });
-                }
-            });
-        }
+        nextTick(() => {
+            const __t =
+                typeof window !== "undefined" &&
+                typeof performance !== "undefined"
+                    ? performance.now()
+                    : 0;
+            if (__isClient && __isDev)
+                console.time("ElevationPaceChart: initSupplementalCharts");
+            initSupplementalCharts();
+            if (__isClient && __isDev) {
+                console.timeEnd("ElevationPaceChart: initSupplementalCharts");
+                console.log("[ElevationPaceChart] initSupplementalCharts complete", {
+                    ms:
+                        typeof performance !== "undefined"
+                            ? performance.now() - __t
+                            : 0,
+                    pacePoints: actualPaceData.value.length,
+                    deltaPoints: activityDeltaChartData.value.length,
+                });
+            }
+        });
 
         if (__isClient && __isDev) {
             console.log("[ElevationPaceChart] geoJsonData processed", {
@@ -2374,11 +2728,9 @@ watch(
                 initChart();
             });
         }
-        if (hasPaceData.value && props.showPaceChart) {
-            nextTick(() => {
-                initPaceChart();
-            });
-        }
+        nextTick(() => {
+            initSupplementalCharts();
+        });
     },
     { deep: true },
 );
@@ -2392,11 +2744,9 @@ watch(
                 initChart();
             });
         }
-        if (hasPaceData.value && props.showPaceChart) {
-            nextTick(() => {
-                initPaceChart();
-            });
-        }
+        nextTick(() => {
+            initSupplementalCharts();
+        });
     },
     { deep: true },
 );
@@ -2411,25 +2761,25 @@ watch(
                 initChart();
             });
         }
-        // Re-initialize pace chart if needed
-        if (hasPaceData.value && props.showPaceChart) {
-            nextTick(() => {
-                initPaceChart();
-            });
-        }
+        nextTick(() => {
+            initSupplementalCharts();
+        });
     },
     { deep: true },
 );
 
-// Watch for activity overlay changes and reinitialize the pace chart
+// Watch for activity overlay changes and reinitialize the stacked charts
 watch(
     () => props.activity,
     () => {
-        if (hasPaceData.value && props.showPaceChart) {
+        if (hasElevationData.value) {
             nextTick(() => {
-                initPaceChart();
+                initChart();
             });
         }
+        nextTick(() => {
+            initSupplementalCharts();
+        });
     },
     { deep: true },
 );
@@ -2444,12 +2794,9 @@ watch(
                 initChart();
             });
         }
-        // Re-initialize pace chart if needed
-        if (hasPaceData.value && props.showPaceChart) {
-            nextTick(() => {
-                initPaceChart();
-            });
-        }
+        nextTick(() => {
+            initSupplementalCharts();
+        });
     },
 );
 
@@ -2499,8 +2846,13 @@ watch([chartHoverDistance, chartHoverSource], ([distance, source]) => {
     // Show crosshairs and tooltips on the opposite chart
     if (source === "elevation" && hasPaceData.value && props.showPaceChart) {
         showPaceChartHover(distance);
+        showActivityDeltaChartHover(distance);
     } else if (source === "pace" && hasElevationData.value) {
         showElevationChartHover(distance);
+        showActivityDeltaChartHover(distance);
+    } else if (source === "delta" && hasElevationData.value) {
+        showElevationChartHover(distance);
+        showPaceChartHover(distance);
     }
 });
 
@@ -2510,6 +2862,7 @@ watch(
     () => {
         updateMapHoverCrosshair();
         updatePaceMapHoverCrosshair();
+        updateActivityDeltaMapHoverCrosshair();
     },
     { deep: true },
 );
@@ -2569,11 +2922,9 @@ watch(
                 initChart();
             });
         }
-        if (hasPaceData.value && props.showPaceChart) {
-            nextTick(() => {
-                initPaceChart();
-            });
-        }
+        nextTick(() => {
+            initSupplementalCharts();
+        });
     },
 );
 // Setup resize observer
@@ -2593,11 +2944,22 @@ onMounted(() => {
         paceResizeObserver = new ResizeObserver(() => {
             if (hasPaceData.value && props.showPaceChart) {
                 nextTick(() => {
-                    initPaceChart();
+                    initSupplementalCharts();
                 });
             }
         });
         paceResizeObserver.observe(paceChartContainer.value);
+    }
+
+    if (activityDeltaChartContainer.value) {
+        activityDeltaResizeObserver = new ResizeObserver(() => {
+            if (showActivityDeltaChart.value) {
+                nextTick(() => {
+                    initActivityDeltaChart();
+                });
+            }
+        });
+        activityDeltaResizeObserver.observe(activityDeltaChartContainer.value);
     }
 });
 
@@ -2605,6 +2967,10 @@ onUnmounted(() => {
     if (elevationHoverFrame !== null) {
         cancelAnimationFrame(elevationHoverFrame);
         elevationHoverFrame = null;
+    }
+    if (activityDeltaHoverFrame !== null) {
+        cancelAnimationFrame(activityDeltaHoverFrame);
+        activityDeltaHoverFrame = null;
     }
     if (paceHoverFrame !== null) {
         cancelAnimationFrame(paceHoverFrame);
@@ -2617,6 +2983,10 @@ onUnmounted(() => {
     if (paceResizeObserver) {
         paceResizeObserver.disconnect();
         paceResizeObserver = null;
+    }
+    if (activityDeltaResizeObserver) {
+        activityDeltaResizeObserver.disconnect();
+        activityDeltaResizeObserver = null;
     }
     disconnectGradeExplanationResizeObservers();
 });
@@ -2734,9 +3104,48 @@ const activityPaceChartData = computed(() => {
         }))
         .filter(
             (point): point is { distance: number; pace: number } =>
-                point.pace !== undefined && Number.isFinite(point.pace),
+            point.pace !== undefined && Number.isFinite(point.pace),
         );
 });
+
+const activityDeltaChartData = computed(() => {
+    const precompute = tooltipActivityPrecompute.value;
+    if (
+        !props.activity ||
+        !precompute ||
+        precompute.elapsedSeconds.length === 0
+    ) {
+        return [];
+    }
+
+    return precompute.distances
+        .map((distance, index) => {
+            const activityElapsedSeconds = precompute.elapsedSeconds[index];
+            const planElapsedSeconds = getElapsedAtDistance(distance);
+
+            return {
+                distance,
+                deltaSeconds:
+                    activityElapsedSeconds !== undefined &&
+                    Number.isFinite(activityElapsedSeconds) &&
+                    planElapsedSeconds !== null &&
+                    Number.isFinite(planElapsedSeconds)
+                        ? activityElapsedSeconds - planElapsedSeconds
+                        : NaN,
+            };
+        })
+        .filter(
+            (point): point is { distance: number; deltaSeconds: number } =>
+                Number.isFinite(point.deltaSeconds),
+        );
+});
+
+const showActivityDeltaChart = computed(
+    () =>
+        props.showPaceChart &&
+        hasPaceData.value &&
+        activityDeltaChartData.value.length > 0,
+);
 
 const paceRange = computed(() => {
     const paces: number[] = planPaceChartData.value
@@ -2761,6 +3170,20 @@ const paceRange = computed(() => {
         min: Math.min(...paces),
         max: Math.max(...paces),
     };
+});
+
+const activityDeltaRange = computed(() => {
+    const deltas = activityDeltaChartData.value
+        .map((point) => point.deltaSeconds)
+        .filter((delta) => Number.isFinite(delta));
+
+    if (deltas.length === 0) {
+        return { min: -60, max: 60 };
+    }
+
+    const maxAbs = Math.max(30, ...deltas.map((delta) => Math.abs(delta)));
+    const padded = maxAbs * 1.08;
+    return { min: -padded, max: padded };
 });
 
 // Precompute elapsed travel and stoppage for tooltip (fast lookup on hover)
@@ -3102,6 +3525,17 @@ function getActivityPaceAtDistance(distance: number): number | null {
             </div>
         </div>
 
+        <!-- Activity Delta Chart -->
+        <div
+            v-if="showActivityDeltaChart"
+            class="activity-delta-chart-container"
+        >
+            <div
+                ref="activityDeltaChartContainer"
+                class="activity-delta-chart"
+            />
+        </div>
+
         <!-- Pace Chart -->
         <div v-if="showPaceChart" class="pace-chart-container">
             <div v-if="!hasPaceData" class="no-pace-data">
@@ -3230,6 +3664,13 @@ function getActivityPaceAtDistance(distance: number): number | null {
     overflow: hidden;
 }
 
+.activity-delta-chart-container {
+    width: 100%;
+    position: relative;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
 .no-pace-data {
     display: flex;
     align-items: center;
@@ -3243,6 +3684,13 @@ function getActivityPaceAtDistance(distance: number): number | null {
 }
 
 .pace-chart {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.activity-delta-chart {
     width: 100%;
     height: 100%;
     box-sizing: border-box;
@@ -3340,6 +3788,7 @@ function getActivityPaceAtDistance(distance: number): number | null {
 
 /* Ensure embedded SVGs fill their containers without overflowing */
 .elevation-chart > svg,
+.activity-delta-chart > svg,
 .pace-chart > svg {
     display: block;
     width: 100%;
