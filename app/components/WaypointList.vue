@@ -153,12 +153,17 @@ const waypointSegments = computed(() => {
 
 const waypointSegmentsByStart = computed<Map<string, WaypointSegment>>(() => {
     return new Map(
-        waypointSegments.value.map((segment) => [segment.fromWaypoint, segment]),
+        waypointSegments.value.map((segment) => [
+            segment.fromWaypoint,
+            segment,
+        ]),
     );
 });
 
 const waypointById = computed<Map<string, Waypoint>>(() => {
-    return new Map((waypoints.value || []).map((waypoint) => [waypoint.id, waypoint]));
+    return new Map(
+        (waypoints.value || []).map((waypoint) => [waypoint.id, waypoint]),
+    );
 });
 
 const cumulativeElevationByWaypoint = computed(() => {
@@ -364,6 +369,22 @@ function getDelaySecondsForWaypoint(waypointId: string): number {
         waypoints.value,
     );
     return delaySeconds;
+}
+
+function getElapsedTimeTooltip(): string {
+    return "Planned elapsed time from the start to this waypoint.";
+}
+
+function getDelayTooltip(): string {
+    return "Planned stoppage time at this waypoint, included in elapsed time.";
+}
+
+function getActivityElapsedTooltip(): string {
+    return "Actual elapsed time from the selected activity at this waypoint.";
+}
+
+function getActivityDeltaTooltip(): string {
+    return "Difference between the selected activity and plan elapsed time at this waypoint.";
 }
 
 function isStartOrFinishWaypoint(waypoint: Waypoint): boolean {
@@ -603,7 +624,9 @@ function getSegmentActivityComparison(fromWaypointId: string) {
                                                     waypoint.id,
                                                 ).elevationGain > 0
                                             "
-                                            v-tooltip="'Cumulative elevation gain'"
+                                            v-tooltip="
+                                                'Cumulative elevation gain'
+                                            "
                                             class="flex items-center gap-1 text-(--sub-color)"
                                         >
                                             <Icon
@@ -625,7 +648,9 @@ function getSegmentActivityComparison(fromWaypointId: string) {
                                                     waypoint.id,
                                                 ).elevationLoss > 0
                                             "
-                                            v-tooltip="'Cumulative elevation loss'"
+                                            v-tooltip="
+                                                'Cumulative elevation loss'
+                                            "
                                             class="flex items-center gap-1 text-(--sub-color)"
                                         >
                                             <Icon
@@ -647,7 +672,10 @@ function getSegmentActivityComparison(fromWaypointId: string) {
                                         v-if="currentPlan && currentPlan.pace"
                                         class="flex items-center gap-4 text-(--main-color) text-sm mb-1"
                                     >
-                                        <span class="flex items-center gap-1">
+                                        <span
+                                            v-tooltip="getElapsedTimeTooltip()"
+                                            class="flex items-center gap-1"
+                                        >
                                             <Icon
                                                 name="lucide:clock"
                                                 class="h-3 w-3 -translate-y-0.25"
@@ -670,6 +698,7 @@ function getSegmentActivityComparison(fromWaypointId: string) {
                                                     waypoint.id,
                                                 ) > 0
                                             "
+                                            v-tooltip="getDelayTooltip()"
                                             class="flex items-center gap-1 text-(--main-color)"
                                         >
                                             <Icon
@@ -687,10 +716,17 @@ function getSegmentActivityComparison(fromWaypointId: string) {
                                     </div>
 
                                     <div
-                                        v-if="getActivityComparison(waypoint.id)"
+                                        v-if="
+                                            getActivityComparison(waypoint.id)
+                                        "
                                         class="flex items-center gap-4 text-sm mb-1 text-(--main-color)"
                                     >
-                                        <span class="flex items-center gap-1">
+                                        <span
+                                            v-tooltip="
+                                                getActivityElapsedTooltip()
+                                            "
+                                            class="flex items-center gap-1"
+                                        >
                                             <Icon
                                                 name="lucide:flag"
                                                 class="h-3 w-3 -translate-y-0.25"
@@ -713,8 +749,13 @@ function getSegmentActivityComparison(fromWaypointId: string) {
                                                 }}
                                             </span>
                                         </span>
-                                        <span class="text-xs text-(--sub-color)">
-                                            Delta
+                                        <span
+                                            v-tooltip="getActivityDeltaTooltip()"
+                                        >
+                                            <Icon
+                                                name="lucide:triangle"
+                                                class="w-3 h-3 translate-y-0.25"
+                                            />
                                             {{
                                                 formatSignedDuration(
                                                     getActivityComparison(
@@ -774,10 +815,7 @@ function getSegmentActivityComparison(fromWaypointId: string) {
                         </div>
 
                         <!-- Segment Information (between this waypoint and the next) -->
-                        <div
-                            v-if="index < waypoints.length - 1"
-                            class="my-1"
-                        >
+                        <div v-if="index < waypoints.length - 1" class="my-1">
                             <div class="w-full">
                                 <div
                                     v-if="getSegmentForWaypoint(waypoint.id)"
@@ -883,10 +921,10 @@ function getSegmentActivityComparison(fromWaypointId: string) {
                                         </div>
 
                                         <!-- Segment Time and Pace -->
-                                            <div
-                                                v-if="currentPlan"
-                                                class="contents"
-                                            >
+                                        <div
+                                            v-if="currentPlan"
+                                            class="contents"
+                                        >
                                             <!-- Segment Time -->
                                             <div
                                                 v-tooltip="'Estimated duration'"
@@ -993,11 +1031,10 @@ function getSegmentActivityComparison(fromWaypointId: string) {
                                                     class="flex items-center gap-1 text-xs text-(--sub-color)"
                                                 >
                                                     <Icon
-                                                        name="lucide:git-compare-arrows"
+                                                        name="lucide:triangle"
                                                         class="w-3 h-3 -translate-y-0.25"
                                                     />
                                                     <span>
-                                                        Delta
                                                         {{
                                                             formatSignedDuration(
                                                                 getSegmentActivityComparison(
@@ -1028,9 +1065,7 @@ function getSegmentActivityComparison(fromWaypointId: string) {
             :waypoints="waypoints"
             :current-plan-id="currentPlanId"
             :get-waypoint-note="getWaypointNote"
-            :get-waypoint-custom-stoppage-time="
-                getWaypointCustomStoppageTime
-            "
+            :get-waypoint-custom-stoppage-time="getWaypointCustomStoppageTime"
             :get-default-stoppage-time="getDefaultStoppageTime"
             @close="closeEditModal"
             @save-waypoint-note="handleSaveNote"

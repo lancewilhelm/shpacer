@@ -14,6 +14,7 @@ Shpacer can now store uploaded race activities at the course level and compare t
 - Course analysis settings are now loaded with the course itself from a dedicated DB-backed `user_course_settings` record instead of being persisted in `userSettings`.
 - The course pacing controls can cap the displayed activity pace on the chart so aid-station stops do not dominate the Y-axis; the default display cap is `30:00 /mi`, and the cap affects chart display only, not tooltip or comparison math.
 - Interwaypoint segment comparisons now use the same normalized matched distance-to-elapsed interpolation as the pace chart tooltip, so segment times and deltas stay aligned in overlap and out-and-back sections.
+- Waypoint comparison rows expose tooltip labels for planned elapsed time, planned stoppage time, actual elapsed time, and plan delta so the compact stat line stays self-describing.
 - Creating or editing a plan after an activity upload immediately makes that plan comparable without re-uploading the activity.
 
 ## Supported Inputs

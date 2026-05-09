@@ -113,6 +113,8 @@ const invertPaceYAxis = computed<boolean>(() => {
     const v = s?.chartStyle?.invertPaceYAxis;
     return typeof v === "boolean" ? v : false;
 });
+const chartsContainer = ref<HTMLElement>();
+const elevationChartContainer = ref<HTMLElement>();
 const chartContainer = ref<HTMLElement>();
 const activityDeltaChartContainer = ref<HTMLElement>();
 const paceChartContainer = ref<HTMLElement>();
@@ -194,14 +196,18 @@ const AXIS_MARGIN_LEFT = 60;
 const AXIS_MARGIN_RIGHT = 20;
 const CHART_Y_AXIS_TICK_FONT_SIZE = "10px";
 const CHART_Y_AXIS_LINE_OPACITY = 1;
+const CHART_GRID_LINE_WIDTH = 0.5;
+const CHART_GRID_LINE_OPACITY = 0.1;
 
 // Elevation chart margins
 const ELEVATION_MARGIN_TOP = 20;
 const ELEVATION_MARGIN_BOTTOM = 20;
+const STACKED_ELEVATION_MARGIN_BOTTOM = 6;
 
 // Pace chart margins
 const PACE_MARGIN_TOP = 10;
 const PACE_MARGIN_BOTTOM = 20;
+const DELTA_MARGIN_BOTTOM = 6;
 
 // Tooltip padding relative to chart
 const TOOLTIP_MARGIN_TOP = 10;
@@ -213,10 +219,22 @@ const ELEVATION_CHART_MARGIN = {
     bottom: ELEVATION_MARGIN_BOTTOM,
     left: AXIS_MARGIN_LEFT,
 };
+const STACKED_ELEVATION_CHART_MARGIN = {
+    top: ELEVATION_MARGIN_TOP,
+    right: AXIS_MARGIN_RIGHT,
+    bottom: STACKED_ELEVATION_MARGIN_BOTTOM,
+    left: AXIS_MARGIN_LEFT,
+};
 const PACE_CHART_MARGIN = {
     top: PACE_MARGIN_TOP,
     right: AXIS_MARGIN_RIGHT,
     bottom: PACE_MARGIN_BOTTOM,
+    left: AXIS_MARGIN_LEFT,
+};
+const DELTA_CHART_MARGIN = {
+    top: PACE_MARGIN_TOP,
+    right: AXIS_MARGIN_RIGHT,
+    bottom: DELTA_MARGIN_BOTTOM,
     left: AXIS_MARGIN_LEFT,
 };
 const EXPLANATION_CHART_MARGIN = {
@@ -1351,7 +1369,10 @@ function initChart() {
     const height = getElevationChartHeight();
 
     // Reduce bottom margin when pace chart is actually shown
-    const margin = ELEVATION_CHART_MARGIN; // Increased top margin for waypoint circles
+    const margin =
+        props.showPaceChart && hasPaceData.value
+            ? STACKED_ELEVATION_CHART_MARGIN
+            : ELEVATION_CHART_MARGIN; // Increased top margin for waypoint circles
     const innerWidth = width - margin.left - margin.right;
     const mobileFactor =
         window.innerWidth < 768 && !props.showPaceChart ? 35 : 0;
@@ -1513,8 +1534,8 @@ function initChart() {
         .attr("y1", 0)
         .attr("y2", innerHeight)
         .style("stroke", "var(--sub-color)")
-        .style("stroke-width", 0.5)
-        .style("opacity", 0.1);
+        .style("stroke-width", CHART_GRID_LINE_WIDTH)
+        .style("opacity", CHART_GRID_LINE_OPACITY);
 
     g.selectAll(".grid-line-y")
         .data(yScale.ticks(6))
@@ -1526,8 +1547,8 @@ function initChart() {
         .attr("y1", (d) => yScale!(d))
         .attr("y2", (d) => yScale!(d))
         .style("stroke", "var(--sub-color)")
-        .style("stroke-width", 0.5)
-        .style("opacity", 0.1);
+        .style("stroke-width", CHART_GRID_LINE_WIDTH)
+        .style("opacity", CHART_GRID_LINE_OPACITY);
 
     // Highlight selected elevation segment (if provided)
     if (props.highlightSegment && xScale) {
@@ -1673,22 +1694,12 @@ function showElevationChartHover(distance: number) {
     if (model) {
         tooltipData.value = model;
 
-        // Position tooltip
-        const containerRect = chartContainer.value!.getBoundingClientRect();
         const tooltipEl = tooltip.value;
         const margin = TOOLTIP_MARGIN;
 
         const chartX = x + margin.left;
         const chartY = margin.top + 10;
-
-        const tooltipWidth = tooltipEl.offsetWidth;
-        const finalX = Math.min(
-            chartX,
-            containerRect.width - tooltipWidth - 10,
-        );
-
-        tooltipEl.style.left = `${finalX}px`;
-        tooltipEl.style.top = `${chartY}px`;
+        positionTooltipInChartsLayer(tooltipEl, chartX, chartY);
 
         tooltipVisible.value = true;
         tooltipFromMap.value = false;
@@ -1758,7 +1769,7 @@ function initActivityDeltaChart() {
     const width = containerRect.width;
     const height = getActivityDeltaChartHeight();
 
-    const margin = PACE_CHART_MARGIN;
+    const margin = DELTA_CHART_MARGIN;
     const innerWidth = width - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
 
@@ -1793,8 +1804,8 @@ function initActivityDeltaChart() {
         .attr("y1", 0)
         .attr("y2", innerHeight)
         .style("stroke", "var(--sub-color)")
-        .style("stroke-width", 0.5)
-        .style("opacity", 0.1);
+        .style("stroke-width", CHART_GRID_LINE_WIDTH)
+        .style("opacity", CHART_GRID_LINE_OPACITY);
 
     g.selectAll(".grid-line-y")
         .data(activityDeltaYScale.ticks(5))
@@ -1806,8 +1817,8 @@ function initActivityDeltaChart() {
         .attr("y1", (value) => activityDeltaYScale!(value))
         .attr("y2", (value) => activityDeltaYScale!(value))
         .style("stroke", "var(--sub-color)")
-        .style("stroke-width", 0.5)
-        .style("opacity", 0.1);
+        .style("stroke-width", CHART_GRID_LINE_WIDTH)
+        .style("opacity", CHART_GRID_LINE_OPACITY);
 
     g.append("line")
         .attr("x1", 0)
@@ -2171,6 +2182,32 @@ function initPaceChart() {
         .style("stroke", "var(--sub-color)")
         .style("opacity", CHART_Y_AXIS_LINE_OPACITY);
 
+    g.selectAll(".grid-line-x")
+        .data(paceXScale.ticks(8))
+        .enter()
+        .append("line")
+        .attr("class", "grid-line-x")
+        .attr("x1", (value) => paceXScale!(value))
+        .attr("x2", (value) => paceXScale!(value))
+        .attr("y1", 0)
+        .attr("y2", innerHeight)
+        .style("stroke", "var(--sub-color)")
+        .style("stroke-width", CHART_GRID_LINE_WIDTH)
+        .style("opacity", CHART_GRID_LINE_OPACITY);
+
+    g.selectAll(".grid-line-y")
+        .data(paceYScale.ticks(6))
+        .enter()
+        .append("line")
+        .attr("class", "grid-line-y")
+        .attr("x1", 0)
+        .attr("x2", innerWidth)
+        .attr("y1", (value) => paceYScale!(value))
+        .attr("y2", (value) => paceYScale!(value))
+        .style("stroke", "var(--sub-color)")
+        .style("stroke-width", CHART_GRID_LINE_WIDTH)
+        .style("opacity", CHART_GRID_LINE_OPACITY);
+
     // Add invisible overlay for mouse interactions
     g.append("rect")
         .attr("class", "pace-overlay")
@@ -2220,19 +2257,11 @@ function handleMouseMove(event: MouseEvent) {
         chartHoverSource.value = "elevation";
         tooltipData.value = snapshot.model;
 
-        const containerRect = chartContainer.value!.getBoundingClientRect();
         const tooltipEl = tooltip.value;
         const margin = TOOLTIP_MARGIN;
         const chartX = pending.mouseX + margin.left;
         const chartY = margin.top + 10;
-        const tooltipWidth = tooltipEl.offsetWidth;
-        const finalX = Math.min(
-            chartX,
-            containerRect.width - tooltipWidth - 10,
-        );
-
-        tooltipEl.style.left = `${finalX}px`;
-        tooltipEl.style.top = `${chartY}px`;
+        positionTooltipInChartsLayer(tooltipEl, chartX, chartY);
 
         tooltipVisible.value = true;
         tooltipFromMap.value = false;
@@ -2320,6 +2349,25 @@ function clampTooltipX(
     return Math.min(desiredX, containerWidth - tooltipEl.offsetWidth - 10);
 }
 
+function positionTooltipInChartsLayer(
+    tooltipEl: HTMLElement,
+    chartX: number,
+    chartY: number,
+) {
+    if (!chartsContainer.value || !elevationChartContainer.value) return null;
+
+    const chartsRect = chartsContainer.value.getBoundingClientRect();
+    const elevationRect = elevationChartContainer.value.getBoundingClientRect();
+    const elevationOffsetTop = elevationRect.top - chartsRect.top;
+    const finalX = clampTooltipX(tooltipEl, chartX, chartsRect.width);
+    const finalY = elevationOffsetTop + chartY;
+
+    tooltipEl.style.left = `${finalX}px`;
+    tooltipEl.style.top = `${finalY}px`;
+
+    return { finalX, finalY, chartsWidth: chartsRect.width };
+}
+
 // Update map hover crosshair position
 function updateMapHoverCrosshair() {
     if (!xScale || !tooltip.value) return;
@@ -2358,7 +2406,6 @@ function updateMapHoverCrosshair() {
     tooltipData.value = primarySnapshot.model;
 
     // Position tooltip
-    const containerRect = chartContainer.value!.getBoundingClientRect();
     const tooltipEl = tooltip.value;
     const secondaryTooltipEl = secondaryTooltip.value;
     const margin = TOOLTIP_MARGIN;
@@ -2367,9 +2414,13 @@ function updateMapHoverCrosshair() {
     const chartX = primaryX + margin.left;
     const chartY = margin.top + 10; // Fixed position near the top
 
-    const primaryFinalX = clampTooltipX(tooltipEl, chartX, containerRect.width);
-    tooltipEl.style.left = `${primaryFinalX}px`;
-    tooltipEl.style.top = `${chartY}px`;
+    const primaryPosition = positionTooltipInChartsLayer(
+        tooltipEl,
+        chartX,
+        chartY,
+    );
+    if (!primaryPosition) return;
+    const primaryFinalX = primaryPosition.finalX;
 
     const secondaryDistance = distances[1];
     if (
@@ -2386,14 +2437,15 @@ function updateMapHoverCrosshair() {
             const secondaryFinalX = clampTooltipX(
                 secondaryTooltipEl,
                 secondaryX,
-                containerRect.width,
+                primaryPosition.chartsWidth,
             );
-            let secondaryFinalY = chartY;
+            let secondaryFinalY = primaryPosition.finalY;
 
             const minHorizontalSeparation =
                 Math.max(tooltipEl.offsetWidth, secondaryTooltipEl.offsetWidth) * 0.65;
             if (Math.abs(primaryFinalX - secondaryFinalX) < minHorizontalSeparation) {
-                secondaryFinalY = chartY + secondaryTooltipEl.offsetHeight + 8;
+                secondaryFinalY =
+                    primaryPosition.finalY + secondaryTooltipEl.offsetHeight + 8;
             }
 
             secondaryTooltipEl.style.left = `${secondaryFinalX}px`;
@@ -2604,7 +2656,6 @@ function updateWaypointCrosshair() {
             tooltipData.value = model;
 
             // Position tooltip at the waypoint crosshair
-            const containerRect = chartContainer.value!.getBoundingClientRect();
             const tooltipEl = tooltip.value;
             const margin = TOOLTIP_MARGIN;
 
@@ -2612,15 +2663,7 @@ function updateWaypointCrosshair() {
             const chartX = x + margin.left;
             const chartY = margin.top + 10; // Fixed position near the top
 
-            // Ensure tooltip doesn't go off-screen
-            const tooltipWidth = tooltipEl.offsetWidth;
-            const finalX = Math.min(
-                chartX,
-                containerRect.width - tooltipWidth - 10,
-            );
-
-            tooltipEl.style.left = `${finalX}px`;
-            tooltipEl.style.top = `${chartY}px`;
+            positionTooltipInChartsLayer(tooltipEl, chartX, chartY);
 
             // Show tooltip for selected waypoint
             tooltipVisible.value = true;
@@ -3349,9 +3392,9 @@ function getActivityPaceAtDistance(distance: number): number | null {
 </script>
 
 <template>
-    <div class="charts-container">
+    <div ref="chartsContainer" class="charts-container">
         <!-- Elevation Chart -->
-        <div class="elevation-chart-container">
+        <div ref="elevationChartContainer" class="elevation-chart-container">
             <div
                 ref="chartContainer"
                 class="elevation-chart"
@@ -3362,161 +3405,6 @@ function getActivityPaceAtDistance(distance: number): number | null {
             <div v-if="creationMode" class="creation-mode-indicator">
                 <Icon name="lucide:circle-plus" class="h-4 w-4" />
                 <span>Click on the elevation profile to add a waypoint</span>
-            </div>
-
-            <!-- Elevation tooltip -->
-            <div
-                ref="tooltip"
-                class="elevation-tooltip"
-                :class="{
-                    'tooltip-visible': tooltipVisible,
-                    'tooltip-from-map': tooltipFromMap,
-                }"
-            >
-                <div class="tooltip-distance">
-                    <Icon
-                        name="lucide:map-pin"
-                        class="inline h-3 w-3 translate-y-0.5"
-                    />
-                    {{ tooltipData.distance }}
-                </div>
-                <div class="tooltip-elevation">
-                    <Icon
-                        name="lucide:arrow-up"
-                        class="inline h-3 w-3 translate-y-0.5"
-                    />
-                    {{ tooltipData.elevation }}
-                </div>
-                <div class="tooltip-grade">
-                    <Icon
-                        name="lucide:triangle-right"
-                        class="inline h-3 w-3 translate-y-0.5"
-                        :class="
-                            tooltipData.grade.slice(0, 1) === '-'
-                                ? '-scale-x-100'
-                                : ''
-                        "
-                    />
-                    {{ tooltipData.grade }}
-                </div>
-                <div v-if="tooltipData.planPace" class="tooltip-metric">
-                    <span class="tooltip-label">Plan pace</span>
-                    <span class="tooltip-value">{{ tooltipData.planPace }}</span>
-                </div>
-                <div v-if="tooltipData.activityPace" class="tooltip-metric">
-                    <span class="tooltip-label">Act pace</span>
-                    <span class="tooltip-value">
-                        {{ tooltipData.activityPace }}
-                    </span>
-                </div>
-                <div v-if="tooltipData.paceDelta" class="tooltip-delta">
-                    <span class="tooltip-label">Pace delta</span>
-                    <span class="tooltip-value">{{ tooltipData.paceDelta }}</span>
-                </div>
-                <div v-if="tooltipData.planElapsed" class="tooltip-metric">
-                    <span class="tooltip-label">Plan time</span>
-                    <span class="tooltip-value">
-                        {{ tooltipData.planElapsed }}
-                    </span>
-                </div>
-                <div v-if="tooltipData.activityElapsed" class="tooltip-metric">
-                    <span class="tooltip-label">Act time</span>
-                    <span class="tooltip-value">
-                        {{ tooltipData.activityElapsed }}
-                    </span>
-                </div>
-                <div v-if="tooltipData.elapsedDelta" class="tooltip-delta">
-                    <span class="tooltip-label">Time delta</span>
-                    <span class="tooltip-value">
-                        {{ tooltipData.elapsedDelta }}
-                    </span>
-                </div>
-            </div>
-            <div
-                ref="secondaryTooltip"
-                class="elevation-tooltip"
-                :class="{
-                    'tooltip-visible': secondaryTooltipVisible,
-                    'tooltip-from-map': secondaryTooltipVisible && tooltipFromMap,
-                }"
-            >
-                <div class="tooltip-distance">
-                    <Icon
-                        name="lucide:map-pin"
-                        class="inline h-3 w-3 translate-y-0.5"
-                    />
-                    {{ secondaryTooltipData.distance }}
-                </div>
-                <div class="tooltip-elevation">
-                    <Icon
-                        name="lucide:arrow-up"
-                        class="inline h-3 w-3 translate-y-0.5"
-                    />
-                    {{ secondaryTooltipData.elevation }}
-                </div>
-                <div class="tooltip-grade">
-                    <Icon
-                        name="lucide:triangle-right"
-                        class="inline h-3 w-3 translate-y-0.5"
-                        :class="
-                            secondaryTooltipData.grade.slice(0, 1) === '-'
-                                ? '-scale-x-100'
-                                : ''
-                        "
-                    />
-                    {{ secondaryTooltipData.grade }}
-                </div>
-                <div v-if="secondaryTooltipData.planPace" class="tooltip-metric">
-                    <span class="tooltip-label">Plan pace</span>
-                    <span class="tooltip-value">
-                        {{ secondaryTooltipData.planPace }}
-                    </span>
-                </div>
-                <div
-                    v-if="secondaryTooltipData.activityPace"
-                    class="tooltip-metric"
-                >
-                    <span class="tooltip-label">Act pace</span>
-                    <span class="tooltip-value">
-                        {{ secondaryTooltipData.activityPace }}
-                    </span>
-                </div>
-                <div
-                    v-if="secondaryTooltipData.paceDelta"
-                    class="tooltip-delta"
-                >
-                    <span class="tooltip-label">Pace delta</span>
-                    <span class="tooltip-value">
-                        {{ secondaryTooltipData.paceDelta }}
-                    </span>
-                </div>
-                <div
-                    v-if="secondaryTooltipData.planElapsed"
-                    class="tooltip-metric"
-                >
-                    <span class="tooltip-label">Plan time</span>
-                    <span class="tooltip-value">
-                        {{ secondaryTooltipData.planElapsed }}
-                    </span>
-                </div>
-                <div
-                    v-if="secondaryTooltipData.activityElapsed"
-                    class="tooltip-metric"
-                >
-                    <span class="tooltip-label">Act time</span>
-                    <span class="tooltip-value">
-                        {{ secondaryTooltipData.activityElapsed }}
-                    </span>
-                </div>
-                <div
-                    v-if="secondaryTooltipData.elapsedDelta"
-                    class="tooltip-delta"
-                >
-                    <span class="tooltip-label">Time delta</span>
-                    <span class="tooltip-value">
-                        {{ secondaryTooltipData.elapsedDelta }}
-                    </span>
-                </div>
             </div>
 
             <div v-if="!hasElevationData" class="no-elevation-warning">
@@ -3550,6 +3438,161 @@ function getActivityPaceAtDistance(distance: number): number | null {
                 </div>
             </div>
             <div v-else ref="paceChartContainer" class="pace-chart" />
+        </div>
+
+        <!-- Elevation tooltip layer -->
+        <div
+            ref="tooltip"
+            class="elevation-tooltip"
+            :class="{
+                'tooltip-visible': tooltipVisible,
+                'tooltip-from-map': tooltipFromMap,
+            }"
+        >
+            <div class="tooltip-distance">
+                <Icon
+                    name="lucide:map-pin"
+                    class="inline h-3 w-3 translate-y-0.5"
+                />
+                {{ tooltipData.distance }}
+            </div>
+            <div class="tooltip-elevation">
+                <Icon
+                    name="lucide:arrow-up"
+                    class="inline h-3 w-3 translate-y-0.5"
+                />
+                {{ tooltipData.elevation }}
+            </div>
+            <div class="tooltip-grade">
+                <Icon
+                    name="lucide:triangle-right"
+                    class="inline h-3 w-3 translate-y-0.5"
+                    :class="
+                        tooltipData.grade.slice(0, 1) === '-'
+                            ? '-scale-x-100'
+                            : ''
+                    "
+                />
+                {{ tooltipData.grade }}
+            </div>
+            <div v-if="tooltipData.planPace" class="tooltip-metric">
+                <span class="tooltip-label">Plan pace</span>
+                <span class="tooltip-value">{{ tooltipData.planPace }}</span>
+            </div>
+            <div v-if="tooltipData.activityPace" class="tooltip-metric">
+                <span class="tooltip-label">Act pace</span>
+                <span class="tooltip-value">
+                    {{ tooltipData.activityPace }}
+                </span>
+            </div>
+            <div v-if="tooltipData.paceDelta" class="tooltip-delta">
+                <span class="tooltip-label">Pace delta</span>
+                <span class="tooltip-value">{{ tooltipData.paceDelta }}</span>
+            </div>
+            <div v-if="tooltipData.planElapsed" class="tooltip-metric">
+                <span class="tooltip-label">Plan time</span>
+                <span class="tooltip-value">
+                    {{ tooltipData.planElapsed }}
+                </span>
+            </div>
+            <div v-if="tooltipData.activityElapsed" class="tooltip-metric">
+                <span class="tooltip-label">Act time</span>
+                <span class="tooltip-value">
+                    {{ tooltipData.activityElapsed }}
+                </span>
+            </div>
+            <div v-if="tooltipData.elapsedDelta" class="tooltip-delta">
+                <span class="tooltip-label">Time delta</span>
+                <span class="tooltip-value">
+                    {{ tooltipData.elapsedDelta }}
+                </span>
+            </div>
+        </div>
+        <div
+            ref="secondaryTooltip"
+            class="elevation-tooltip"
+            :class="{
+                'tooltip-visible': secondaryTooltipVisible,
+                'tooltip-from-map': secondaryTooltipVisible && tooltipFromMap,
+            }"
+        >
+            <div class="tooltip-distance">
+                <Icon
+                    name="lucide:map-pin"
+                    class="inline h-3 w-3 translate-y-0.5"
+                />
+                {{ secondaryTooltipData.distance }}
+            </div>
+            <div class="tooltip-elevation">
+                <Icon
+                    name="lucide:arrow-up"
+                    class="inline h-3 w-3 translate-y-0.5"
+                />
+                {{ secondaryTooltipData.elevation }}
+            </div>
+            <div class="tooltip-grade">
+                <Icon
+                    name="lucide:triangle-right"
+                    class="inline h-3 w-3 translate-y-0.5"
+                    :class="
+                        secondaryTooltipData.grade.slice(0, 1) === '-'
+                            ? '-scale-x-100'
+                            : ''
+                    "
+                />
+                {{ secondaryTooltipData.grade }}
+            </div>
+            <div v-if="secondaryTooltipData.planPace" class="tooltip-metric">
+                <span class="tooltip-label">Plan pace</span>
+                <span class="tooltip-value">
+                    {{ secondaryTooltipData.planPace }}
+                </span>
+            </div>
+            <div
+                v-if="secondaryTooltipData.activityPace"
+                class="tooltip-metric"
+            >
+                <span class="tooltip-label">Act pace</span>
+                <span class="tooltip-value">
+                    {{ secondaryTooltipData.activityPace }}
+                </span>
+            </div>
+            <div
+                v-if="secondaryTooltipData.paceDelta"
+                class="tooltip-delta"
+            >
+                <span class="tooltip-label">Pace delta</span>
+                <span class="tooltip-value">
+                    {{ secondaryTooltipData.paceDelta }}
+                </span>
+            </div>
+            <div
+                v-if="secondaryTooltipData.planElapsed"
+                class="tooltip-metric"
+            >
+                <span class="tooltip-label">Plan time</span>
+                <span class="tooltip-value">
+                    {{ secondaryTooltipData.planElapsed }}
+                </span>
+            </div>
+            <div
+                v-if="secondaryTooltipData.activityElapsed"
+                class="tooltip-metric"
+            >
+                <span class="tooltip-label">Act time</span>
+                <span class="tooltip-value">
+                    {{ secondaryTooltipData.activityElapsed }}
+                </span>
+            </div>
+            <div
+                v-if="secondaryTooltipData.elapsedDelta"
+                class="tooltip-delta"
+            >
+                <span class="tooltip-label">Time delta</span>
+                <span class="tooltip-value">
+                    {{ secondaryTooltipData.elapsedDelta }}
+                </span>
+            </div>
         </div>
 
         <ModalWindow
@@ -3639,8 +3682,9 @@ function getActivityPaceAtDistance(distance: number): number | null {
     height: 100%;
     display: flex;
     flex-direction: column;
+    position: relative;
     box-sizing: border-box;
-    overflow: hidden;
+    overflow: visible;
 }
 
 .elevation-chart-container {
@@ -3807,7 +3851,7 @@ function getActivityPaceAtDistance(distance: number): number | null {
     opacity: 0;
     transition: opacity 0.2s ease;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    z-index: 10;
+    z-index: 20;
     min-width: 120px;
 }
 
