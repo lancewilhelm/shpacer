@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { SelectCourseActivity } from "~/utils/db/schema";
+import type { CourseActivitySummary } from "~/utils/courseActivities";
 import { formatElapsedTime } from "~/utils/timeCalculations";
 
 interface Props {
-    activities: SelectCourseActivity[];
+    activities: CourseActivitySummary[];
     currentActivityId?: string | null;
     courseId: string;
 }
@@ -70,7 +70,7 @@ async function onFileSelected(event: Event) {
 
     try {
         const originalFileContent = await readFileAsText(file);
-        const response = await $fetch<{ activity: SelectCourseActivity }>(
+        const response = await $fetch<{ activity: CourseActivitySummary }>(
             `/api/courses/${props.courseId}/activities`,
             {
                 method: "POST",

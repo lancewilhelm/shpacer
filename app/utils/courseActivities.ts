@@ -94,13 +94,34 @@ export interface CourseActivityPlanDetail {
   splits: CourseActivitySplitComparison[];
 }
 
+export interface CourseActivitySummary {
+  id: string;
+  sourceFileName: string;
+  provider: CourseActivityProvider;
+  startedAt: Date | null;
+  endedAt: Date | null;
+  elapsedTimeSeconds: number | null;
+  recordedDistanceMeters: number | null;
+  matchedDistanceMeters: number | null;
+  matchStatus: CourseActivityMatchStatus;
+  matchConfidence: number;
+  isPrimary: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type CourseActivityDetail = SelectCourseActivity;
+
 export interface CourseActivitiesResponse {
-  activities: SelectCourseActivity[];
-  primaryActivityId: string | null;
+  activities: CourseActivitySummary[];
+}
+
+export interface CourseActivityDetailResponse {
+  activity: CourseActivityDetail;
 }
 
 export function getCourseActivityMatchData(
-  activity: Pick<SelectCourseActivity, "matchData">,
+  activity: Pick<CourseActivityDetail, "matchData">,
 ): CourseActivityMatchData {
   return activity.matchData as CourseActivityMatchData;
 }

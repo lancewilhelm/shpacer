@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import type {
   SelectCourse,
-  SelectCourseActivity,
   SelectPlan,
   SelectWaypointNote,
   SelectWaypointStoppageTime,
 } from "~/utils/db/schema";
 import type {
   CourseActivitiesResponse,
+  CourseActivityDetail,
+  CourseActivityDetailResponse,
   CourseActivityPlanDetail,
+  CourseActivitySummary,
 } from "~/utils/courseActivities";
 import { formatSignedDuration } from "~/utils/courseActivities";
 import { formatDistance, formatElevation } from "~/utils/courseMetrics";
@@ -163,7 +165,7 @@ const [courseResp, plansResp, activitiesResp] = await Promise.all([
     },
   }),
   useFetch<CourseActivitiesResponse>(`/api/courses/${courseId}/activities`, {
-    default: () => ({ activities: [], primaryActivityId: null }),
+    default: () => ({ activities: [] }),
     onResponseError(ctx) {
       if (ctx.response.status === 401) {
         ctx.error = null as unknown as never;
@@ -204,6 +206,8 @@ const plans = computed(() => plansData.value?.plans || []);
 const activities = computed(() => activitiesData.value?.activities || []);
 const currentPlanId = ref<string | null>(null);
 const currentActivityId = ref<string | null>(null);
+const currentActivityDetail = ref<CourseActivityDetail | null>(null);
+const currentActivityDetailPending = ref(false);
 const activitySelectionInitialized = ref(false);
 const publicSharedPlan = ref<SelectPlan | null>(null); // populated when viewing a publicly shared plan (logged-out)
 const NO_ACTIVITY_QUERY_VALUE = "none";
@@ -393,12 +397,18 @@ const currentPlan = computed(() =>
       publicSharedPlan.value
     : null,
 );
-const currentActivity = computed<SelectCourseActivity | null>(() =>
+const currentActivitySummary = computed<CourseActivitySummary | null>(() =>
   currentActivityId.value
     ? activities.value.find((activity) => activity.id === currentActivityId.value) ||
       null
     : null,
 );
+const currentActivity = computed<CourseActivityDetail | null>(
+  () => currentActivityDetail.value,
+);
+const currentActivityInfo = computed<
+  CourseActivitySummary | CourseActivityDetail | null
+>(() => currentActivityDetail.value ?? currentActivitySummary.value);
 
 watch(currentPlan, (plan) => {
   if (!plan) {
@@ -478,6 +488,66 @@ watchEffect(() => {
     });
   }
 });
+
+let currentActivityDetailRequestId = 0;
+
+async function refreshCurrentActivityDetail() {
+  const requestId = ++currentActivityDetailRequestId;
+
+  if (
+    mode.value !== "member" ||
+    !currentActivityId.value ||
+    !capabilities.value.canViewActivities
+  ) {
+    currentActivityDetail.value = null;
+    currentActivityDetailPending.value = false;
+    return;
+  }
+
+  currentActivityDetailPending.value = true;
+
+  try {
+    const requestHeaders = import.meta.server
+      ? useRequestHeaders(["cookie", "authorization"])
+      : undefined;
+    const response = await $fetch<CourseActivityDetailResponse>(
+      `/api/courses/${courseId}/activities/${currentActivityId.value}`,
+      {
+        headers: requestHeaders,
+      },
+    );
+
+    if (
+      requestId !== currentActivityDetailRequestId ||
+      response.activity.id !== currentActivityId.value
+    ) {
+      return;
+    }
+
+    currentActivityDetail.value = response.activity;
+  } catch (error) {
+    if (requestId === currentActivityDetailRequestId) {
+      console.error("Failed to load activity detail", error);
+      currentActivityDetail.value = null;
+    }
+  } finally {
+    if (requestId === currentActivityDetailRequestId) {
+      currentActivityDetailPending.value = false;
+    }
+  }
+}
+
+watch(
+  [
+    () => mode.value,
+    () => currentActivityId.value,
+    () => capabilities.value.canViewActivities,
+  ],
+  () => {
+    refreshCurrentActivityDetail();
+  },
+  { immediate: true },
+);
 
 async function refreshActivityComparisons() {
   if (
@@ -2760,22 +2830,22 @@ onUnmounted(() => {
           </div>
 
           <div
-            v-if="mode === 'member' && currentActivity"
+            v-if="mode === 'member' && currentActivityInfo"
             class="mt-2 flex flex-wrap gap-2 text-xs md:text-sm"
           >
             <div
               class="px-3 py-2 rounded-lg border border-(--sub-color) bg-(--sub-alt-color) text-(--main-color)"
             >
               <span class="font-medium">Activity:</span>
-              {{ currentActivity.sourceFileName }}
+              {{ currentActivityInfo.sourceFileName }}
             </div>
             <div
               class="px-3 py-2 rounded-lg border border-(--sub-color) bg-(--sub-alt-color) text-(--main-color)"
             >
               <span class="font-medium">Actual:</span>
               {{
-                currentActivity.elapsedTimeSeconds != null
-                  ? formatElapsedTime(currentActivity.elapsedTimeSeconds)
+                currentActivityInfo.elapsedTimeSeconds != null
+                  ? formatElapsedTime(currentActivityInfo.elapsedTimeSeconds)
                   : "—"
               }}
             </div>
@@ -2783,8 +2853,14 @@ onUnmounted(() => {
               class="px-3 py-2 rounded-lg border border-(--sub-color) bg-(--sub-alt-color) text-(--main-color)"
             >
               <span class="font-medium">Match:</span>
-              {{ currentActivity.matchStatus }} ·
-              {{ currentActivity.matchConfidence }}%
+              {{ currentActivityInfo.matchStatus }} ·
+              {{ currentActivityInfo.matchConfidence }}%
+            </div>
+            <div
+              v-if="currentActivityInfo && currentActivityId && currentActivityDetailPending"
+              class="px-3 py-2 rounded-lg border border-(--sub-color) bg-(--sub-alt-color) text-(--sub-color)"
+            >
+              Loading activity detail…
             </div>
             <div
               v-if="currentPlan && activityPlanDetail"

@@ -1,15 +1,15 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { auth } from "~/utils/auth";
 import {
-  courseActivities,
   courses,
   plans,
   userCourses,
   waypoints,
   waypointStoppageTimes,
-} from "~/utils/db/schema";
-import { buildPlanComparisonSummary } from "~~/server/utils/courseActivities";
-import { cloudDb } from "~~/server/utils/db/cloud";
+} from "~/utils/db/schema"
+import { buildPlanComparisonSummary } from "~~/server/utils/courseActivities"
+import { loadCourseActivityDetail } from "~~/server/utils/courseActivityDetail"
+import { cloudDb } from "~~/server/utils/db/cloud"
 
 export default defineEventHandler(async (event) => {
   const session = await auth.api.getSession({
@@ -59,23 +59,17 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const [activity] = await cloudDb
-    .select()
-    .from(courseActivities)
-    .where(
-      and(
-        eq(courseActivities.id, activityId),
-        eq(courseActivities.courseId, courseId),
-        eq(courseActivities.userId, session.user.id),
-      ),
-    )
-    .limit(1);
+  const activity = await loadCourseActivityDetail({
+    courseId,
+    activityId,
+    userId: session.user.id,
+  })
 
   if (!activity) {
     throw createError({
       statusCode: 404,
       statusMessage: "Activity not found",
-    });
+    })
   }
 
   const [course] = await cloudDb

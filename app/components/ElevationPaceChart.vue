@@ -14,12 +14,13 @@ import {
 import { formatDistance, formatElevation } from "~/utils/courseMetrics";
 import { useUserSettingsStore } from "~/stores/userSettings";
 import { getWaypointColorFromOrder } from "~/utils/waypoints";
-import type { SelectCourseActivity, SelectPlan } from "~/utils/db/schema";
+import type { SelectPlan } from "~/utils/db/schema";
 import type { CourseAnalysisSettings } from "~/utils/courseSettings";
 import { normalizeCourseAnalysisSettings } from "~/utils/courseSettings";
 import {
     buildCourseActivityElapsedSeries,
     getCourseActivityMatchData,
+    type CourseActivityDetail,
 } from "~/utils/courseActivities";
 
 interface Props {
@@ -38,7 +39,7 @@ interface Props {
     }>;
     creationMode?: boolean;
     plan?: SelectPlan | null;
-    activity?: SelectCourseActivity | null;
+    activity?: CourseActivityDetail | null;
     showPaceChart?: boolean;
     showGradeExplanationModal?: boolean;
     highlightSegment?: { start: number; end: number } | null;

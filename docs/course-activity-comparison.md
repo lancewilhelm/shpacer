@@ -8,6 +8,7 @@ Shpacer can now store uploaded race activities at the course level and compare t
 - Each activity is matched back onto the course route to reduce the impact of GPS drift.
 - The course page uses compact plan and activity dropdowns instead of a dedicated activity panel.
 - The selected activity persists in the course URL with `?activity=...`, and courses with uploaded activities now default to the explicit no-selection state `?activity=none` until an activity is chosen.
+- Course page loads now fetch only lightweight activity summaries up front for the selector; the full uploaded activity payload is fetched only after a specific activity is selected.
 - Selecting both an activity and a plan surfaces comparison stats in the header and detailed comparison in the existing waypoint and split views.
 - The elevation tooltip now compares hovered plan pace/time against the matched activity pace/time using the same distance-based smoothing window used by the pace chart.
 - When an activity is selected, the pace chart overlays a dedicated activity pace line using the same matched-and-smoothed pace series shown in the tooltip.
@@ -29,7 +30,7 @@ The current implementation is private/member-only and does not expose activities
 - Activity matching uses the course route as the source of truth, not the raw activity distance.
 - Overlapping and out-and-back course geometry uses the existing overlap index to choose plausible route-distance candidates.
 - Matching now rejects implausible instantaneous forward jumps in route progress so a single bad overlap handoff does not collapse pace fidelity across the rest of the activity.
-- Comparison detail is computed from stored matched samples, so plan changes can be recomputed on demand.
+- Comparison detail is computed from stored matched samples, so plan changes can be recomputed on demand. Legacy repair work now runs when an activity detail/comparison is requested, not during the initial course-page summary load.
 - Per-course smoothing and pace-cap values are course-scoped analysis settings, fetched alongside member course data and saved through `/api/courses/:id/settings`.
 
 ## Implementation References
