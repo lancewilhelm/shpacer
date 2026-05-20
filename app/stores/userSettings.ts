@@ -56,7 +56,7 @@ function getDefaultSettings(): UserSettings {
     funboxModes: [],
     chartStyle: {
       showAreaGradient: true,
-      invertPaceYAxis: false,
+      invertPaceYAxis: true,
     },
     units: {
       strategy: "override",

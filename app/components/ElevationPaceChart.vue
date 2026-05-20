@@ -111,7 +111,7 @@ const showAreaGradient = computed<boolean>(() => {
 const invertPaceYAxis = computed<boolean>(() => {
     const s = userSettingsStore?.settings;
     const v = s?.chartStyle?.invertPaceYAxis;
-    return typeof v === "boolean" ? v : false;
+    return typeof v === "boolean" ? v : true;
 });
 const chartsContainer = ref<HTMLElement>();
 const elevationChartContainer = ref<HTMLElement>();

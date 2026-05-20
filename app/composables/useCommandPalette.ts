@@ -428,7 +428,7 @@ function getPaceAxisOrientationOptions() {
         useUiStore().setCommandPaletteVisible(false);
       },
       active: computed(
-        () => (userSettingsStore.settings.chartStyle?.invertPaceYAxis ?? false),
+        () => (userSettingsStore.settings.chartStyle?.invertPaceYAxis ?? true),
       ),
     },
     {
@@ -444,7 +444,7 @@ function getPaceAxisOrientationOptions() {
       },
       active: computed(
         () =>
-          !(userSettingsStore.settings.chartStyle?.invertPaceYAxis ?? false),
+          !(userSettingsStore.settings.chartStyle?.invertPaceYAxis ?? true),
       ),
     },
   ];

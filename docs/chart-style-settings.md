@@ -7,7 +7,7 @@ When a course activity is selected alongside a pacing plan, the stacked chart vi
 Current chart style options:
 
 - `Gradient under lines`: fills the area beneath the elevation and pace traces with a subtle gradient.
-- `Fast pace at top`: flips the pace chart Y axis so lower pace values render higher on the chart and slower paces render lower.
+- `Fast pace at top`: flips the pace chart Y axis so lower pace values render higher on the chart and slower paces render lower. This is the default orientation.
 
 These preferences are stored in the user settings store and applied anywhere the shared elevation/pace chart is rendered.
 

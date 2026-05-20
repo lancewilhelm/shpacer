@@ -97,7 +97,7 @@ const chartAreaGradientEnabled = computed(() => {
 });
 const invertPaceYAxisEnabled = computed(() => {
     return Boolean(
-        userSettingsStore.settings.chartStyle?.invertPaceYAxis ?? false,
+        userSettingsStore.settings.chartStyle?.invertPaceYAxis ?? true,
     );
 });
 
