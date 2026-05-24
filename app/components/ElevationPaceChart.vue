@@ -42,6 +42,7 @@ interface Props {
     activity?: CourseActivityDetail | null;
     showPaceChart?: boolean;
     showGradeExplanationModal?: boolean;
+    zoomRange?: { start: number; end: number } | null;
     highlightSegment?: { start: number; end: number } | null;
     highlightColor?: string;
 }
@@ -74,6 +75,7 @@ const props = withDefaults(defineProps<Props>(), {
     activity: null,
     showPaceChart: true,
     showGradeExplanationModal: false,
+    zoomRange: null,
     highlightSegment: null,
     highlightColor: "#ff0000",
 });
@@ -84,6 +86,8 @@ const emit = defineEmits<{
     "pace-hover": [event: PaceHoverEvent];
     "pace-leave": [];
     "grade-explanation-close": [];
+    "range-select": [range: { start: number; end: number }];
+    "zoom-reset": [];
     "waypoint-click": [
         waypoint: {
             id: string;
@@ -191,6 +195,7 @@ const PACE_ONLY_ELEVATION_HEIGHT_FACTOR = 0.55;
 const PACE_ONLY_PACE_HEIGHT_FACTOR = 0.45;
 const ACTIVITY_COMPARISON_PRIMARY_HEIGHT_FACTOR = 0.4;
 const ACTIVITY_COMPARISON_DELTA_HEIGHT_FACTOR = 0.2;
+const MIN_DRAG_SELECT_PX = 6;
 
 // Shared axis margins and chart padding
 const AXIS_MARGIN_LEFT = 60;
@@ -335,12 +340,32 @@ let pendingPaceHoverDistance: number | null = null;
 let activityDeltaHoverFrame: number | null = null;
 let elevationHoverFrame: number | null = null;
 let paceHoverFrame: number | null = null;
+let elevationDragSelectionRect:
+    | d3.Selection<SVGRectElement, unknown, null, undefined>
+    | null = null;
+let paceDragSelectionRect:
+    | d3.Selection<SVGRectElement, unknown, null, undefined>
+    | null = null;
+let activityDeltaDragSelectionRect:
+    | d3.Selection<SVGRectElement, unknown, null, undefined>
+    | null = null;
+let activeDragSelectionRect:
+    | d3.Selection<SVGRectElement, unknown, null, undefined>
+    | null = null;
+let activeDragScale: d3.ScaleLinear<number, number> | null = null;
+let activeDragCrosshair:
+    | d3.Selection<SVGLineElement, unknown, null, undefined>
+    | null = null;
+let dragStartX: number | null = null;
+let dragCurrentX: number | null = null;
+let suppressNextChartClick = false;
 let activityDeltaResizeObserver: ResizeObserver | null = null;
 let gradeAdjustmentResizeObserver: ResizeObserver | null = null;
 let gradePaceResizeObserver: ResizeObserver | null = null;
+const isDragSelecting = ref(false);
 
 watch(
-    () => [props.highlightSegment, props.highlightColor],
+    () => [props.highlightSegment, props.highlightColor, props.zoomRange],
     () => {
         // Reinitialize charts to reflect new highlight segment/color
         if (chartContainer.value) {
@@ -433,8 +458,19 @@ const smoothedElevationPoints = computed(() => {
     return result;
 });
 
-const elevationStats = computed(() => {
-    return getElevationStats(smoothedElevationPoints.value);
+const visibleElevationPoints = computed(() =>
+    buildVisibleElevationSeries(
+        smoothedElevationPoints.value,
+        visibleDistanceRange.value,
+    ),
+);
+
+const visibleElevationStats = computed(() => {
+    const points =
+        visibleElevationPoints.value.length > 0
+            ? visibleElevationPoints.value
+            : smoothedElevationPoints.value;
+    return getElevationStats(points);
 });
 
 // Pace chart computed properties
@@ -463,6 +499,191 @@ const totalDistance = computed(() => {
     if (elevationPoints.length === 0) return 0;
     return Math.max(...elevationPoints.map((p) => p.distance));
 });
+
+type DistanceRange = {
+    start: number;
+    end: number;
+};
+
+function clampDistanceRange(
+    range: DistanceRange | null | undefined,
+    maxDistance: number,
+): DistanceRange | null {
+    if (
+        !range ||
+        !Number.isFinite(range.start) ||
+        !Number.isFinite(range.end) ||
+        maxDistance <= 0
+    ) {
+        return null;
+    }
+
+    const start = Math.max(0, Math.min(range.start, range.end));
+    const end = Math.min(maxDistance, Math.max(range.start, range.end));
+
+    if (end <= start) {
+        return null;
+    }
+
+    return { start, end };
+}
+
+const visibleDistanceRange = computed<DistanceRange>(() => {
+    const zoomRange = clampDistanceRange(props.zoomRange, totalDistance.value);
+    if (zoomRange) {
+        return zoomRange;
+    }
+
+    return {
+        start: 0,
+        end: totalDistance.value,
+    };
+});
+
+const hasZoomRange = computed(
+    () => clampDistanceRange(props.zoomRange, totalDistance.value) !== null,
+);
+
+function buildValueDomain(
+    values: number[],
+    options?: { padRatio?: number; minPad?: number; fallback?: [number, number] },
+): [number, number] {
+    const finiteValues = values.filter((value) => Number.isFinite(value));
+    const fallback = options?.fallback ?? [0, 1];
+    const padRatio = options?.padRatio ?? 0.05;
+    const minPad = options?.minPad ?? 1;
+
+    if (finiteValues.length === 0) {
+        return fallback;
+    }
+
+    const minValue = Math.min(...finiteValues);
+    const maxValue = Math.max(...finiteValues);
+
+    if (minValue === maxValue) {
+        const pad = Math.max(minPad, Math.abs(minValue) * padRatio);
+        return [minValue - pad, maxValue + pad];
+    }
+
+    const pad = Math.max(minPad, (maxValue - minValue) * padRatio);
+    return [minValue - pad, maxValue + pad];
+}
+
+function interpolateNumericDatumAtDistance<
+    T extends { distance: number; [key: string]: number },
+>(points: T[], distance: number): T | null {
+    if (!points.length) return null;
+
+    const first = points[0];
+    const last = points[points.length - 1];
+    if (!first || !last) return null;
+
+    if (distance <= first.distance) {
+        return {
+            ...first,
+            distance,
+        };
+    }
+
+    if (distance >= last.distance) {
+        return {
+            ...last,
+            distance,
+        };
+    }
+
+    for (let index = 1; index < points.length; index++) {
+        const previous = points[index - 1];
+        const current = points[index];
+        if (!previous || !current) continue;
+        if (distance < previous.distance || distance > current.distance) continue;
+
+        const span = current.distance - previous.distance;
+        const ratio = span > 0 ? (distance - previous.distance) / span : 0;
+        const interpolated = { ...previous, distance } as T;
+        const mutableInterpolated = interpolated as Record<string, number>;
+
+        for (const key of Object.keys(previous)) {
+            if (key === "distance") continue;
+            const previousValue = previous[key];
+            const currentValue = current[key];
+            if (
+                typeof previousValue === "number" &&
+                typeof currentValue === "number"
+            ) {
+                mutableInterpolated[key] =
+                    previousValue + (currentValue - previousValue) * ratio;
+            }
+        }
+
+        return interpolated;
+    }
+
+    return null;
+}
+
+function buildVisibleNumericSeries<
+    T extends { distance: number; [key: string]: number },
+>(points: T[], range: DistanceRange): T[] {
+    if (!points.length) return [];
+    if (range.start <= 0 && range.end >= totalDistance.value) {
+        return points;
+    }
+
+    const result: T[] = [];
+    const startPoint = interpolateNumericDatumAtDistance(points, range.start);
+    if (startPoint) {
+        result.push(startPoint);
+    }
+
+    for (const point of points) {
+        if (point.distance > range.start && point.distance < range.end) {
+            result.push(point);
+        }
+    }
+
+    const endPoint = interpolateNumericDatumAtDistance(points, range.end);
+    if (
+        endPoint &&
+        (!result.length || result[result.length - 1]?.distance !== endPoint.distance)
+    ) {
+        result.push(endPoint);
+    }
+
+    return result;
+}
+
+function buildVisibleElevationSeries(
+    points: ElevationPoint[],
+    range: DistanceRange,
+): ElevationPoint[] {
+    if (!points.length) return [];
+    if (range.start <= 0 && range.end >= totalDistance.value) {
+        return points;
+    }
+
+    const result: ElevationPoint[] = [];
+    const startPoint = interpolateAtDistance(points, range.start);
+    if (startPoint) {
+        result.push(startPoint);
+    }
+
+    for (const point of points) {
+        if (point.distance > range.start && point.distance < range.end) {
+            result.push(point);
+        }
+    }
+
+    const endPoint = interpolateAtDistance(points, range.end);
+    if (
+        endPoint &&
+        (!result.length || result[result.length - 1]?.distance !== endPoint.distance)
+    ) {
+        result.push(endPoint);
+    }
+
+    return result;
+}
 
 const MAX_MAP_HOVER_CROSSHAIRS = 2;
 const MAP_HOVER_CROSSHAIR_OPACITY = 0.8;
@@ -1392,15 +1613,29 @@ function initChart() {
         .attr("transform", `translate(${margin.left},${margin.top})`);
 
     // Set up scales
-    const stats = elevationStats.value;
+    const stats = visibleElevationStats.value;
+    const visiblePoints =
+        visibleElevationPoints.value.length > 0
+            ? visibleElevationPoints.value
+            : smoothedElevationPoints.value;
+    const xDomain = visibleDistanceRange.value;
     xScale = d3
         .scaleLinear()
-        .domain([0, stats.totalDistance])
+        .domain([xDomain.start, xDomain.end])
         .range([0, innerWidth]);
 
     yScale = d3
         .scaleLinear()
-        .domain([stats.minElevation * 0.95, stats.maxElevation * 1.05])
+        .domain(
+            buildValueDomain(
+                visiblePoints.map((point) => point.elevation),
+                {
+                    padRatio: 0.05,
+                    minPad: 5,
+                    fallback: [0, 1],
+                },
+            ),
+        )
         .range([innerHeight, 0]);
 
     // Create line generator
@@ -1443,14 +1678,14 @@ function initChart() {
 
     if (showAreaGradient.value) {
         g.append("path")
-            .datum(smoothedElevationPoints.value)
+            .datum(visiblePoints)
             .attr("fill", "url(#elevation-gradient)")
             .attr("d", area);
     }
 
     // Add elevation line
     g.append("path")
-        .datum(smoothedElevationPoints.value)
+        .datum(visiblePoints)
         .attr("fill", "none")
         .attr("stroke", "var(--main-color)")
         .attr("stroke-width", 2)
@@ -1554,12 +1789,12 @@ function initChart() {
     // Highlight selected elevation segment (if provided)
     if (props.highlightSegment && xScale) {
         const segStart = Math.max(
-            0,
-            Math.min(stats.totalDistance, props.highlightSegment.start),
+            xDomain.start,
+            Math.min(xDomain.end, props.highlightSegment.start),
         );
         const segEnd = Math.max(
             segStart,
-            Math.min(stats.totalDistance, props.highlightSegment.end),
+            Math.min(xDomain.end, props.highlightSegment.end),
         );
         const x1 = xScale(segStart);
         const x2 = xScale(segEnd);
@@ -1630,6 +1865,15 @@ function initChart() {
         .style("opacity", 0)
         .style("pointer-events", "none");
 
+    elevationDragSelectionRect = g
+        .append("rect")
+        .attr("class", "chart-drag-selection")
+        .attr("y", 0)
+        .attr("height", innerHeight)
+        .style("fill", props.highlightColor || "#ff0000")
+        .style("opacity", 0)
+        .style("pointer-events", "none");
+
     // Add waypoint pins
     nextTick(() => {
         addWaypointPins();
@@ -1642,7 +1886,10 @@ function initChart() {
         .attr("height", innerHeight)
         .style("fill", "none")
         .style("pointer-events", "all")
-        .style("cursor", props.creationMode ? "crosshair" : "default")
+        .style("cursor", props.creationMode ? "crosshair" : "crosshair")
+        .on("pointerdown", handleElevationPointerDown)
+        .on("pointermove", handleElevationPointerMove)
+        .on("pointerup", handleElevationPointerUp)
         .on("mousemove", handleMouseMove)
         .on("mouseleave", handleMouseLeave)
         .on("click", handleChartClick);
@@ -1773,6 +2020,7 @@ function initActivityDeltaChart() {
     const margin = DELTA_CHART_MARGIN;
     const innerWidth = width - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
+    const xDomain = visibleDistanceRange.value;
 
     activityDeltaSvg = d3
         .select(container)
@@ -1787,7 +2035,7 @@ function initActivityDeltaChart() {
 
     activityDeltaXScale = d3
         .scaleLinear()
-        .domain([0, totalDistance.value])
+        .domain([xDomain.start, xDomain.end])
         .range([0, innerWidth]);
 
     activityDeltaYScale = d3
@@ -1833,12 +2081,12 @@ function initActivityDeltaChart() {
 
     if (props.highlightSegment && activityDeltaXScale) {
         const segStart = Math.max(
-            0,
-            Math.min(totalDistance.value, props.highlightSegment.start),
+            xDomain.start,
+            Math.min(xDomain.end, props.highlightSegment.start),
         );
         const segEnd = Math.max(
             segStart,
-            Math.min(totalDistance.value, props.highlightSegment.end),
+            Math.min(xDomain.end, props.highlightSegment.end),
         );
         const x1 = activityDeltaXScale(segStart);
         const x2 = activityDeltaXScale(segEnd);
@@ -1862,7 +2110,7 @@ function initActivityDeltaChart() {
         .curve(d3.curveCardinal);
 
     g.append("path")
-        .datum(activityDeltaChartData.value)
+        .datum(visibleActivityDeltaChartData.value)
         .attr("fill", "none")
         .attr("stroke", "var(--main-color)")
         .attr("stroke-width", 2)
@@ -1904,6 +2152,15 @@ function initActivityDeltaChart() {
         .style("opacity", 0)
         .style("pointer-events", "none");
 
+    activityDeltaDragSelectionRect = g
+        .append("rect")
+        .attr("class", "chart-drag-selection")
+        .attr("y", 0)
+        .attr("height", innerHeight)
+        .style("fill", props.highlightColor || "#ff0000")
+        .style("opacity", 0)
+        .style("pointer-events", "none");
+
     const yAxis = d3
         .axisLeft(activityDeltaYScale)
         .ticks(5)
@@ -1925,6 +2182,10 @@ function initActivityDeltaChart() {
         .attr("height", innerHeight)
         .style("fill", "none")
         .style("pointer-events", "all")
+        .on("pointerdown", handleActivityDeltaPointerDown)
+        .on("pointermove", handleActivityDeltaPointerMove)
+        .on("pointerup", handleActivityDeltaPointerUp)
+        .on("click", handleChartOverlayResetClick)
         .on("mousemove", handleActivityDeltaMouseMove)
         .on("mouseleave", handleActivityDeltaMouseLeave);
 
@@ -1960,6 +2221,7 @@ function initPaceChart() {
     const mobileFactor =
         window.innerWidth < 768 && props.showPaceChart ? 25 : 0;
     const innerHeight = height - margin.top - margin.bottom - mobileFactor;
+    const xDomain = visibleDistanceRange.value;
 
     // Create SVG
     paceSvg = d3
@@ -1976,7 +2238,7 @@ function initPaceChart() {
     // Set up scales
     paceXScale = d3
         .scaleLinear()
-        .domain([0, totalDistance.value])
+        .domain([xDomain.start, xDomain.end])
         .range([0, innerWidth]);
 
     paceYScale = d3
@@ -2020,7 +2282,7 @@ function initPaceChart() {
         // Draw the filled area under the actual pace line
         const pg = paceSvg!.select("g");
         pg.append("path")
-            .datum(planPaceChartData.value)
+            .datum(visiblePlanPaceChartData.value)
             .attr("fill", "url(#pace-gradient)")
             .attr("d", paceArea);
     }
@@ -2028,12 +2290,12 @@ function initPaceChart() {
     // Highlight selected pace segment (if provided)
     if (props.highlightSegment && paceXScale) {
         const segStart = Math.max(
-            0,
-            Math.min(totalDistance.value, props.highlightSegment.start),
+            xDomain.start,
+            Math.min(xDomain.end, props.highlightSegment.start),
         );
         const segEnd = Math.max(
             segStart,
-            Math.min(totalDistance.value, props.highlightSegment.end),
+            Math.min(xDomain.end, props.highlightSegment.end),
         );
         const px1 = paceXScale(segStart);
         const px2 = paceXScale(segEnd);
@@ -2061,7 +2323,7 @@ function initPaceChart() {
 
     // Add plan pace line
     g.append("path")
-        .datum(planPaceChartData.value)
+        .datum(visiblePlanPaceChartData.value)
         .attr("fill", "none")
         .attr("stroke", "var(--main-color)")
         .attr("stroke-width", 2)
@@ -2076,7 +2338,7 @@ function initPaceChart() {
             .curve(d3.curveCardinal);
 
         g.append("path")
-            .datum(activityPaceChartData.value)
+            .datum(visibleActivityPaceChartData.value)
             .attr("fill", "none")
             .attr("stroke", "var(--text-color)")
             .attr("stroke-width", 1)
@@ -2130,6 +2392,15 @@ function initPaceChart() {
         .attr("y2", innerHeight)
         .style("stroke", "var(--main-color)")
         .style("stroke-width", 1)
+        .style("opacity", 0)
+        .style("pointer-events", "none");
+
+    paceDragSelectionRect = g
+        .append("rect")
+        .attr("class", "chart-drag-selection")
+        .attr("y", 0)
+        .attr("height", innerHeight)
+        .style("fill", props.highlightColor || "#ff0000")
         .style("opacity", 0)
         .style("pointer-events", "none");
 
@@ -2216,6 +2487,10 @@ function initPaceChart() {
         .attr("height", innerHeight)
         .style("fill", "none")
         .style("pointer-events", "all")
+        .on("pointerdown", handlePacePointerDown)
+        .on("pointermove", handlePacePointerMove)
+        .on("pointerup", handlePacePointerUp)
+        .on("click", handleChartOverlayResetClick)
         .on("mousemove", handlePaceMouseMove)
         .on("mouseleave", handlePaceMouseLeave);
 
@@ -2231,9 +2506,194 @@ function initPaceChart() {
         .text("Pace");
 }
 
+function updateDragSelectionRect() {
+    if (
+        dragStartX === null ||
+        dragCurrentX === null ||
+        !activeDragSelectionRect
+    ) {
+        return;
+    }
+
+    const startX = Math.min(dragStartX, dragCurrentX);
+    const width = Math.abs(dragCurrentX - dragStartX);
+    activeDragSelectionRect
+        .attr("x", startX)
+        .attr("width", width)
+        .style("opacity", width >= MIN_DRAG_SELECT_PX ? 0.18 : 0);
+}
+
+function clearDragSelectionState() {
+    activeDragSelectionRect = null;
+    activeDragScale = null;
+    activeDragCrosshair = null;
+    dragStartX = null;
+    dragCurrentX = null;
+    isDragSelecting.value = false;
+    elevationDragSelectionRect?.attr("width", 0).style("opacity", 0);
+    paceDragSelectionRect?.attr("width", 0).style("opacity", 0);
+    activityDeltaDragSelectionRect?.attr("width", 0).style("opacity", 0);
+}
+
+function beginDragSelection(options: {
+    event: PointerEvent;
+    overlay: SVGRectElement | null;
+    rect:
+        | d3.Selection<SVGRectElement, unknown, null, undefined>
+        | null;
+    scale: d3.ScaleLinear<number, number> | null;
+    crosshair:
+        | d3.Selection<SVGLineElement, unknown, null, undefined>
+        | null;
+    allowDuringCreationMode?: boolean;
+}) {
+    const {
+        event,
+        overlay,
+        rect,
+        scale,
+        crosshair,
+        allowDuringCreationMode = false,
+    } = options;
+    if ((props.creationMode && !allowDuringCreationMode) || !overlay || !rect || !scale) {
+        return;
+    }
+
+    activeDragSelectionRect = rect;
+    activeDragScale = scale;
+    activeDragCrosshair = crosshair;
+    const [mouseX] = d3.pointer(event, overlay);
+    dragStartX = mouseX;
+    dragCurrentX = mouseX;
+    isDragSelecting.value = false;
+    suppressNextChartClick = false;
+    overlay.setPointerCapture(event.pointerId);
+    updateDragSelectionRect();
+}
+
+function updateDragSelection(
+    event: PointerEvent,
+    overlay: SVGRectElement | null,
+) {
+    if (dragStartX === null || !overlay) return;
+
+    const [mouseX] = d3.pointer(event, overlay);
+    dragCurrentX = mouseX;
+
+    if (Math.abs(mouseX - dragStartX) >= MIN_DRAG_SELECT_PX) {
+        isDragSelecting.value = true;
+        activeDragCrosshair?.style("opacity", 0);
+        tooltipVisible.value = false;
+        tooltipFromMap.value = false;
+        clearSecondaryMapTooltipState();
+    }
+
+    updateDragSelectionRect();
+}
+
+function finishDragSelection(
+    event: PointerEvent,
+    overlay: SVGRectElement | null,
+) {
+    if (dragStartX === null || !activeDragScale) {
+        clearDragSelectionState();
+        return;
+    }
+
+    const [mouseX] = overlay ? d3.pointer(event, overlay) : [dragCurrentX ?? dragStartX];
+    dragCurrentX = mouseX;
+
+    if (isDragSelecting.value) {
+        const startDistance = activeDragScale.invert(Math.min(dragStartX, mouseX));
+        const endDistance = activeDragScale.invert(Math.max(dragStartX, mouseX));
+        if (endDistance > startDistance) {
+            emit("range-select", {
+                start: startDistance,
+                end: endDistance,
+            });
+            suppressNextChartClick = true;
+        }
+    }
+
+    if (overlay?.hasPointerCapture(event.pointerId)) {
+        overlay.releasePointerCapture(event.pointerId);
+    }
+
+    clearDragSelectionState();
+}
+
+function handleElevationPointerDown(event: PointerEvent) {
+    const overlay = event.currentTarget as SVGRectElement | null;
+    beginDragSelection({
+        event,
+        overlay,
+        rect: elevationDragSelectionRect,
+        scale: xScale,
+        crosshair,
+        allowDuringCreationMode: false,
+    });
+}
+
+function handleElevationPointerMove(event: PointerEvent) {
+    const overlay = event.currentTarget as SVGRectElement | null;
+    if (props.creationMode) return;
+    updateDragSelection(event, overlay);
+}
+
+function handleElevationPointerUp(event: PointerEvent) {
+    if (props.creationMode) {
+        clearDragSelectionState();
+        return;
+    }
+    const overlay = event.currentTarget as SVGRectElement | null;
+    finishDragSelection(event, overlay);
+}
+
+function handleActivityDeltaPointerDown(event: PointerEvent) {
+    const overlay = event.currentTarget as SVGRectElement | null;
+    beginDragSelection({
+        event,
+        overlay,
+        rect: activityDeltaDragSelectionRect,
+        scale: activityDeltaXScale,
+        crosshair: activityDeltaCrosshair,
+    });
+}
+
+function handleActivityDeltaPointerMove(event: PointerEvent) {
+    const overlay = event.currentTarget as SVGRectElement | null;
+    updateDragSelection(event, overlay);
+}
+
+function handleActivityDeltaPointerUp(event: PointerEvent) {
+    const overlay = event.currentTarget as SVGRectElement | null;
+    finishDragSelection(event, overlay);
+}
+
+function handlePacePointerDown(event: PointerEvent) {
+    const overlay = event.currentTarget as SVGRectElement | null;
+    beginDragSelection({
+        event,
+        overlay,
+        rect: paceDragSelectionRect,
+        scale: paceXScale,
+        crosshair: paceCrosshair,
+    });
+}
+
+function handlePacePointerMove(event: PointerEvent) {
+    const overlay = event.currentTarget as SVGRectElement | null;
+    updateDragSelection(event, overlay);
+}
+
+function handlePacePointerUp(event: PointerEvent) {
+    const overlay = event.currentTarget as SVGRectElement | null;
+    finishDragSelection(event, overlay);
+}
+
 // Handle mouse movement over the chart
 function handleMouseMove(event: MouseEvent) {
-    if (!xScale || !crosshair || !tooltip.value) return;
+    if (dragStartX !== null || !xScale || !crosshair || !tooltip.value) return;
 
     const [mouseX] = d3.pointer(event);
     pendingElevationHover = { mouseX, distance: xScale.invert(mouseX) };
@@ -2281,7 +2741,7 @@ function handleMouseMove(event: MouseEvent) {
 
 // Handle mouse leaving the chart
 function handleMouseLeave() {
-    if (!crosshair) return;
+    if (!crosshair || dragStartX !== null) return;
 
     if (elevationHoverFrame !== null) {
         cancelAnimationFrame(elevationHoverFrame);
@@ -2318,24 +2778,37 @@ function handleMouseLeave() {
     emit("elevation-leave");
 }
 
-// Handle chart click for waypoint creation
-function handleChartClick(event: MouseEvent) {
-    if (!props.creationMode || !xScale) return;
-
-    const [mouseX] = d3.pointer(event);
-    const distance = xScale.invert(mouseX);
-
-    // Interpolate elevation and coordinates at this distance
-    const interpolatedPoint = interpolateAtDistance(elevationPoints, distance);
-
-    if (interpolatedPoint) {
-        emit("waypoint-create", {
-            lat: interpolatedPoint.lat,
-            lng: interpolatedPoint.lng,
-            distance: interpolatedPoint.distance,
-            elevation: interpolatedPoint.elevation,
-        });
+function handleChartOverlayResetClick() {
+    if (hasZoomRange.value) {
+        emit("zoom-reset");
     }
+}
+
+// Handle chart click for waypoint creation or zoom reset
+function handleChartClick(event: MouseEvent) {
+    if (suppressNextChartClick) {
+        suppressNextChartClick = false;
+        return;
+    }
+
+    if (props.creationMode && xScale) {
+        const [mouseX] = d3.pointer(event);
+        const distance = xScale.invert(mouseX);
+
+        const interpolatedPoint = interpolateAtDistance(elevationPoints, distance);
+
+        if (interpolatedPoint) {
+            emit("waypoint-create", {
+                lat: interpolatedPoint.lat,
+                lng: interpolatedPoint.lng,
+                distance: interpolatedPoint.distance,
+                elevation: interpolatedPoint.elevation,
+            });
+        }
+        return;
+    }
+
+    handleChartOverlayResetClick();
 }
 
 function buildTooltipModelAtDistance(distance: number): TooltipModel | null {
@@ -2384,6 +2857,11 @@ function updateMapHoverCrosshair() {
         }
 
         const x = localXScale(distance);
+        if (x < 0 || x > (localXScale.range()[1] || 0)) {
+            line.style("opacity", 0);
+            return;
+        }
+
         line.attr("x1", x)
             .attr("x2", x)
             .style("opacity", MAP_HOVER_CROSSHAIR_OPACITY);
@@ -2402,6 +2880,14 @@ function updateMapHoverCrosshair() {
     }
 
     const primaryX = localXScale(primaryDistance);
+    if (primaryX < 0 || primaryX > (localXScale.range()[1] || 0)) {
+        clearSecondaryMapTooltipState();
+        if (!crosshair || crosshair.style("opacity") === "0") {
+            tooltipVisible.value = false;
+            tooltipFromMap.value = false;
+        }
+        return;
+    }
     const primarySnapshot = buildHoverSnapshotAtDistance(primaryDistance);
     if (!primarySnapshot) return;
     tooltipData.value = primarySnapshot.model;
@@ -2464,6 +2950,7 @@ function updateMapHoverCrosshair() {
 }
 
 function handleActivityDeltaMouseMove(event: MouseEvent) {
+    if (dragStartX !== null) return;
     if (!activityDeltaXScale || !activityDeltaCrosshair) return;
 
     const [mouseX] = d3.pointer(event);
@@ -2503,6 +2990,7 @@ function handleActivityDeltaMouseMove(event: MouseEvent) {
 }
 
 function handleActivityDeltaMouseLeave() {
+    if (dragStartX !== null) return;
     if (activityDeltaHoverFrame !== null) {
         cancelAnimationFrame(activityDeltaHoverFrame);
         activityDeltaHoverFrame = null;
@@ -2523,6 +3011,7 @@ function handleActivityDeltaMouseLeave() {
 
 // Handle mouse movement over the pace chart
 function handlePaceMouseMove(event: MouseEvent) {
+    if (dragStartX !== null) return;
     if (!paceXScale || !paceCrosshair) return;
 
     const [mouseX] = d3.pointer(event);
@@ -2557,6 +3046,7 @@ function handlePaceMouseMove(event: MouseEvent) {
 
 // Handle mouse leave from pace chart
 function handlePaceMouseLeave() {
+    if (dragStartX !== null) return;
     if (paceHoverFrame !== null) {
         cancelAnimationFrame(paceHoverFrame);
         paceHoverFrame = null;
@@ -2594,6 +3084,11 @@ function updatePaceMapHoverCrosshair() {
         }
 
         const x = localPaceXScale(distance);
+        if (x < 0 || x > (localPaceXScale.range()[1] || 0)) {
+            line.style("opacity", 0);
+            return;
+        }
+
         line.attr("x1", x)
             .attr("x2", x)
             .style("opacity", MAP_HOVER_CROSSHAIR_OPACITY);
@@ -2614,6 +3109,11 @@ function updateActivityDeltaMapHoverCrosshair() {
         }
 
         const x = localActivityDeltaXScale(distance);
+        if (x < 0 || x > (localActivityDeltaXScale.range()[1] || 0)) {
+            line.style("opacity", 0);
+            return;
+        }
+
         line.attr("x1", x)
             .attr("x2", x)
             .style("opacity", MAP_HOVER_CROSSHAIR_OPACITY);
@@ -2641,6 +3141,12 @@ function updateWaypointCrosshair() {
         props.selectedWaypointDistance !== undefined
     ) {
         const x = xScale(props.selectedWaypointDistance);
+        if (x < 0 || x > (xScale.range()[1] || 0)) {
+            waypointCrosshair.style("opacity", 0);
+            tooltipVisible.value = false;
+            clearSecondaryMapTooltipState();
+            return;
+        }
         waypointCrosshair.attr("x1", x).attr("x2", x).style("opacity", 0.9); // High opacity for selected waypoint
 
         // Show tooltip for selected waypoint
@@ -2951,7 +3457,7 @@ watch(
         if (svg) {
             svg.select(".overlay").style(
                 "cursor",
-                props.creationMode ? "crosshair" : "default",
+                props.creationMode ? "crosshair" : "crosshair",
             );
         }
     },
@@ -3184,6 +3690,27 @@ const activityDeltaChartData = computed(() => {
         );
 });
 
+const visiblePlanPaceChartData = computed(() =>
+    buildVisibleNumericSeries(
+        planPaceChartData.value,
+        visibleDistanceRange.value,
+    ),
+);
+
+const visibleActivityPaceChartData = computed(() =>
+    buildVisibleNumericSeries(
+        activityPaceChartData.value,
+        visibleDistanceRange.value,
+    ),
+);
+
+const visibleActivityDeltaChartData = computed(() =>
+    buildVisibleNumericSeries(
+        activityDeltaChartData.value,
+        visibleDistanceRange.value,
+    ),
+);
+
 const showActivityDeltaChart = computed(
     () =>
         props.showPaceChart &&
@@ -3192,12 +3719,12 @@ const showActivityDeltaChart = computed(
 );
 
 const paceRange = computed(() => {
-    const paces: number[] = planPaceChartData.value
+    const paces: number[] = visiblePlanPaceChartData.value
         .map((point) => point.actualPace)
         .filter((pace) => Number.isFinite(pace));
 
     paces.push(
-        ...activityPaceChartData.value
+        ...visibleActivityPaceChartData.value
             .map((point) => point.pace)
             .filter((pace) => Number.isFinite(pace)),
     );
@@ -3210,14 +3737,17 @@ const paceRange = computed(() => {
         return { min: 0, max: 0 };
     }
 
-    return {
-        min: Math.min(...paces),
-        max: Math.max(...paces),
-    };
+    const [min, max] = buildValueDomain(paces, {
+        padRatio: 0.05,
+        minPad: 5,
+        fallback: [0, 1],
+    });
+
+    return { min, max };
 });
 
 const activityDeltaRange = computed(() => {
-    const deltas = activityDeltaChartData.value
+    const deltas = visibleActivityDeltaChartData.value
         .map((point) => point.deltaSeconds)
         .filter((delta) => Number.isFinite(delta));
 

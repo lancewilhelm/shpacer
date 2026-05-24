@@ -1,6 +1,6 @@
-# Splits, Units, and Route Highlighting
+# Splits, Units, Chart Zoom, and Route Highlighting
 
-This document explains how split distance units are resolved and how route highlighting behaves when selecting split rows or interwaypoint segments. It covers the interaction between course defaults, user settings, and the UI components that render these views and highlights.
+This document explains how split distance units are resolved and how route highlighting behaves when selecting split rows, interwaypoint segments, or a dragged chart range. It covers the interaction between course defaults, user settings, and the UI components that render these views and highlights.
 
 ## Overview
 
@@ -10,6 +10,7 @@ This document explains how split distance units are resolved and how route highl
 - Splits are generated at even unit boundaries (every 1 mile or every 1 km).
 - Clicking a split (or a range of splits) highlights the corresponding route segment on the map and chart and can auto-fit the map view to that segment.
 - Clicking an interwaypoint segment in the Waypoints tab highlights that waypoint-to-waypoint route segment using the same map/chart highlight pipeline.
+- Dragging across any of the top charts selects a distance range, adds a small padded context window for chart zoom, and fits the map to the raw selected route segment.
 
 ## Unit Resolution
 
@@ -64,17 +65,30 @@ Notes on pacing:
   - `segment-click` with `{ fromWaypointId, toWaypointId, start, end }` for single interwaypoint segment selection.
   - `segment-cancel` when the selected segment row is clicked again.
 
+- `ElevationPaceChart.vue` emits:
+  - `range-select` with `{ start, end }` for drag-selected chart ranges from the elevation, pace, or activity-delta overlays.
+  - `zoom-reset` when the user clicks any chart background while a chart zoom is active.
+
 - `pages/courses/[id].vue`:
-  - Maintains split row selection state plus a shared route highlight model with a `source` of either `split` or `waypoint-segment`.
-  - Computes `stableHighlightSegment` (start/end only) for the map and chart.
+  - Maintains split row selection state, waypoint-segment selection state, chart zoom state, and a shared route highlight model with a `source` of `split`, `waypoint-segment`, or `chart-range`.
+  - Computes `stableHighlightSegment` (start/end only) for the map and chart, while passing a separate padded `zoomRange` into the chart component.
   - Passes `:highlight-segment="stableHighlightSegment"` to the map and chart and sets `:fit-highlight="shouldFitHighlightSegment"` so auto-fit applies to either source when that detail view is active.
   - Clears waypoint selection when a waypoint segment is selected, and clears waypoint-segment selection when a waypoint is selected.
+  - Clears split/segment selection and selected waypoint when a drag-selected chart zoom becomes active.
+  - Treats chart-range highlighting as globally active, while split and waypoint-segment highlighting still follow the active detail tab.
   - Deselecting a split or waypoint segment clears the highlight and remounts the map to re-fit to the full track.
+  - Resetting the chart zoom clears the chart-range highlight and remounts the map to re-fit to the full track.
   - Keeps `waypointPanelTab` synchronized with the mobile Waypoints/Splits buttons so map/chart stay aligned with the last selected detail view on mobile.
 
 - `LeafletMap.vue`:
   - Draws the highlighted segment as a polyline between the provided `highlightSegment.start` and `highlightSegment.end` distance offsets (meters).
   - If `fitHighlight` is true, fits the map bounds to the highlighted segment. The component tracks previous fits to avoid repeated automatic zooms unless the highlighted segment changes.
+
+- `ElevationPaceChart.vue`:
+  - Limits the elevation, pace, and activity-delta x-domains to the shared padded zoom range when present.
+  - Recomputes each chart's y-domain from only the currently visible data so the zoom behaves like a true chart zoom, not just a horizontal crop.
+  - Allows the elevation, pace, and activity-delta overlays to all start the same drag-select interaction.
+  - Lets a plain chart-background click reset the shared chart zoom.
 
 ## Expected Behavior
 
@@ -93,6 +107,12 @@ Notes on pacing:
   - Clicking a waypoint-to-waypoint segment row highlights that exact route segment on both map and chart.
   - Clicking the same segment row again clears the highlight and restores the full-track fit.
   - Clicking a waypoint clears any active waypoint-segment highlight.
+
+- With chart zoom:
+  - Dragging across any top chart selects a route segment and adds 5% padding on each side for the chart zoom window.
+  - The map fits to the raw dragged range, while the elevation, pace, and activity-delta charts all zoom to the same padded range.
+  - Clicking any chart background resets the zoom and returns the map to the full course.
+  - Selecting a split or waypoint-segment after chart zoom replaces the chart-range focus with the newly selected segment.
 
 - With no selection:
   - The map shows the full track (no highlight).
@@ -122,9 +142,15 @@ Notes on pacing:
    - Click an interwaypoint segment row and verify the correct route section is highlighted on the map and chart.
    - Click the same segment again and verify the highlight clears and the map returns to the full track.
    - Click a waypoint after selecting a segment and verify the segment highlight clears.
-6. On mobile:
+6. Drag across each of the top charts and:
+   - Verify the map fits to the selected course section.
+   - Verify the elevation, pace, and activity-delta charts zoom to the same padded range.
+   - Verify a tiny drag does not activate zoom.
+   - Verify clicking any chart background resets the zoom and restores the full track.
+7. On mobile:
    - Select a split, switch to Map, and verify the highlight and split markers are preserved.
    - Select an interwaypoint segment, switch to Map or Charts, and verify the same segment remains highlighted.
+   - Drag-select in Charts, switch to Map, and verify the same zoomed section remains the active highlight until reset.
 
 ## Troubleshooting
 
@@ -133,11 +159,12 @@ Notes on pacing:
   - Confirm `SplitsTable` receives `:course-defaults="course || null"` so SSR-safe unit helpers resolve correctly.
 
 - Map does not auto-fit on selection:
-  - Auto-fit happens when the highlighted route source matches the active detail view. Check that `waypointPanelTab` matches the selected detail source (`splits` or `waypoints`).
+  - Auto-fit happens when the highlighted route source matches the active detail view, except for chart-range selection which is always active. Check that `waypointPanelTab` matches the selected detail source (`splits` or `waypoints`) when the highlight did not come from the chart.
 
 - Highlight doesn’t change on click:
   - Verify that `SplitsTable` emits `split-click` and the page updates the shared route highlight state.
   - Verify that `WaypointList` emits `segment-click` for interwaypoint rows.
+  - Verify that `ElevationPaceChart` emits `range-select` after a real drag, not just a click.
   - Check that `LeafletMap` receives `:highlight-segment` and that `geoJsonData` is present.
 
 ## Relevant Components
@@ -146,10 +173,13 @@ Notes on pacing:
   - Resolves and renders split units; emits selection events.
 
 - `pages/courses/[id].vue`
-  - Coordinates unit resolution for splits, generates synthetic split waypoints, manages selection state, passes highlight info to the map and chart.
+  - Coordinates unit resolution for splits, generates synthetic split waypoints, manages split/segment/chart-zoom state, and passes highlight plus zoom info to the map and chart.
 
 - `components/WaypointList.vue`
   - Renders interwaypoint segment rows and emits waypoint-segment selection events.
+
+- `components/ElevationPaceChart.vue`
+  - Handles drag-selection, shared chart zoom, hover syncing, and chart reset clicks.
 
 - `components/LeafletMap.vue`
   - Renders split-style waypoint markers when appropriate and draws highlighted route segments with optional auto-fit.

@@ -12,6 +12,7 @@ Shpacer can now store uploaded race activities at the course level and compare t
 - Selecting both an activity and a plan surfaces comparison stats in the header and detailed comparison in the existing waypoint and split views.
 - The elevation tooltip now compares hovered plan pace/time against the matched activity pace/time using the same distance-based smoothing window used by the pace chart.
 - When an activity is selected, the pace chart overlays a dedicated activity pace line using the same matched-and-smoothed pace series shown in the tooltip.
+- Dragging across any of the top comparison charts now applies a shared distance zoom to the elevation, pace, and activity-delta charts, with the map fitting to the same route section.
 - Course analysis settings are now loaded with the course itself from a dedicated DB-backed `user_course_settings` record instead of being persisted in `userSettings`.
 - The course pacing controls can cap the displayed activity pace on the chart so aid-station stops do not dominate the Y-axis; the default display cap is `30:00 /mi`, and the cap affects chart display only, not tooltip or comparison math.
 - Interwaypoint segment comparisons now use the same normalized matched distance-to-elapsed interpolation as the pace chart tooltip, so segment times and deltas stay aligned in overlap and out-and-back sections.

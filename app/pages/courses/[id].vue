@@ -45,7 +45,7 @@ type Waypoint = {
   order: number;
 };
 
-type RouteSegmentHighlightSource = "split" | "waypoint-segment";
+type RouteSegmentHighlightSource = "split" | "waypoint-segment" | "chart-range";
 
 type RouteSegmentHighlight = {
   start: number;
@@ -1798,6 +1798,7 @@ const selectedSplitRange = ref<{ startIndex: number; endIndex: number } | null>(
   null,
 );
 const selectedWaypointSegment = ref<SelectedWaypointSegment | null>(null);
+const chartZoomRange = ref<{ start: number; end: number } | null>(null);
 const mapResetKey = ref(0);
 
 onMounted(() => {
@@ -1845,6 +1846,7 @@ watch(
 
 function isHighlightSourceActive(source: RouteSegmentHighlightSource): boolean {
   if (source === "split") return waypointPanelTab.value === "splits";
+  if (source === "chart-range") return true;
   return waypointPanelTab.value === "waypoints";
 }
 
@@ -1865,6 +1867,31 @@ const shouldFitHighlightSegment = computed(
   () => !!stableHighlightSegment.value,
 );
 /* Removed highlight-controlled center/zoom to avoid snapping map view during other interactions */
+
+function buildChartZoomRange(start: number, end: number) {
+  const rangeStart = Math.min(start, end);
+  const rangeEnd = Math.max(start, end);
+  const totalDistance = totalCourseDistanceMeters.value;
+
+  if (!Number.isFinite(rangeStart) || !Number.isFinite(rangeEnd)) {
+    return null;
+  }
+
+  if (totalDistance <= 0) {
+    return {
+      start: rangeStart,
+      end: rangeEnd,
+    };
+  }
+
+  const selectionWidth = Math.max(0, rangeEnd - rangeStart);
+  const padding = selectionWidth * 0.05;
+
+  return {
+    start: Math.max(0, rangeStart - padding),
+    end: Math.min(totalDistance, rangeEnd + padding),
+  };
+}
 
 function clearWaypointSegmentSelection(options?: { resetMap?: boolean }) {
   const resetMap = options?.resetMap ?? true;
@@ -1908,6 +1935,26 @@ function clearSplitSelection(options?: { resetMap?: boolean }) {
   }
 }
 
+function clearChartZoom(options?: { resetMap?: boolean }) {
+  const resetMap = options?.resetMap ?? true;
+  const hadSelection =
+    !!chartZoomRange.value || routeSegmentHighlight.value?.source === "chart-range";
+
+  chartZoomRange.value = null;
+
+  if (routeSegmentHighlight.value?.source === "chart-range") {
+    routeSegmentHighlight.value = null;
+  }
+
+  if (hadSelection) {
+    elevationHoverPoint.value = null;
+    mapHoverDistances.value = null;
+    if (resetMap) {
+      mapResetKey.value++;
+    }
+  }
+}
+
 function handleSplitClick(payload: {
   start: number;
   end: number;
@@ -1921,6 +1968,7 @@ function handleSplitClick(payload: {
 
   // Select this single split and highlight segment; clear any range selection
   clearWaypointSegmentSelection({ resetMap: false });
+  clearChartZoom({ resetMap: false });
   selectedSplitRange.value = null;
   selectedSplitIndex.value = payload.index;
   routeSegmentHighlight.value = {
@@ -1937,6 +1985,7 @@ function handleSplitRangeClick(payload: {
   end: number;
 }) {
   clearWaypointSegmentSelection({ resetMap: false });
+  clearChartZoom({ resetMap: false });
   selectedSplitIndex.value = null;
   selectedSplitRange.value = {
     startIndex: Math.min(payload.startIndex, payload.endIndex),
@@ -1955,6 +2004,7 @@ function handleSplitCancel() {
 
 function handleWaypointSegmentClick(payload: SelectedWaypointSegment) {
   clearSplitSelection({ resetMap: false });
+  clearChartZoom({ resetMap: false });
   selectedWaypoint.value = null;
   selectedWaypointSegment.value = payload;
   routeSegmentHighlight.value = {
@@ -1966,6 +2016,26 @@ function handleWaypointSegmentClick(payload: SelectedWaypointSegment) {
 
 function handleWaypointSegmentCancel() {
   clearWaypointSegmentSelection();
+}
+
+function handleChartRangeSelect(payload: { start: number; end: number }) {
+  clearSplitSelection({ resetMap: false });
+  clearWaypointSegmentSelection({ resetMap: false });
+  selectedWaypoint.value = null;
+
+  const nextZoomRange = buildChartZoomRange(payload.start, payload.end);
+  if (!nextZoomRange) return;
+
+  chartZoomRange.value = nextZoomRange;
+  routeSegmentHighlight.value = {
+    start: Math.min(payload.start, payload.end),
+    end: Math.max(payload.start, payload.end),
+    source: "chart-range",
+  };
+}
+
+function handleChartZoomReset() {
+  clearChartZoom();
 }
 
 // -------- Plan Stats (header) helpers --------
@@ -2213,6 +2283,7 @@ const publicViewLabel = computed(() => {
 // Handle waypoint events
 function handleWaypointSelect(waypoint: Waypoint) {
   clearWaypointSegmentSelection();
+  clearChartZoom();
   // Toggle selection: if the same waypoint is clicked, deselect it
   if (selectedWaypoint.value?.id === waypoint.id) {
     selectedWaypoint.value = null;
@@ -2231,6 +2302,7 @@ function handleWaypointLeave() {
 
 function handleWaypointClick(waypoint: Waypoint) {
   clearWaypointSegmentSelection();
+  clearChartZoom();
   // Toggle selection: if the same waypoint is clicked, deselect it
   if (selectedWaypoint.value?.id === waypoint.id) {
     selectedWaypoint.value = null;
@@ -3160,6 +3232,7 @@ onUnmounted(() => {
                   :activity="currentActivity"
                   :show-pace-chart="!!currentPlan"
                   :show-grade-explanation-modal="paceExplanationModalOpen"
+                  :zoom-range="chartZoomRange"
                   :highlight-segment="stableHighlightSegment"
                   highlight-color="#ff0000"
                   @elevation-hover="handleElevationHover"
@@ -3167,6 +3240,8 @@ onUnmounted(() => {
                   @pace-hover="handlePaceHover"
                   @pace-leave="handlePaceLeave"
                   @grade-explanation-close="closePaceExplanationModal"
+                  @range-select="handleChartRangeSelect"
+                  @zoom-reset="handleChartZoomReset"
                   @waypoint-click="handleElevationWaypointClick"
                 />
                 <div
@@ -3266,6 +3341,7 @@ onUnmounted(() => {
                   :activity="currentActivity"
                   :show-pace-chart="!!currentPlan"
                   :show-grade-explanation-modal="paceExplanationModalOpen"
+                  :zoom-range="chartZoomRange"
                   :highlight-segment="stableHighlightSegment"
                   highlight-color="#ff0000"
                   @elevation-hover="handleElevationHover"
@@ -3273,6 +3349,8 @@ onUnmounted(() => {
                   @pace-hover="handlePaceHover"
                   @pace-leave="handlePaceLeave"
                   @grade-explanation-close="closePaceExplanationModal"
+                  @range-select="handleChartRangeSelect"
+                  @zoom-reset="handleChartZoomReset"
                   @waypoint-click="handleElevationWaypointClick"
                 />
                 <div
