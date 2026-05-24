@@ -83,6 +83,7 @@ Notes on pacing:
 - `LeafletMap.vue`:
   - Draws the highlighted segment as a polyline between the provided `highlightSegment.start` and `highlightSegment.end` distance offsets (meters).
   - If `fitHighlight` is true, fits the map bounds to the highlighted segment. The component tracks previous fits to avoid repeated automatic zooms unless the highlighted segment changes.
+  - Adds a reset-view button directly below the built-in zoom buttons that re-fits the map to the full course bounds whenever route geometry is available.
 
 - `ElevationPaceChart.vue`:
   - Limits the elevation, pace, and activity-delta x-domains to the shared padded zoom range when present.
@@ -116,6 +117,7 @@ Notes on pacing:
 
 - With no selection:
   - The map shows the full track (no highlight).
+  - The reset-view button below the zoom controls returns the map to the full track after any manual pan or zoom.
   - Selecting and then re-clicking the same split or waypoint segment clears the selection and restores the full track view.
 
 - On mobile:

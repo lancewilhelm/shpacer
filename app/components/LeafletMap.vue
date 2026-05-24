@@ -111,6 +111,8 @@ const geoJsonLayers: L.GeoJSON[] = [];
 const overlayGeoJsonLayers: L.GeoJSON[] = [];
 const waypointMarkers: Map<string, L.Marker> = new Map(); // Track markers by waypoint ID
 let elevationHoverMarker: L.CircleMarker | null = null;
+let resetViewControl: L.Control | null = null;
+let resetViewButton: HTMLAnchorElement | null = null;
 let highlightLayer: L.Polyline | null = null;
 let prevFitHighlight = false;
 let lastFittedSegmentKey: string | null = null;
@@ -127,6 +129,22 @@ let trackHoverFrame: number | null = null;
 
 function rebuildOverlapIndex() {
     overlapIndex = buildOverlapIndexForGeoJsonTracks(props.geoJsonData);
+}
+
+function hasCourseBounds() {
+    return geoJsonLayers.length > 0;
+}
+
+function updateResetViewControlState() {
+    if (!resetViewButton) return;
+
+    const disabled = !hasCourseBounds();
+    resetViewButton.setAttribute("aria-disabled", String(disabled));
+    resetViewButton.tabIndex = disabled ? -1 : 0;
+    resetViewButton.classList.toggle("leaflet-disabled", disabled);
+    resetViewButton.title = disabled
+        ? "Reset view unavailable"
+        : "Reset map view";
 }
 
 // Function to handle track hover and calculate one or two distances along route
@@ -291,6 +309,8 @@ function addGeoJsonLayers() {
         overlayGeoJsonLayers.push(overlayLayer);
     });
 
+    updateResetViewControlState();
+
     // Fit bounds to show all tracks on initial mount only
     if (!hasDoneInitialFit && geoJsonLayers.length > 0) {
         fitToCourseBounds();
@@ -298,10 +318,77 @@ function addGeoJsonLayers() {
     }
 }
 
-function fitToCourseBounds() {
-    if (!map || !L || geoJsonLayers.length === 0) return;
+function fitToCourseBounds(options?: { animate?: boolean }) {
+    if (!map || !L || geoJsonLayers.length === 0) return false;
     const group = new L.FeatureGroup(geoJsonLayers);
-    map.fitBounds(group.getBounds(), { padding: [20, 20] });
+    map.fitBounds(group.getBounds(), {
+        padding: [20, 20],
+        animate: options?.animate ?? false,
+    });
+    return true;
+}
+
+function createResetViewControl() {
+    if (!map || !L || resetViewControl) return;
+
+    const ResetViewControl = L.Control.extend({
+        options: {
+            position: "topleft",
+        },
+        onAdd() {
+            const container = L.DomUtil.create(
+                "div",
+                "leaflet-bar leaflet-control leaflet-reset-view-control",
+            );
+            const button = L.DomUtil.create(
+                "a",
+                "leaflet-reset-view-button",
+                container,
+            ) as HTMLAnchorElement;
+
+            button.href = "#";
+            button.role = "button";
+            button.setAttribute("aria-label", "Reset map view");
+            button.innerHTML = `
+                <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                    <path
+                        d="M3.5 8a4.5 4.5 0 1 0 1.318-3.182"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="1.5"
+                    />
+                    <path
+                        d="M2.5 2.5v3h3"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="1.5"
+                    />
+                </svg>
+            `;
+
+            L.DomEvent.disableClickPropagation(container);
+            L.DomEvent.disableScrollPropagation(container);
+            L.DomEvent.on(button, "click", (event: Event) => {
+                L.DomEvent.stop(event);
+                fitToCourseBounds({ animate: true });
+            });
+
+            resetViewButton = button;
+            updateResetViewControlState();
+
+            return container;
+        },
+        onRemove() {
+            resetViewButton = null;
+        },
+    });
+
+    resetViewControl = new ResetViewControl();
+    resetViewControl.addTo(map);
 }
 
 // Function to generate different colors for tracks
@@ -516,6 +603,8 @@ onMounted(() => {
 
     // Initialize the map
     map = L.map(mapId).setView(props.center, props.zoom);
+
+    createResetViewControl();
 
     // OSM tiles
     const osm = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -862,6 +951,8 @@ onUnmounted(() => {
         cancelAnimationFrame(trackHoverFrame);
         trackHoverFrame = null;
     }
+    resetViewButton = null;
+    resetViewControl = null;
     if (map) {
         map.remove();
         map = null;
@@ -872,3 +963,21 @@ onUnmounted(() => {
 <template>
     <div :id="mapId" class="w-full h-full rounded-lg shadow-lg z-0" />
 </template>
+
+<style scoped>
+:deep(.leaflet-reset-view-control) {
+    margin-top: 10px;
+}
+
+:deep(.leaflet-reset-view-button) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+}
+
+:deep(.leaflet-reset-view-button svg) {
+    width: 16px;
+    height: 16px;
+}
+</style>
