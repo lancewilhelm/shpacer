@@ -55,6 +55,7 @@ File Upload → Validation → Processing → Preview Rendering → Metrics Calc
 Notes:
 - Elevation preview is file-backed only (no server-side elevation derivation for missing samples).
 - Persisted course metrics remain server-authoritative and are recalculated during course creation.
+- Primary navigation now lives in a persistent in-flow top header bar rather than a translucent overlay, so page content starts below the header on core app screens.
 - Implementation details: `app/pages/courses/new.vue`, `app/components/ElevationProfilePreview.vue`, and `app/utils/elevationProfile.ts`.
 
 ### 3. Course Interaction Workflow
