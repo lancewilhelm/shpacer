@@ -752,26 +752,20 @@ watch(selectedWaypointForEdit, (newWaypoint) => {
     }
 });
 
+function scheduleWaypointMapResize(delayMs = 100) {
+    if (!import.meta.client) return;
+
+    nextTick(() => {
+        window.setTimeout(() => {
+            window.dispatchEvent(new Event("resize"));
+        }, delayMs);
+    });
+}
+
 // Watch for tab changes to invalidate map size
 watch(activeTab, (newTab) => {
     if (newTab === "waypoints") {
-        // Give the DOM time to render the waypoints tab
-        nextTick(() => {
-            // Force Leaflet to recalculate map size after tab switch
-            setTimeout(() => {
-                if (import.meta.client) {
-                    // Try to find the map instance and invalidate its size
-                    const mapElement = document.querySelector(
-                        ".leaflet-container",
-                    ) as HTMLElement & {
-                        _leaflet_map?: { invalidateSize: () => void };
-                    };
-                    if (mapElement && mapElement._leaflet_map) {
-                        mapElement._leaflet_map.invalidateSize();
-                    }
-                }
-            }, 100);
-        });
+        scheduleWaypointMapResize();
     }
 });
 
@@ -780,21 +774,9 @@ watch(
     () => props.open,
     (isOpen) => {
         if (isOpen) {
-            // Give time for modal to fully open and render
-            nextTick(() => {
-                setTimeout(() => {
-                    if (import.meta.client && activeTab.value === "waypoints") {
-                        const mapElement = document.querySelector(
-                            ".leaflet-container",
-                        ) as HTMLElement & {
-                            _leaflet_map?: { invalidateSize: () => void };
-                        };
-                        if (mapElement && mapElement._leaflet_map) {
-                            mapElement._leaflet_map.invalidateSize();
-                        }
-                    }
-                }, 200);
-            });
+            if (activeTab.value === "waypoints") {
+                scheduleWaypointMapResize(200);
+            }
         }
     },
 );
@@ -838,7 +820,7 @@ const mapCenter = computed((): [number, number] => {
                     typeof coords[0] === "number" &&
                     typeof coords[1] === "number"
                 ) {
-                    return [coords[1], coords[0]]; // Note: GeoJSON is [lng, lat], Leaflet expects [lat, lng]
+                    return [coords[1], coords[0]]; // Stored as GeoJSON [lng, lat]; UI state uses [lat, lng]
                 }
             } else if (firstFeature && firstFeature.geometry.type === "Point") {
                 const coords = firstFeature.geometry.coordinates;
@@ -2254,7 +2236,7 @@ function canMoveBackward(waypoint: Waypoint): boolean {
                     class="relative h-full min-w-0 flex-1 rounded-lg overflow-hidden border border-(--sub-color) bg-gray-100"
                 >
                     <ClientOnly>
-                        <LeafletMap
+                        <MapLibreCourseMap
                             :geo-json-data="geoJsonData"
                             :center="mapCenter"
                             :zoom="mapZoom"

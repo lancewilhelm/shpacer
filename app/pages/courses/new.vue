@@ -320,7 +320,7 @@ const previewStats = computed<PreviewStats | null>(() => {
 
               <div class="h-64 rounded-lg overflow-hidden">
                 <ClientOnly>
-                  <LeafletMap
+                  <MapLibreCourseMap
                     :geo-json-data="[processedFile.geoJson]"
                     :center="[0, 0]"
                     :zoom="10"

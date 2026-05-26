@@ -40,7 +40,7 @@ Result:
   - Start waypoint “S” at distance 0
   - Numeric waypoints 1..N at each 1 mi or 1 km
   - Finish waypoint “F”
-- `LeafletMap.vue` respects `displayMarkersAsSplits`:
+- `MapLibreCourseMap.vue` respects `displayMarkersAsSplits`:
   - Start is labeled “S”
   - Finish is labeled “F”
   - Intermediate waypoints are numbered 1..N
@@ -80,7 +80,7 @@ Notes on pacing:
   - Resetting the chart zoom clears the chart-range highlight and remounts the map to re-fit to the full track.
   - Keeps `waypointPanelTab` synchronized with the mobile Waypoints/Splits buttons so map/chart stay aligned with the last selected detail view on mobile.
 
-- `LeafletMap.vue`:
+- `MapLibreCourseMap.vue`:
   - Draws the highlighted segment as a polyline between the provided `highlightSegment.start` and `highlightSegment.end` distance offsets (meters).
   - If `fitHighlight` is true, fits the map bounds to the highlighted segment. The component tracks previous fits to avoid repeated automatic zooms unless the highlighted segment changes.
   - Adds a reset-view button directly below the built-in zoom buttons that re-fits the map to the full course bounds whenever route geometry is available.
@@ -167,7 +167,7 @@ Notes on pacing:
   - Verify that `SplitsTable` emits `split-click` and the page updates the shared route highlight state.
   - Verify that `WaypointList` emits `segment-click` for interwaypoint rows.
   - Verify that `ElevationPaceChart` emits `range-select` after a real drag, not just a click.
-  - Check that `LeafletMap` receives `:highlight-segment` and that `geoJsonData` is present.
+  - Check that `MapLibreCourseMap` receives `:highlight-segment` and that `geoJsonData` is present.
 
 ## Relevant Components
 
@@ -183,7 +183,7 @@ Notes on pacing:
 - `components/ElevationPaceChart.vue`
   - Handles drag-selection, shared chart zoom, hover syncing, and chart reset clicks.
 
-- `components/LeafletMap.vue`
+- `components/MapLibreCourseMap.vue`
   - Renders split-style waypoint markers when appropriate and draws highlighted route segments with optional auto-fit.
 
 - `utils/units.ts`
