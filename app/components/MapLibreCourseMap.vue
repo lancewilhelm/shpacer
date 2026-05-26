@@ -1165,30 +1165,12 @@ function createResetViewControl() {
             const container = document.createElement("div");
             container.className = "maplibregl-ctrl maplibregl-ctrl-group";
 
-            const button = document.createElement("button");
-            button.type = "button";
+            const button = document.createElement("div");
             button.className =
-                "maplibre-reset-view-button w-8 h-8 rounded cursor-pointer";
+                "flex items-center justify-center w-7.25 h-8 rounded cursor-pointer";
             button.setAttribute("aria-label", "Reset map view");
             button.innerHTML = `
-        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-          <path
-            d="M3.5 8a4.5 4.5 0 1 0 1.318-3.182"
-            fill="none"
-            stroke="#444444"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="1.5"
-          />
-          <path
-            d="M2.5 2.5v3h3"
-            fill="none"
-            stroke="#444444"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="1.5"
-          />
-        </svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><!-- Icon from Remix Icon by Remix Design - https://github.com/Remix-Design/RemixIcon/blob/master/License --><path fill="#444444" d="M22 12c0 5.523-4.477 10-10 10S2 17.523 2 12S6.477 2 12 2v2a8 8 0 1 0 5.135 1.865L15 8V2h6l-2.447 2.447A9.98 9.98 0 0 1 22 12"/></svg>
       `;
             button.addEventListener("click", (event) => {
                 event.preventDefault();
@@ -1229,32 +1211,14 @@ function createBasemapControl() {
             container.className =
                 "maplibregl-ctrl maplibregl-ctrl-group maplibre-basemap-control";
 
-            const button = document.createElement("button");
-            button.type = "button";
+            const button = document.createElement("div");
             button.className =
-                "maplibre-reset-view-button maplibre-basemap-button w-8 h-8 rounded cursor-pointer";
+                "flex items-center justify-center w-7.25 h-8 rounded cursor-pointer";
             button.setAttribute("aria-label", "Choose basemap");
             button.setAttribute("aria-haspopup", "menu");
             button.setAttribute("aria-expanded", "false");
             button.innerHTML = `
-        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-          <path
-            d="M2 4.25 5.5 3l5 1.75L14 3.5v8L10.5 12.75l-5-1.75L2 12.25z"
-            fill="none"
-            stroke="#444444"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="1.25"
-          />
-          <path
-            d="M5.5 3v8M10.5 4.75v8"
-            fill="none"
-            stroke="#444444"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="1.25"
-          />
-        </svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><!-- Icon from Lucide by Lucide Contributors - https://github.com/lucide-icons/lucide/blob/main/LICENSE --><path fill="none" stroke="#444444" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0zm.894.211v15M9 3.236v15"/></svg>
       `;
 
             const panel = document.createElement("div");
@@ -1389,6 +1353,15 @@ onMounted(() => {
         const handleWaypointLeave = () => {
             map?.getCanvas().style.setProperty("cursor", "");
         };
+
+        map.addControl(
+            new maplibregl.NavigationControl({
+                visualizePitch: true,
+                showZoom: true,
+                showCompass: true,
+            }),
+            "top-left",
+        );
 
         map.on("mouseenter", WAYPOINT_HIT_LAYER_ID, handleWaypointEnter);
         map.on("mouseenter", WAYPOINT_SYMBOL_LAYER_ID, handleWaypointEnter);
@@ -1619,37 +1592,6 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-:deep(.maplibre-reset-view-button) {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(255, 255, 255, 0.96);
-    opacity: 1;
-}
-
-:deep(.maplibre-reset-view-button svg) {
-    width: 16px;
-    height: 16px;
-}
-
-:deep(.maplibre-reset-view-button:hover),
-:deep(.maplibre-reset-view-button:focus-visible),
-:deep(.maplibre-basemap-button:hover),
-:deep(.maplibre-basemap-button:focus-visible) {
-    background: rgba(255, 255, 255, 0.96);
-    opacity: 1;
-    box-shadow: none;
-}
-
-:deep(.maplibre-reset-view-button:disabled) {
-    cursor: not-allowed;
-    opacity: 0.5;
-}
-
-:deep(.maplibre-basemap-control) {
-    position: relative;
-}
-
 :deep(.maplibre-basemap-button) {
     display: flex;
     align-items: center;
