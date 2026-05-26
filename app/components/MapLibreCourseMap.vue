@@ -2,7 +2,9 @@
 import { useUserSettingsStore } from "~/stores/userSettings";
 import { calculateDistance } from "~/utils/distance";
 import {
+    HILLSHADE_LAYER_ID,
     MAP_BASEMAPS,
+    TERRAIN_SOURCE_ID,
     createRasterBasemapStyle,
     getBasemapLayerId,
     getBasemapSourceId,
@@ -139,7 +141,7 @@ const mapContainerRef = ref<HTMLDivElement | null>(null);
 const userSettingsStore = useUserSettingsStore();
 
 let map: MapLibreMap | null = null;
-let resetViewButton: HTMLButtonElement | null = null;
+let resetViewButton: HTMLDivElement | null = null;
 let resizeObserver: ResizeObserver | null = null;
 let overlapIndex: OverlapIndex | null = null;
 let trackHoverFrame: number | null = null;
@@ -151,7 +153,7 @@ let selectedWaypointPopup: MapLibrePopup | null = null;
 let selectedGenericMarkerPopup: MapLibrePopup | null = null;
 let resetViewControl: IControl | null = null;
 let basemapControl: IControl | null = null;
-let basemapMenuButton: HTMLButtonElement | null = null;
+let basemapMenuButton: HTMLDivElement | null = null;
 let basemapMenuPanel: HTMLDivElement | null = null;
 let basemapMenuContainer: HTMLDivElement | null = null;
 const basemapOptionButtons = new Map<MapBasemapId, HTMLButtonElement>();
@@ -264,15 +266,18 @@ function ensureBasemapSourcesAndLayers() {
         }
 
         if (!mapInstance.getLayer(layerId)) {
-            mapInstance.addLayer({
-                id: layerId,
-                type: "raster",
-                source: sourceId,
-                layout: {
-                    visibility:
-                        basemap.id === activeBasemapId ? "visible" : "none",
+            mapInstance.addLayer(
+                {
+                    id: layerId,
+                    type: "raster",
+                    source: sourceId,
+                    layout: {
+                        visibility:
+                            basemap.id === activeBasemapId ? "visible" : "none",
+                    },
                 },
-            });
+                HILLSHADE_LAYER_ID,
+            );
         }
     });
 }
@@ -320,6 +325,17 @@ function updateBasemapSelection(
         button.setAttribute("aria-pressed", String(selected));
         button.setAttribute("aria-checked", String(selected));
     });
+}
+
+function syncHillshadeVisibility() {
+    const mapInstance = map;
+    if (!mapInstance?.getLayer(HILLSHADE_LAYER_ID)) return;
+
+    mapInstance.setLayoutProperty(
+        HILLSHADE_LAYER_ID,
+        "visibility",
+        mapInstance.getTerrain() ? "visible" : "none",
+    );
 }
 
 function setBasemapMenuOpen(open: boolean) {
@@ -658,7 +674,7 @@ function updateResetViewControlState() {
     if (!resetViewButton) return;
 
     const disabled = !hasCourseBounds();
-    resetViewButton.disabled = disabled;
+    // resetViewButton.disabled = disabled;
     resetViewButton.setAttribute("aria-disabled", String(disabled));
     resetViewButton.title = disabled
         ? "Reset view unavailable"
@@ -1336,6 +1352,8 @@ onMounted(() => {
         updateHighlightSegment();
         updateGenericMarkers();
         updateBasemapSelection(activeBasemapId, { persist: false });
+        syncHillshadeVisibility();
+        map.on("terrain", syncHillshadeVisibility);
 
         map.on("mousemove", TRACK_HIT_LAYER_ID, (event) => {
             if (!map) return;
@@ -1362,6 +1380,17 @@ onMounted(() => {
             }),
             "top-left",
         );
+
+        map.addControl(
+            new maplibregl.TerrainControl({
+                source: TERRAIN_SOURCE_ID,
+            }),
+            "top-right",
+        );
+
+        map.addControl(new maplibregl.GlobeControl());
+
+        map.setMaxPitch(85);
 
         map.on("mouseenter", WAYPOINT_HIT_LAYER_ID, handleWaypointEnter);
         map.on("mouseenter", WAYPOINT_SYMBOL_LAYER_ID, handleWaypointEnter);
@@ -1573,6 +1602,7 @@ onUnmounted(() => {
     }
 
     if (map) {
+        map.off("terrain", syncHillshadeVisibility);
         map.remove();
         map = null;
     }
@@ -1607,8 +1637,8 @@ onUnmounted(() => {
 
 :deep(.maplibre-basemap-panel) {
     position: absolute;
-    top: calc(100% + 4px);
-    right: 0;
+    top: 0px;
+    right: 36px;
     min-width: 182px;
     border: 1px solid rgba(148, 163, 184, 0.35);
     background: rgba(255, 255, 255, 0.96);

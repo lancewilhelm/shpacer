@@ -18,6 +18,11 @@ export interface MapBasemapDefinition {
   maxzoom: number;
 }
 
+export const TERRAIN_SOURCE_ID = 'terrain-source';
+export const HILLSHADE_SOURCE_ID = 'hillshade-source';
+export const HILLSHADE_LAYER_ID = 'terrain-hillshade';
+const MAPTERHORN_TILEJSON_URL = 'https://tiles.mapterhorn.com/tilejson.json';
+
 const OSM_ATTRIBUTION_HTML =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
 const OSM_HOT_ATTRIBUTION_HTML =
@@ -109,6 +114,14 @@ export function createRasterBasemapStyle(
         maxzoom: basemap.maxzoom,
         attribution: basemap.attributionHtml,
       },
+      [TERRAIN_SOURCE_ID]: {
+        type: 'raster-dem',
+        url: MAPTERHORN_TILEJSON_URL,
+      },
+      [HILLSHADE_SOURCE_ID]: {
+        type: 'raster-dem',
+        url: MAPTERHORN_TILEJSON_URL,
+      },
     },
     layers: [
       {
@@ -116,6 +129,22 @@ export function createRasterBasemapStyle(
         type: 'raster',
         source: sourceId,
       },
+      {
+        id: HILLSHADE_LAYER_ID,
+        type: 'hillshade',
+        source: HILLSHADE_SOURCE_ID,
+        layout: {
+          visibility: 'visible',
+        },
+        paint: {
+          'hillshade-shadow-color': '#473B24',
+        },
+      },
     ],
+    terrain: {
+      source: TERRAIN_SOURCE_ID,
+      exaggeration: 1,
+    },
+    sky: {},
   };
 }

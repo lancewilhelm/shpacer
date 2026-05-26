@@ -16,6 +16,8 @@ Deprecated note: old course URLs that still include `?mapEngine=maplibre` are no
 
 - Interactive maps use the shared basemap registry in [app/utils/mapBasemaps.ts](/Users/lancewilhelm/projects/shpacer/app/utils/mapBasemaps.ts)
 - The active basemap selection now persists through reloads via the user settings store and is reused by export rendering
+- Interactive maps now also attach shared DEM terrain and hillshade sources so pitched MapLibre views can render 3D terrain without changing the existing map controls
+- The terrain toggle now also syncs hillshade visibility, so disabling terrain removes the extra shaded relief overlay instead of leaving hillshade behind
 - The current implementation keeps the raster basemap intentionally simple while separating renderer migration from any later production-style redesign
 
 ## Export path
