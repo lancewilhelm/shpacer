@@ -14,14 +14,15 @@ Deprecated note: old course URLs that still include `?mapEngine=maplibre` are no
 
 ## Basemap
 
-- Interactive maps use OpenStreetMap raster tiles through a minimal MapLibre style
+- Interactive maps use the shared basemap registry in [app/utils/mapBasemaps.ts](/Users/lancewilhelm/projects/shpacer/app/utils/mapBasemaps.ts)
+- The active basemap selection now persists through reloads via the user settings store and is reused by export rendering
 - The current implementation keeps the raster basemap intentionally simple while separating renderer migration from any later production-style redesign
 
 ## Export path
 
 - Plan PDF map snapshots no longer rely on a hidden Leaflet map
 - Export rendering now lives in [app/utils/mapImageExport.ts](/Users/lancewilhelm/projects/shpacer/app/utils/mapImageExport.ts)
-- The export utility stitches OpenStreetMap raster tiles onto a canvas and draws the route plus waypoint markers directly before the print document opens
+- The export utility stitches the currently selected basemap's raster tiles onto a canvas and draws the route plus waypoint markers directly before the print document opens
 
 ## Follow-up considerations
 

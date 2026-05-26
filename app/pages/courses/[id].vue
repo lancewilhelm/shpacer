@@ -26,11 +26,11 @@ import { buildPlanPdfHtml } from "~/utils/planWaypointPrint";
 import {
   captureCourseOverviewMapImage,
   captureWaypointMapImage,
-  OSM_ATTRIBUTION,
 } from "~/utils/mapImageExport";
 import type { DistanceUnit } from "~/stores/userSettings";
 import type { CourseAnalysisSettings } from "~/utils/courseSettings";
 import { normalizeCourseAnalysisSettings } from "~/utils/courseSettings";
+import { getMapBasemapById } from "~/utils/mapBasemaps";
 
 // Define the waypoint type that matches what we get from the API
 type Waypoint = {
@@ -1511,6 +1511,9 @@ async function exportPlanPdf() {
     const waypointById = new Map(
       waypoints.value.map((waypoint) => [waypoint.id, waypoint]),
     );
+    const exportBasemap = getMapBasemapById(
+      userSettingsStore.settings.mapStyle?.basemapId,
+    );
     const exportWaypoints = waypoints.value.map((waypoint) => ({
       id: waypoint.id,
       name: waypoint.name,
@@ -1525,6 +1528,7 @@ async function exportPlanPdf() {
       overviewMapImageDataUrl = await captureCourseOverviewMapImage({
         geoJsonData: geoJsonData.value,
         allWaypoints: exportWaypoints,
+        basemapId: exportBasemap.id,
         size: {
           width: 620,
           height: 360,
@@ -1553,6 +1557,7 @@ async function exportPlanPdf() {
               order: waypoint.order,
             },
             allWaypoints: exportWaypoints,
+            basemapId: exportBasemap.id,
             size: {
               width: 420,
               height: 250,
@@ -1570,7 +1575,7 @@ async function exportPlanPdf() {
         ...row,
         mapImageDataUrl,
         mapImageError,
-        mapAttribution: OSM_ATTRIBUTION,
+        mapAttribution: exportBasemap.attributionText,
       });
     }
 
@@ -1583,7 +1588,7 @@ async function exportPlanPdf() {
       }),
       overviewMapImageDataUrl,
       overviewMapError,
-      overviewMapAttribution: OSM_ATTRIBUTION,
+      overviewMapAttribution: exportBasemap.attributionText,
       overviewRows: detailRows.map((row) => ({
         waypointName: row.waypointName,
         distanceFromStart: row.distanceFromStart,

@@ -22,7 +22,7 @@ export const useSyncStore = defineStore(
           console.error("No data to sync");
           return;
         }
-        logger.debug("Sync request body:", body);
+        logger.debug({ body: body as unknown }, "Sync request body");
         const response = await $fetch<SyncResponse>("/api/sync", {
           method: "POST",
           body,
@@ -57,7 +57,7 @@ export const useSyncStore = defineStore(
           return;
         }
 
-        logger.debug("Sync request body:", body);
+        logger.debug({ body: body as unknown }, "Sync request body");
 
         const response = await $fetch<SyncResponse>("/api/sync", {
           method: "POST",
@@ -123,10 +123,13 @@ export type SyncResponse = {
 async function processSyncResponse(response: SyncResponse, type: string) {
   const { unsyncedUserSettings, unsyncedGlobalSettings } = response.data;
 
-  logger.debug("Processing sync response:", {
-    unsyncedUserSettings,
-    unsyncedGlobalSettings,
-  });
+  logger.debug(
+    {
+      unsyncedUserSettings: unsyncedUserSettings as unknown,
+      unsyncedGlobalSettings: unsyncedGlobalSettings as unknown,
+    },
+    "Processing sync response",
+  );
 
   // --- Process settings ---
   const userSettingsStore = useUserSettingsStore();

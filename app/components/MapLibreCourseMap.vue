@@ -1,5 +1,14 @@
 <script setup lang="ts">
+import { useUserSettingsStore } from "~/stores/userSettings";
 import { calculateDistance } from "~/utils/distance";
+import {
+    MAP_BASEMAPS,
+    createRasterBasemapStyle,
+    getBasemapLayerId,
+    getBasemapSourceId,
+    normalizeMapBasemapId,
+    type MapBasemapId,
+} from "~/utils/mapBasemaps";
 import {
     buildOverlapIndexForGeoJsonTracks,
     getTrackDistanceCandidatesForPoint,
@@ -26,9 +35,6 @@ type MapLibrePopup = import("maplibre-gl").Popup;
 type GeoJSONSource = import("maplibre-gl").GeoJSONSource;
 type MapLayerMouseEvent = import("maplibre-gl").MapLayerMouseEvent;
 type IControl = import("maplibre-gl").IControl;
-type StyleSpecification = import("maplibre-gl").StyleSpecification;
-
-type BasemapId = "osm" | "osmHot" | "openTopoMap" | "esriSatellite";
 
 interface Props {
     center?: [number, number];
@@ -63,8 +69,8 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-    center: () => [51.505, -0.09],
-    zoom: 13,
+    center: undefined,
+    zoom: undefined,
     markers: () => [],
     geoJsonData: () => [],
     overlayGeoJsonData: () => [],
@@ -120,77 +126,8 @@ const WAYPOINT_HIT_LAYER_ID = "course-waypoints-hit";
 const WAYPOINT_SYMBOL_LAYER_ID = "course-waypoints-symbol";
 const MARKER_SOURCE_ID = "course-generic-markers";
 const MARKER_LAYER_ID = "course-generic-markers-circle";
-const OSM_ATTRIBUTION =
-    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
-const OSM_HOT_ATTRIBUTION =
-    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, Tiles styled by <a href="https://www.hotosm.org/">Humanitarian OpenStreetMap Team</a> hosted by <a href="https://openstreetmap.fr/">OpenStreetMap France</a>';
-const OPEN_TOPO_MAP_ATTRIBUTION =
-    'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org/">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org/">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)';
-const ESRI_SATELLITE_ATTRIBUTION =
-    '&copy; <a href="http://www.esri.com/">Esri</a>, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community';
-const BASEMAP_SOURCE_PREFIX = "basemap-source-";
-const BASEMAP_LAYER_PREFIX = "basemap-layer-";
-const DEFAULT_BASEMAP_ID: BasemapId = "osm";
-const BASEMAPS: Array<{
-    id: BasemapId;
-    label: string;
-    attribution: string;
-    tiles: string[];
-    maxzoom: number;
-}> = [
-    {
-        id: "osm",
-        label: "OpenStreetMap",
-        attribution: OSM_ATTRIBUTION,
-        tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-        maxzoom: 19,
-    },
-    {
-        id: "osmHot",
-        label: "OpenStreetMap.HOT",
-        attribution: OSM_HOT_ATTRIBUTION,
-        tiles: ["https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png"],
-        maxzoom: 19,
-    },
-    {
-        id: "openTopoMap",
-        label: "OpenTopoMap",
-        attribution: OPEN_TOPO_MAP_ATTRIBUTION,
-        tiles: ["https://a.tile.opentopomap.org/{z}/{x}/{y}.png"],
-        maxzoom: 17,
-    },
-    {
-        id: "esriSatellite",
-        label: "Esri Satellite",
-        attribution: ESRI_SATELLITE_ATTRIBUTION,
-        tiles: [
-            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        ],
-        maxzoom: 18,
-    },
-];
-const OSM_RASTER_STYLE = {
-    version: 8,
-    glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
-    sources: {
-        [BASEMAP_SOURCE_PREFIX + DEFAULT_BASEMAP_ID]: {
-            type: "raster",
-            tiles: BASEMAPS[0]?.tiles ?? [
-                "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-            ],
-            tileSize: 256,
-            maxzoom: BASEMAPS[0]?.maxzoom ?? 19,
-            attribution: OSM_ATTRIBUTION,
-        },
-    },
-    layers: [
-        {
-            id: BASEMAP_LAYER_PREFIX + DEFAULT_BASEMAP_ID,
-            type: "raster",
-            source: BASEMAP_SOURCE_PREFIX + DEFAULT_BASEMAP_ID,
-        },
-    ],
-} satisfies StyleSpecification;
+const FALLBACK_CENTER: [number, number] = [51.505, -0.09];
+const FALLBACK_ZOOM = 13;
 
 let maplibregl: MapLibreModule | null = null;
 if (import.meta.client) {
@@ -199,6 +136,7 @@ if (import.meta.client) {
 }
 
 const mapContainerRef = ref<HTMLDivElement | null>(null);
+const userSettingsStore = useUserSettingsStore();
 
 let map: MapLibreMap | null = null;
 let resetViewButton: HTMLButtonElement | null = null;
@@ -216,13 +154,15 @@ let basemapControl: IControl | null = null;
 let basemapMenuButton: HTMLButtonElement | null = null;
 let basemapMenuPanel: HTMLDivElement | null = null;
 let basemapMenuContainer: HTMLDivElement | null = null;
-const basemapOptionButtons = new Map<BasemapId, HTMLButtonElement>();
+const basemapOptionButtons = new Map<MapBasemapId, HTMLButtonElement>();
 let hasDoneInitialFit = false;
 let prevFitHighlight = false;
 let lastFittedSegmentKey: string | null = null;
 let windowResizeHandler: (() => void) | null = null;
 let documentPointerDownHandler: ((event: PointerEvent) => void) | null = null;
-let activeBasemapId: BasemapId = DEFAULT_BASEMAP_ID;
+let activeBasemapId: MapBasemapId = normalizeMapBasemapId(
+    userSettingsStore.settings.mapStyle?.basemapId,
+);
 let basemapMenuOpen = false;
 
 function rebuildOverlapIndex() {
@@ -305,33 +245,26 @@ function emptyFeatureCollection(): GeoJSON.FeatureCollection {
     };
 }
 
-function getBasemapSourceId(id: BasemapId): string {
-    return `${BASEMAP_SOURCE_PREFIX}${id}`;
-}
-
-function getBasemapLayerId(id: BasemapId): string {
-    return `${BASEMAP_LAYER_PREFIX}${id}`;
-}
-
 function ensureBasemapSourcesAndLayers() {
-    if (!map) return;
+    const mapInstance = map;
+    if (!mapInstance) return;
 
-    BASEMAPS.forEach((basemap) => {
+    MAP_BASEMAPS.forEach((basemap) => {
         const sourceId = getBasemapSourceId(basemap.id);
         const layerId = getBasemapLayerId(basemap.id);
 
-        if (!map.getSource(sourceId)) {
-            map.addSource(sourceId, {
+        if (!mapInstance.getSource(sourceId)) {
+            mapInstance.addSource(sourceId, {
                 type: "raster",
                 tiles: basemap.tiles,
                 tileSize: 256,
                 maxzoom: basemap.maxzoom,
-                attribution: basemap.attribution,
+                attribution: basemap.attributionHtml,
             });
         }
 
-        if (!map.getLayer(layerId)) {
-            map.addLayer({
+        if (!mapInstance.getLayer(layerId)) {
+            mapInstance.addLayer({
                 id: layerId,
                 type: "raster",
                 source: sourceId,
@@ -344,24 +277,45 @@ function ensureBasemapSourcesAndLayers() {
     });
 }
 
-function updateBasemapSelection(nextBasemapId: BasemapId) {
-    if (!map) return;
+function persistBasemapSelection(nextBasemapId: MapBasemapId) {
+    if (userSettingsStore.settings.mapStyle?.basemapId === nextBasemapId) {
+        return;
+    }
 
-    activeBasemapId = nextBasemapId;
+    userSettingsStore.updateSettings({
+        mapStyle: {
+            ...userSettingsStore.settings.mapStyle,
+            basemapId: nextBasemapId,
+        },
+    });
+}
 
-    BASEMAPS.forEach((basemap) => {
+function updateBasemapSelection(
+    nextBasemapId: MapBasemapId,
+    options?: { persist?: boolean },
+) {
+    activeBasemapId = normalizeMapBasemapId(nextBasemapId);
+
+    if (options?.persist !== false) {
+        persistBasemapSelection(activeBasemapId);
+    }
+
+    const mapInstance = map;
+    if (!mapInstance) return;
+
+    MAP_BASEMAPS.forEach((basemap) => {
         const layerId = getBasemapLayerId(basemap.id);
-        if (!map.getLayer(layerId)) return;
+        if (!mapInstance.getLayer(layerId)) return;
 
-        map.setLayoutProperty(
+        mapInstance.setLayoutProperty(
             layerId,
             "visibility",
-            basemap.id === nextBasemapId ? "visible" : "none",
+            basemap.id === activeBasemapId ? "visible" : "none",
         );
     });
 
     basemapOptionButtons.forEach((button, basemapId) => {
-        const selected = basemapId === nextBasemapId;
+        const selected = basemapId === activeBasemapId;
         button.dataset.selected = selected ? "true" : "false";
         button.setAttribute("aria-pressed", String(selected));
         button.setAttribute("aria-checked", String(selected));
@@ -723,6 +677,30 @@ function fitToCourseBounds(options?: { animate?: boolean }) {
     });
 
     return true;
+}
+
+function resolveInitialMapOptions() {
+    const hasExplicitViewport =
+        Array.isArray(props.center) && typeof props.zoom === "number";
+
+    if (!hasExplicitViewport) {
+        const bounds = createCourseBounds();
+        if (bounds) {
+            hasDoneInitialFit = true;
+            return {
+                bounds,
+                fitBoundsOptions: {
+                    padding: 20,
+                    duration: 0,
+                },
+            };
+        }
+    }
+
+    return {
+        center: toMapLibreCenter(props.center ?? FALLBACK_CENTER),
+        zoom: typeof props.zoom === "number" ? props.zoom : FALLBACK_ZOOM,
+    };
 }
 
 function buildHighlightFeatureCollection(): GeoJSON.FeatureCollection {
@@ -1187,7 +1165,8 @@ function createResetViewControl() {
             const container = document.createElement("div");
             container.className = "maplibregl-ctrl maplibregl-ctrl-group";
 
-            const button = document.createElement("div");
+            const button = document.createElement("button");
+            button.type = "button";
             button.className =
                 "maplibre-reset-view-button w-8 h-8 rounded cursor-pointer";
             button.setAttribute("aria-label", "Reset map view");
@@ -1250,7 +1229,8 @@ function createBasemapControl() {
             container.className =
                 "maplibregl-ctrl maplibregl-ctrl-group maplibre-basemap-control";
 
-            const button = document.createElement("div");
+            const button = document.createElement("button");
+            button.type = "button";
             button.className =
                 "maplibre-reset-view-button maplibre-basemap-button w-8 h-8 rounded cursor-pointer";
             button.setAttribute("aria-label", "Choose basemap");
@@ -1284,7 +1264,7 @@ function createBasemapControl() {
             panel.setAttribute("aria-label", "Basemap options");
 
             basemapOptionButtons.clear();
-            BASEMAPS.forEach((basemap) => {
+            MAP_BASEMAPS.forEach((basemap) => {
                 const optionButton = document.createElement("button");
                 optionButton.type = "button";
                 optionButton.className = "maplibre-basemap-option";
@@ -1374,9 +1354,8 @@ onMounted(() => {
     map = new maplibregl.Map({
         container: mapContainerRef.value,
         attributionControl: false,
-        style: OSM_RASTER_STYLE,
-        center: toMapLibreCenter(props.center),
-        zoom: props.zoom,
+        style: createRasterBasemapStyle(activeBasemapId),
+        ...resolveInitialMapOptions(),
     });
 
     map.on("load", () => {
@@ -1392,7 +1371,7 @@ onMounted(() => {
         updateElevationHoverMarker();
         updateHighlightSegment();
         updateGenericMarkers();
-        updateBasemapSelection(activeBasemapId);
+        updateBasemapSelection(activeBasemapId, { persist: false });
 
         map.on("mousemove", TRACK_HIT_LAYER_ID, (event) => {
             if (!map) return;
@@ -1552,6 +1531,16 @@ watch(
         }
     },
     { deep: true },
+);
+
+watch(
+    () => userSettingsStore.settings.mapStyle?.basemapId,
+    (nextBasemapId) => {
+        const normalized = normalizeMapBasemapId(nextBasemapId);
+        if (normalized === activeBasemapId) return;
+        updateBasemapSelection(normalized, { persist: false });
+    },
+    { immediate: true },
 );
 
 watch(

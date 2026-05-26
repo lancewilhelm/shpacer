@@ -322,8 +322,6 @@ const previewStats = computed<PreviewStats | null>(() => {
                 <ClientOnly>
                   <MapLibreCourseMap
                     :geo-json-data="[processedFile.geoJson]"
-                    :center="[0, 0]"
-                    :zoom="10"
                   />
                   <template #fallback>
                     <div

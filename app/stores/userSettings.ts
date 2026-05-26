@@ -1,5 +1,10 @@
 import { defineStore } from "pinia";
 import { triggerDebouncedSync } from "~/utils/sync/debounce";
+import {
+  DEFAULT_MAP_BASEMAP_ID,
+  normalizeMapBasemapId,
+  type MapBasemapId,
+} from "~/utils/mapBasemaps";
 
 export const fontFamilyOptions = [
   "Fira Code",
@@ -38,6 +43,9 @@ export interface UserSettings {
     showAreaGradient: boolean;
     invertPaceYAxis: boolean;
   };
+  mapStyle: {
+    basemapId: MapBasemapId;
+  };
   units: {
     distance: DistanceUnitSetting;
     elevation: ElevationUnitSetting;
@@ -57,6 +65,9 @@ function getDefaultSettings(): UserSettings {
     chartStyle: {
       showAreaGradient: true,
       invertPaceYAxis: true,
+    },
+    mapStyle: {
+      basemapId: DEFAULT_MAP_BASEMAP_ID,
     },
     units: {
       strategy: "override",
@@ -89,6 +100,11 @@ function normalizeUserSettings(
       ...defaults.chartStyle,
       ...(settings.chartStyle ?? {}),
     },
+    mapStyle: {
+      ...defaults.mapStyle,
+      ...(settings.mapStyle ?? {}),
+      basemapId: normalizeMapBasemapId(settings.mapStyle?.basemapId),
+    },
     units: {
       ...defaults.units,
       ...(settings.units ?? {}),
@@ -110,6 +126,10 @@ function mergeUserSettings(
     chartStyle: {
       ...(base.chartStyle ?? {}),
       ...(updated.chartStyle ?? {}),
+    },
+    mapStyle: {
+      ...(base.mapStyle ?? {}),
+      ...(updated.mapStyle ?? {}),
     },
     units: {
       ...(base.units ?? {}),
@@ -224,6 +244,7 @@ export const useUserSettingsStore = defineStore(
           "settings.themeSorting",
           "settings.funboxModes",
           "settings.chartStyle",
+          "settings.mapStyle",
           "settings.units",
         ],
       },

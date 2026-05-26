@@ -1,7 +1,10 @@
 import { getWaypointColorFromOrder } from '~/utils/waypoints';
+import {
+  DEFAULT_MAP_BASEMAP_ID,
+  getMapBasemapById,
+  type MapBasemapId,
+} from '~/utils/mapBasemaps';
 
-const OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-export const OSM_ATTRIBUTION = 'Map data © OpenStreetMap contributors';
 const TILE_SIZE = 256;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 19;
@@ -23,6 +26,7 @@ interface CaptureWaypointMapImageOptions {
   geoJsonData: GeoJSON.FeatureCollection[];
   waypoint: WaypointForExport;
   allWaypoints: WaypointForExport[];
+  basemapId?: MapBasemapId;
   size?: {
     width: number;
     height: number;
@@ -32,6 +36,7 @@ interface CaptureWaypointMapImageOptions {
 interface CaptureCourseOverviewMapImageOptions {
   geoJsonData: GeoJSON.FeatureCollection[];
   allWaypoints: WaypointForExport[];
+  basemapId?: MapBasemapId;
   size?: {
     width: number;
     height: number;
@@ -237,13 +242,14 @@ function selectViewport(
   width: number,
   height: number,
   padding: number,
+  maxZoom: number,
 ): Viewport {
   const availableWidth = Math.max(1, width - padding * 2);
   const availableHeight = Math.max(1, height - padding * 2);
 
   let selectedZoom = MIN_ZOOM;
 
-  for (let zoom = MAX_ZOOM; zoom >= MIN_ZOOM; zoom--) {
+  for (let zoom = maxZoom; zoom >= MIN_ZOOM; zoom--) {
     const northWest = projectLatLng(bounds.maxLat, bounds.minLng, zoom);
     const southEast = projectLatLng(bounds.minLat, bounds.maxLng, zoom);
     const projectedWidth = Math.abs(southEast.x - northWest.x);
@@ -316,7 +322,9 @@ async function drawTiles(
   width: number,
   height: number,
   viewport: Viewport,
+  basemapId: MapBasemapId,
 ) {
+  const basemap = getMapBasemapById(basemapId);
   const worldCenter = projectLatLng(
     viewport.center.lat,
     viewport.center.lng,
@@ -357,8 +365,14 @@ async function drawTiles(
   const tileImages = await Promise.all(
     tiles.map(async (tile) => {
       try {
+        const tileTemplate =
+          basemap.tiles[(tile.x + tile.y) % basemap.tiles.length] ??
+          basemap.tiles[0];
+        if (!tileTemplate) {
+          return null;
+        }
         const image = await loadImage(
-          OSM_TILE_URL
+          tileTemplate
             .replace('{z}', String(viewport.zoom))
             .replace('{x}', String(tile.x))
             .replace('{y}', String(tile.y)),
@@ -459,14 +473,31 @@ async function renderMapImage(options: {
   bounds: GeographicBounds;
   waypointsToDraw: WaypointForExport[];
   allWaypoints: WaypointForExport[];
+  basemapId?: MapBasemapId;
   width: number;
   height: number;
   padding: number;
 }): Promise<string> {
-  const { geoJsonData, bounds, waypointsToDraw, allWaypoints, width, height, padding } =
+  const {
+    geoJsonData,
+    bounds,
+    waypointsToDraw,
+    allWaypoints,
+    basemapId = DEFAULT_MAP_BASEMAP_ID,
+    width,
+    height,
+    padding,
+  } =
     options;
   const lineCoordinates = extractLineCoordinates(geoJsonData);
-  const viewport = selectViewport(bounds, width, height, padding);
+  const basemap = getMapBasemapById(basemapId);
+  const viewport = selectViewport(
+    bounds,
+    width,
+    height,
+    padding,
+    Math.min(MAX_ZOOM, basemap.maxzoom),
+  );
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
@@ -477,7 +508,7 @@ async function renderMapImage(options: {
   ctx.fillStyle = CANVAS_BACKGROUND;
   ctx.fillRect(0, 0, width, height);
 
-  await drawTiles(ctx, width, height, viewport);
+  await drawTiles(ctx, width, height, viewport, basemap.id);
   drawRoutes(ctx, lineCoordinates, viewport, width, height);
   await drawWaypoints(ctx, waypointsToDraw, allWaypoints, viewport, width, height);
 
@@ -505,6 +536,7 @@ export async function captureWaypointMapImage(
     bounds: getBoundsForWaypoint(options.waypoint),
     waypointsToDraw: [options.waypoint],
     allWaypoints: options.allWaypoints,
+    basemapId: options.basemapId,
     width,
     height,
     padding: 24,
@@ -525,6 +557,7 @@ export async function captureCourseOverviewMapImage(
     bounds: getBoundsForCourse(lineCoordinates, options.allWaypoints),
     waypointsToDraw: options.allWaypoints,
     allWaypoints: options.allWaypoints,
+    basemapId: options.basemapId,
     width,
     height,
     padding: 30,

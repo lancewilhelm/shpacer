@@ -14,7 +14,7 @@ The CSV export downloads one row per waypoint and includes:
 - Tags
 - Notes
 
-The exported distance and elevation columns follow the viewer's current unit settings. Timing values follow the active plan timing calculations shown in the waypoint panel, including plan pacing adjustments and waypoint stoppage handling.
+The exported distance and elevation columns follow the viewer's current unit settings. Timing values follow the active plan timing calculations shown in the waypoint panel, including plan pacing adjustments and waypoint stoppage handling. Map snapshots now follow the currently selected interactive basemap and carry that basemap's attribution text into the print layout.
 
 The PDF export opens a print-ready document. The first page is a quick-reference overview table. The second page shows a whole-course overview map. Each following page renders a single waypoint section with the same export fields broken out for easier reading and printing.
 
