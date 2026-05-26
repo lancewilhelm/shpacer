@@ -12,7 +12,7 @@ Shpacer is a self-hosted web application designed for race course planning and a
 - **UI Framework**: Tailwind CSS v4 with CSS custom properties for theming
 - **Database**: SQLite with Drizzle ORM for type-safe database operations
 - **Authentication**: Better Auth with role-based access control
-- **Mapping**: Leaflet for interactive map visualization
+- **Mapping**: MapLibre GL JS for interactive map visualization
 - **File Processing**: Custom GPX/TCX parsers with GeoJSON conversion
 - **State Management**: Pinia for centralized state management
 - **Real-time Sync**: Custom debounced synchronization system
@@ -82,7 +82,7 @@ Course Selection → Map Display → Interactive Exploration → Waypoint Manage
 4. **Waypoint Management**: Edit names, tags, and properties
 5. **Export/Share**: Download original files or share course data
 
-Implementation details: `app/components/CourseEditModal.vue` and `app/components/LeafletMap.vue`.
+Implementation details: `app/components/CourseEditModal.vue` and `app/components/MapLibreCourseMap.vue`.
 
 Form validation/action errors in course, waypoint, and plan modals are shown as dismissible alerts.
 

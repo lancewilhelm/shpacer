@@ -18,7 +18,7 @@ The exported distance and elevation columns follow the viewer's current unit set
 
 The PDF export opens a print-ready document. The first page is a quick-reference overview table. The second page shows a whole-course overview map. Each following page renders a single waypoint section with the same export fields broken out for easier reading and printing.
 
-The current PDF map snapshot spike uses `leaflet.bigimage` with an export-only hidden Leaflet map:
+The current PDF map snapshot flow renders maps directly to a hidden canvas:
 
 - OpenStreetMap tiles only
 - Route polyline overlay
@@ -27,4 +27,4 @@ The current PDF map snapshot spike uses `leaflet.bigimage` with an export-only h
 
 If a waypoint image cannot be captured, the PDF shows a placeholder message for that waypoint instead of failing the whole export.
 
-Implementation lives in [app/pages/courses/[id].vue](/Users/lancewilhelm/projects/shpacer/app/pages/courses/[id].vue), [app/components/CourseActionsDropdown.vue](/Users/lancewilhelm/projects/shpacer/app/components/CourseActionsDropdown.vue), [app/utils/planWaypointExport.ts](/Users/lancewilhelm/projects/shpacer/app/utils/planWaypointExport.ts), [app/utils/planWaypointPrint.ts](/Users/lancewilhelm/projects/shpacer/app/utils/planWaypointPrint.ts), and [app/utils/leafletBigImageExport.ts](/Users/lancewilhelm/projects/shpacer/app/utils/leafletBigImageExport.ts).
+Implementation lives in [app/pages/courses/[id].vue](/Users/lancewilhelm/projects/shpacer/app/pages/courses/[id].vue), [app/components/CourseActionsDropdown.vue](/Users/lancewilhelm/projects/shpacer/app/components/CourseActionsDropdown.vue), [app/utils/planWaypointExport.ts](/Users/lancewilhelm/projects/shpacer/app/utils/planWaypointExport.ts), [app/utils/planWaypointPrint.ts](/Users/lancewilhelm/projects/shpacer/app/utils/planWaypointPrint.ts), and [app/utils/mapImageExport.ts](/Users/lancewilhelm/projects/shpacer/app/utils/mapImageExport.ts).

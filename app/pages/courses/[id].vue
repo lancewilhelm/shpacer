@@ -27,7 +27,7 @@ import {
   captureCourseOverviewMapImage,
   captureWaypointMapImage,
   OSM_ATTRIBUTION,
-} from "~/utils/leafletBigImageExport";
+} from "~/utils/mapImageExport";
 import type { DistanceUnit } from "~/stores/userSettings";
 import type { CourseAnalysisSettings } from "~/utils/courseSettings";
 import { normalizeCourseAnalysisSettings } from "~/utils/courseSettings";
@@ -217,6 +217,7 @@ function replaceCourseSelectionQuery(updates: {
   activityParam?: string | null;
 }) {
   const query = { ...route.query };
+  delete query.mapEngine;
 
   if (updates.planId !== undefined) {
     if (updates.planId) {
@@ -1800,8 +1801,18 @@ const selectedSplitRange = ref<{ startIndex: number; endIndex: number } | null>(
 const selectedWaypointSegment = ref<SelectedWaypointSegment | null>(null);
 const chartZoomRange = ref<{ start: number; end: number } | null>(null);
 const mapResetKey = ref(0);
+const courseViewerMapKey = computed(() => `${mapResetKey.value}`);
 
 onMounted(() => {
+  if (route.query.mapEngine) {
+    const query = { ...route.query };
+    delete query.mapEngine;
+    router.replace({
+      path: route.path,
+      query,
+    });
+  }
+
   if (isClient && isDev) {
     const t = pageNow();
     pageLog("CoursePage mounted");
@@ -3175,8 +3186,8 @@ onUnmounted(() => {
             <div class="flex-1 p-4">
               <div class="h-full rounded-lg overflow-hidden">
                 <ClientOnly>
-                  <LeafletMap
-                    :key="mapResetKey"
+                  <MapLibreCourseMap
+                    :key="courseViewerMapKey"
                     :geo-json-data="geoJsonData"
                     :overlay-geo-json-data="activityOverlayGeoJsonData"
                     :waypoints="displayWaypoints"
@@ -3369,8 +3380,8 @@ onUnmounted(() => {
             <div class="flex-1 p-4">
               <div class="h-full rounded-lg overflow-hidden">
                 <ClientOnly>
-                  <LeafletMap
-                    :key="mapResetKey"
+                  <MapLibreCourseMap
+                    :key="courseViewerMapKey"
                     :geo-json-data="geoJsonData"
                     :overlay-geo-json-data="activityOverlayGeoJsonData"
                     :waypoints="displayWaypoints"
