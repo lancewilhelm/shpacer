@@ -1661,13 +1661,11 @@ onUnmounted(() => {
     text-align: left;
 }
 
-/*:deep(.maplibre-basemap-option[data-selected="true"]) {
-    background: color-mix(in srgb, var(--main-color, #2563eb) 10%, white);
-}*/
-
-/*:deep(.maplibre-basemap-option:hover) {
-    background:  #f8fafc);
-}*/
+:deep(.maplibregl-ctrl button:not(:disabled):hover),
+:deep(.maplibregl-ctrl button:not(:disabled):active) {
+    background-color: transparent !important;
+    opacity: 1 !important;
+}
 
 :deep(.maplibre-basemap-option-check) {
     visibility: hidden;

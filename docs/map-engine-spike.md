@@ -11,6 +11,7 @@ Deprecated note: old course URLs that still include `?mapEngine=maplibre` are no
 - New-course preview maps use the same MapLibre component
 - Route hover, waypoint selection, track-click editing flows, highlighted-segment fitting, and reset-view controls all run on the MapLibre stack
 - Interactive maps include a basemap picker with `OpenStreetMap`, `OpenStreetMap.HOT`, `OpenTopoMap`, and `Esri Satellite`
+- Native MapLibre control buttons keep a stable background and opacity on hover so they match the rest of the course-map chrome
 
 ## Basemap
 
