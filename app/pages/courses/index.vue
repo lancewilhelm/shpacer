@@ -200,9 +200,7 @@ async function addPublicCourse(id: string) {
                 <!-- Owned Courses -->
                 <div class="flex items-center justify-between">
                     <div>
-                        <h1 class="text-3xl font-bold text-(--main-color)">
-                            My Courses
-                        </h1>
+                        <h1 class="text-(--main-color)">My Courses</h1>
                         <p class="text-(--sub-color) mt-1">
                             {{ ownedCourses.length }} course{{
                                 ownedCourses.length !== 1 ? "s" : ""
@@ -258,9 +256,7 @@ async function addPublicCourse(id: string) {
                             name="lucide:map"
                             class="h-16 w-16 text-(--sub-color) mx-auto mb-4 scale-300"
                         />
-                        <h3
-                            class="text-xl font-semibold text-(--main-color) mb-2"
-                        >
+                        <h3 class="text-(--main-color) mb-2">
                             No owned courses yet
                         </h3>
                         <p class="text-(--sub-color) mb-4">
@@ -287,7 +283,7 @@ async function addPublicCourse(id: string) {
                         @click="$router.push(`/courses/${course.id}`)"
                     >
                         <h3
-                            class="font-semibold text-(--main-color) mb-1 group-hover:text-(--main-color) transition-colors truncate flex items-center gap-2"
+                            class="text-(--main-color) mb-1 group-hover:text-(--main-color) transition-colors truncate flex items-center gap-2"
                         >
                             <span class="truncate">{{ course.name }}</span>
                             <Icon
@@ -377,7 +373,9 @@ async function addPublicCourse(id: string) {
                 >
                     <div class="flex items-center justify-between">
                         <div>
-                            <h2 class="text-2xl font-bold text-(--main-color)">
+                            <h2
+                                class="text-2xl font-semibold text-(--main-color)"
+                            >
                                 Starred Courses
                             </h2>
                             <p class="text-(--sub-color) mt-1 text-sm">
@@ -403,7 +401,7 @@ async function addPublicCourse(id: string) {
                                 <span>Starred</span>
                             </div>
                             <h3
-                                class="font-semibold text-(--main-color) mb-1 group-hover:text-(--main-color) transition-colors truncate flex items-center gap-2 pr-12"
+                                class="text-(--main-color) mb-1 group-hover:text-(--main-color) transition-colors truncate flex items-center gap-2 pr-12"
                             >
                                 <span class="truncate">{{ course.name }}</span>
                                 <Icon
@@ -501,7 +499,7 @@ async function addPublicCourse(id: string) {
             <!-- Public Courses Search -->
             <section class="flex flex-col gap-4">
                 <div class="flex items-center justify-between">
-                    <h2 class="text-2xl font-bold text-(--main-color)">
+                    <h2 class="text-2xl font-semibold text-(--main-color)">
                         Find a Course
                     </h2>
                 </div>
@@ -606,9 +604,7 @@ async function addPublicCourse(id: string) {
                     >
                         <div class="flex items-start justify-between gap-2">
                             <div class="min-w-0">
-                                <h3
-                                    class="font-semibold text-(--main-color) mb-1 truncate"
-                                >
+                                <h3 class="text-(--main-color) mb-1 truncate">
                                     {{ pc.name }}
                                 </h3>
                                 <div

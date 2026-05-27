@@ -762,7 +762,7 @@ function getActivityComparison(index: number) {
 <template>
     <div class="h-full w-full overflow-hidden flex flex-col">
         <div class="flex-1 overflow-auto">
-            <table class="min-w-full text-sm whitespace-nowrap">
+            <table class="min-w-full text-sm whitespace-nowrap rounded-none!">
                 <thead
                     class="sticky top-0 bg-(--bg-color) z-0 border-b border-(--sub-color)"
                 >
@@ -792,13 +792,19 @@ function getActivityComparison(index: number) {
                             Elapsed
                         </th>
                         <th
-                            v-if="currentPlan && activityComparisonSplits.length > 0"
+                            v-if="
+                                currentPlan &&
+                                activityComparisonSplits.length > 0
+                            "
                             class="text-right p-x-1! py-1! whitespace-nowrap"
                         >
                             Actual
                         </th>
                         <th
-                            v-if="currentPlan && activityComparisonSplits.length > 0"
+                            v-if="
+                                currentPlan &&
+                                activityComparisonSplits.length > 0
+                            "
                             class="text-right p-x-1! py-1! whitespace-nowrap"
                         >
                             Delta
@@ -881,7 +887,10 @@ function getActivityComparison(index: number) {
                             <span v-else>—</span>
                         </td>
                         <td
-                            v-if="currentPlan && activityComparisonSplits.length > 0"
+                            v-if="
+                                currentPlan &&
+                                activityComparisonSplits.length > 0
+                            "
                             class="p-x-1! py-1! text-(--main-color) text-right whitespace-nowrap"
                         >
                             <span
@@ -902,7 +911,10 @@ function getActivityComparison(index: number) {
                             <span v-else>—</span>
                         </td>
                         <td
-                            v-if="currentPlan && activityComparisonSplits.length > 0"
+                            v-if="
+                                currentPlan &&
+                                activityComparisonSplits.length > 0
+                            "
                             class="p-x-1! py-1! text-(--main-color) text-right whitespace-nowrap"
                         >
                             {{
@@ -920,8 +932,8 @@ function getActivityComparison(index: number) {
                             :colspan="
                                 currentPlan
                                     ? activityComparisonSplits.length > 0
-                                      ? 8
-                                      : 6
+                                        ? 8
+                                        : 6
                                     : 4
                             "
                         >

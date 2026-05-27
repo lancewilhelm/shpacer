@@ -75,16 +75,14 @@ function formatPace(pace: number, paceUnit: string) {
         <AppHeader class="w-full" />
         <div class="w-full h-full p-4 flex flex-col gap-6 overflow-auto">
             <div
-                class="text-6xl font-bold text-(--main-color) logo text-center"
+                class="text-6xl font-semibold text-(--main-color) logo text-center"
             >
                 shpacer
             </div>
             <div class="flex flex-col gap-6">
                 <!-- Recent Courses -->
                 <div>
-                    <h3 class="text-xl font-semibold text-(--main-color) mb-2">
-                        Recent Courses
-                    </h3>
+                    <h3 class="text-(--main-color) mb-2">Recent Courses</h3>
                     <div
                         v-if="coursesPending"
                         class="flex items-center justify-center py-8"
@@ -113,9 +111,7 @@ function formatPace(pace: number, paceUnit: string) {
                             class="bg-(--sub-alt-color) border border-(--sub-color) rounded-lg p-4 hover:border-(--main-color) transition-colors group cursor-pointer"
                             @click="$router.push(`/courses/${course.id}`)"
                         >
-                            <h4
-                                class="font-semibold text-(--main-color) truncate"
-                            >
+                            <h4 class="text-(--main-color) truncate">
                                 {{ course.name }}
                             </h4>
                             <div
@@ -179,9 +175,7 @@ function formatPace(pace: number, paceUnit: string) {
 
                 <!-- Recent Plans -->
                 <div>
-                    <h3 class="text-xl font-semibold text-(--main-color) mb-2">
-                        Recent Plans
-                    </h3>
+                    <h3 class="text-(--main-color) mb-2">Recent Plans</h3>
                     <div
                         v-if="plansPending"
                         class="flex items-center justify-center py-8"
@@ -215,13 +209,11 @@ function formatPace(pace: number, paceUnit: string) {
                             "
                         >
                             <div
-                                class="text-(--sub-color) font-semibold truncate"
+                                class="text-(--sub-color) font-medium truncate"
                             >
                                 {{ plan.courseName }}
                             </div>
-                            <h4
-                                class="font-medium text-(--main-color) truncate"
-                            >
+                            <h4 class="text-(--main-color) truncate">
                                 {{ plan.name }}
                             </h4>
                             <div

@@ -560,7 +560,7 @@ function getSegmentActivityComparison(fromWaypointId: string) {
                                     >
                                         <!-- Waypoint Info -->
                                         <div
-                                            class="font-medium text-(--main-color) truncate text-ellipsis flex-1 w-0"
+                                            class="text-(--main-color) truncate text-ellipsis flex-1 w-0"
                                         >
                                             {{ waypoint.name }}
                                         </div>
@@ -680,7 +680,7 @@ function getSegmentActivityComparison(fromWaypointId: string) {
                                                 name="lucide:clock"
                                                 class="h-3 w-3 -translate-y-0.25"
                                             />
-                                            <span class="font-medium">
+                                            <span>
                                                 {{
                                                     getElapsedTimeForWaypoint(
                                                         waypoint.id,
@@ -731,7 +731,7 @@ function getSegmentActivityComparison(fromWaypointId: string) {
                                                 name="lucide:flag"
                                                 class="h-3 w-3 -translate-y-0.25"
                                             />
-                                            <span class="font-medium">
+                                            <span>
                                                 {{
                                                     getActivityComparison(
                                                         waypoint.id,
@@ -750,7 +750,9 @@ function getSegmentActivityComparison(fromWaypointId: string) {
                                             </span>
                                         </span>
                                         <span
-                                            v-tooltip="getActivityDeltaTooltip()"
+                                            v-tooltip="
+                                                getActivityDeltaTooltip()
+                                            "
                                         >
                                             <Icon
                                                 name="lucide:triangle"
@@ -859,7 +861,7 @@ function getSegmentActivityComparison(fromWaypointId: string) {
                                                 name="lucide:move-horizontal"
                                                 class="h-3 w-3 -translate-y-0.25"
                                             />
-                                            <span class="font-medium">
+                                            <span>
                                                 {{
                                                     formatSegmentDistance(
                                                         getSegmentForWaypoint(
@@ -884,7 +886,7 @@ function getSegmentActivityComparison(fromWaypointId: string) {
                                                 name="lucide:arrow-up"
                                                 class="h-3 w-3 -translate-y-0.25"
                                             />
-                                            <span class="font-medium">
+                                            <span>
                                                 {{
                                                     formatSegmentElevation(
                                                         getSegmentForWaypoint(
@@ -909,7 +911,7 @@ function getSegmentActivityComparison(fromWaypointId: string) {
                                                 name="lucide:arrow-down"
                                                 class="h-3 w-3 -translate-y-0.25"
                                             />
-                                            <span class="font-medium">
+                                            <span>
                                                 {{
                                                     formatSegmentElevation(
                                                         getSegmentForWaypoint(

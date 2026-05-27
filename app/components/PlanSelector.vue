@@ -101,14 +101,14 @@ onBeforeUnmount(() => {
         <!-- Plan Selector Dropdown -->
         <div ref="dropdownRef" class="relative">
             <button
-                class="flex items-center gap-2 px-2 py-1 md:px-3 md:py-2 border border-(--main-color) text-(--main-color) rounded-sm hover:bg-(--main-color) hover:text-(--bg-color) transition-colors text-xs md:text-sm font-medium"
+                class="flex items-center gap-2 px-2 py-1 md:px-3 md:py-2 border border-(--main-color) text-(--main-color) rounded-sm hover:bg-(--main-color) hover:text-(--bg-color) transition-colors text-xs md:text-sm"
                 @click="dropdownOpen = !dropdownOpen"
             >
                 <Icon
                     name="lucide:clipboard-list"
                     class="h-3 w-3 md:h-4 md:w-4"
                 />
-                <span class="font-medium">
+                <span>
                     {{ currentPlan ? currentPlan.name : "Select Plan" }}
                 </span>
                 <Icon
@@ -138,7 +138,7 @@ onBeforeUnmount(() => {
                     >
                         <div class="flex items-center gap-2">
                             <Icon name="lucide:eye-off" class="h-4 w-4" />
-                            <span class="font-medium">No Plan</span>
+                            <span>No Plan</span>
                         </div>
                     </div>
 
@@ -159,9 +159,7 @@ onBeforeUnmount(() => {
                     >
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center gap-2">
-                                <span class="font-medium truncate">{{
-                                    plan.name
-                                }}</span>
+                                <span class="truncate">{{ plan.name }}</span>
                             </div>
                             <div
                                 v-if="plan.pace"
@@ -208,7 +206,7 @@ onBeforeUnmount(() => {
                     >
                         <div class="flex items-center gap-2">
                             <Icon name="lucide:plus" class="h-4 w-4" />
-                            <span class="font-medium">Add Plan</span>
+                            <span>Add Plan</span>
                         </div>
                     </div>
                 </div>

@@ -283,7 +283,7 @@ onMounted(() => {
                     name="lucide:info"
                     class="h-5 w-5 text-(--main-color) scale-150"
                 />
-                <h2 class="text-xl font-semibold text-(--main-color)">
+                <h2 class="text-xl font-medium text-(--main-color)">
                     Course Information
                 </h2>
             </div>
@@ -324,7 +324,7 @@ onMounted(() => {
                 <div
                     class="px-3 py-2 bg-(--sub-alt-color) border-b border-(--sub-color)/30 flex items-center justify-between"
                 >
-                    <h6 class="text-sm font-semibold text-(--main-color)">
+                    <h6 class="text-sm font-medium text-(--main-color)">
                         {{ group.section }}
                     </h6>
                 </div>

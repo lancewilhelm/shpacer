@@ -345,7 +345,7 @@ defineExpose({
         <ModalWindow :open="showGeoJsonModal" @close="closeGeoJsonModal">
             <div class="max-w-4xl w-full">
                 <div class="flex items-center justify-between mb-4">
-                    <h2 class="text-lg font-semibold text-(--main-color)">
+                    <h2 class="text-lg font-medium text-(--main-color)">
                         GeoJSON Data - {{ uploadedFile?.name }}
                     </h2>
                     <div class="flex items-center gap-2">

@@ -1,31 +1,31 @@
 <script setup lang="ts">
 import type {
-  SelectCourse,
-  SelectPlan,
-  SelectWaypointNote,
-  SelectWaypointStoppageTime,
+    SelectCourse,
+    SelectPlan,
+    SelectWaypointNote,
+    SelectWaypointStoppageTime,
 } from "~/utils/db/schema";
 import type {
-  CourseActivitiesResponse,
-  CourseActivityDetail,
-  CourseActivityDetailResponse,
-  CourseActivityPlanDetail,
-  CourseActivitySummary,
+    CourseActivitiesResponse,
+    CourseActivityDetail,
+    CourseActivityDetailResponse,
+    CourseActivityPlanDetail,
+    CourseActivitySummary,
 } from "~/utils/courseActivities";
 import { formatSignedDuration } from "~/utils/courseActivities";
 import { formatDistance, formatElevation } from "~/utils/courseMetrics";
 import { clampChartPanelHeight } from "~/utils/uiConstants";
 import {
-  extractElevationProfile,
-  interpolateAtDistance,
+    extractElevationProfile,
+    interpolateAtDistance,
 } from "~/utils/elevationProfile";
 import { getTagsByIds } from "~/utils/waypointTags";
 import { formatDelayTime, formatElapsedTime } from "~/utils/timeCalculations";
 import { buildPlanWaypointExportRows } from "~/utils/planWaypointExport";
 import { buildPlanPdfHtml } from "~/utils/planWaypointPrint";
 import {
-  captureCourseOverviewMapImage,
-  captureWaypointMapImage,
+    captureCourseOverviewMapImage,
+    captureWaypointMapImage,
 } from "~/utils/mapImageExport";
 import type { DistanceUnit } from "~/stores/userSettings";
 import type { CourseAnalysisSettings } from "~/utils/courseSettings";
@@ -34,30 +34,30 @@ import { getMapBasemapById } from "~/utils/mapBasemaps";
 
 // Define the waypoint type that matches what we get from the API
 type Waypoint = {
-  id: string;
-  name: string;
-  description: string | null;
-  lat: number;
-  lng: number;
-  elevation: number | null;
-  distance: number;
-  tags: string[];
-  order: number;
+    id: string;
+    name: string;
+    description: string | null;
+    lat: number;
+    lng: number;
+    elevation: number | null;
+    distance: number;
+    tags: string[];
+    order: number;
 };
 
 type RouteSegmentHighlightSource = "split" | "waypoint-segment" | "chart-range";
 
 type RouteSegmentHighlight = {
-  start: number;
-  end: number;
-  source: RouteSegmentHighlightSource;
+    start: number;
+    end: number;
+    source: RouteSegmentHighlightSource;
 };
 
 type SelectedWaypointSegment = {
-  fromWaypointId: string;
-  toWaypointId: string;
-  start: number;
-  end: number;
+    fromWaypointId: string;
+    toWaypointId: string;
+    start: number;
+    end: number;
 };
 
 // Auth guard removed: this page now supports unified public (read‑only) and member modes.
@@ -73,57 +73,57 @@ const courseId = route.params.id as string;
 const isClient = typeof window !== "undefined";
 const isDev = import.meta.dev ?? false;
 function pageLog(...args: unknown[]) {
-  if (isClient && isDev) {
-    console.log("[CoursePage]", ...args);
-  }
+    if (isClient && isDev) {
+        console.log("[CoursePage]", ...args);
+    }
 }
 const pageNow = () =>
-  isClient && typeof performance !== "undefined" ? performance.now() : 0;
+    isClient && typeof performance !== "undefined" ? performance.now() : 0;
 
 // Detailed PerformanceResourceTiming logger for network phase breakdowns
 function logResourceTiming(url: string, label: string) {
-  if (!isClient || !isDev || typeof performance === "undefined") return;
-  const entries = performance.getEntriesByType(
-    "resource",
-  ) as PerformanceResourceTiming[];
-  // Try to find the most recent matching entry (full absolute URL may be recorded)
-  const match = entries.filter((e) => e.name.includes(url)).slice(-1)[0];
-  if (match) {
-    const ssl =
-      match.secureConnectionStart && match.secureConnectionStart > 0
-        ? match.connectEnd - match.secureConnectionStart
-        : 0;
-    pageLog(`${label} resource timing`, {
-      name: match.name,
-      redirect: match.redirectEnd - match.redirectStart,
-      dns: match.domainLookupEnd - match.domainLookupStart,
-      connect: match.connectEnd - match.connectStart,
-      ssl,
-      request: match.responseStart - match.requestStart,
-      ttfb: match.responseStart - match.startTime,
-      response: match.responseEnd - match.responseStart,
-      duration: match.duration,
-      transferSize: (match as unknown as { transferSize?: number })
-        .transferSize,
-      encodedBodySize: (match as unknown as { encodedBodySize?: number })
-        .encodedBodySize,
-      decodedBodySize: (match as unknown as { decodedBodySize?: number })
-        .decodedBodySize,
-      nextHopProtocol: (match as unknown as { nextHopProtocol?: string })
-        .nextHopProtocol,
-      startTime: match.startTime,
-    });
-  } else {
-    pageLog(`${label} resource timing`, {
-      message: "No PerformanceResourceTiming entry found",
-      url,
-    });
-  }
+    if (!isClient || !isDev || typeof performance === "undefined") return;
+    const entries = performance.getEntriesByType(
+        "resource",
+    ) as PerformanceResourceTiming[];
+    // Try to find the most recent matching entry (full absolute URL may be recorded)
+    const match = entries.filter((e) => e.name.includes(url)).slice(-1)[0];
+    if (match) {
+        const ssl =
+            match.secureConnectionStart && match.secureConnectionStart > 0
+                ? match.connectEnd - match.secureConnectionStart
+                : 0;
+        pageLog(`${label} resource timing`, {
+            name: match.name,
+            redirect: match.redirectEnd - match.redirectStart,
+            dns: match.domainLookupEnd - match.domainLookupStart,
+            connect: match.connectEnd - match.connectStart,
+            ssl,
+            request: match.responseStart - match.requestStart,
+            ttfb: match.responseStart - match.startTime,
+            response: match.responseEnd - match.responseStart,
+            duration: match.duration,
+            transferSize: (match as unknown as { transferSize?: number })
+                .transferSize,
+            encodedBodySize: (match as unknown as { encodedBodySize?: number })
+                .encodedBodySize,
+            decodedBodySize: (match as unknown as { decodedBodySize?: number })
+                .decodedBodySize,
+            nextHopProtocol: (match as unknown as { nextHopProtocol?: string })
+                .nextHopProtocol,
+            startTime: match.startTime,
+        });
+    } else {
+        pageLog(`${label} resource timing`, {
+            message: "No PerformanceResourceTiming entry found",
+            url,
+        });
+    }
 }
 
 // Start initial timing (ended after initial fetches resolve)
 if (isClient && isDev) {
-  console.time("CoursePage: initial fetches");
+    console.time("CoursePage: initial fetches");
 }
 
 // Import necessary stores
@@ -133,54 +133,56 @@ const uiStore = useUiStore();
 // Fetch course data
 // Fetch course, plans, and activities in parallel (avoid SSR waterfall)
 const [courseResp, plansResp, activitiesResp] = await Promise.all([
-  useFetch<{
-    mode: "member" | "public";
-    capabilities: {
-      canEditCourse: boolean;
-      canDeleteCourse: boolean;
-      canTogglePublic: boolean;
-      canToggleShare: boolean;
-      canManagePlans: boolean;
-      canViewPlans: boolean;
-      canManageActivities: boolean;
-      canViewActivities: boolean;
-      canEditWaypoints: boolean;
-      canMutateNotes: boolean;
-      canClone: boolean;
-      canDownloadOriginal: boolean;
-      canSeeRawFileName: boolean;
-    };
-    course: (SelectCourse & {
-      role?: string;
-      courseSettings?: CourseAnalysisSettings | null;
-    }) | null;
-  }>(`/api/courses/${courseId}`),
-  useFetch<{ plans: SelectPlan[] }>(`/api/courses/${courseId}/plans`, {
-    default: () => ({ plans: [] }),
-    onResponseError(ctx) {
-      // Public (unauthenticated) mode will 401 here; swallow & leave plans empty.
-      if (ctx.response.status === 401) {
-        ctx.error = null as unknown as never;
-      }
-    },
-  }),
-  useFetch<CourseActivitiesResponse>(`/api/courses/${courseId}/activities`, {
-    default: () => ({ activities: [] }),
-    onResponseError(ctx) {
-      if (ctx.response.status === 401) {
-        ctx.error = null as unknown as never;
-      }
-    },
-  }),
+    useFetch<{
+        mode: "member" | "public";
+        capabilities: {
+            canEditCourse: boolean;
+            canDeleteCourse: boolean;
+            canTogglePublic: boolean;
+            canToggleShare: boolean;
+            canManagePlans: boolean;
+            canViewPlans: boolean;
+            canManageActivities: boolean;
+            canViewActivities: boolean;
+            canEditWaypoints: boolean;
+            canMutateNotes: boolean;
+            canClone: boolean;
+            canDownloadOriginal: boolean;
+            canSeeRawFileName: boolean;
+        };
+        course:
+            | (SelectCourse & {
+                  role?: string;
+                  courseSettings?: CourseAnalysisSettings | null;
+              })
+            | null;
+    }>(`/api/courses/${courseId}`),
+    useFetch<{ plans: SelectPlan[] }>(`/api/courses/${courseId}/plans`, {
+        default: () => ({ plans: [] }),
+        onResponseError(ctx) {
+            // Public (unauthenticated) mode will 401 here; swallow & leave plans empty.
+            if (ctx.response.status === 401) {
+                ctx.error = null as unknown as never;
+            }
+        },
+    }),
+    useFetch<CourseActivitiesResponse>(`/api/courses/${courseId}/activities`, {
+        default: () => ({ activities: [] }),
+        onResponseError(ctx) {
+            if (ctx.response.status === 401) {
+                ctx.error = null as unknown as never;
+            }
+        },
+    }),
 ]);
 if (isClient && isDev) {
-  console.timeEnd("CoursePage: initial fetches");
-  pageLog("Initial course/plans fetch complete", {
-    courseId,
-    courseFetched: !!courseResp?.data?.value?.course,
-    plansCount: (plansResp?.data?.value?.plans || []).length,
-    activitiesCount: (activitiesResp?.data?.value?.activities || []).length,
-  });
+    console.timeEnd("CoursePage: initial fetches");
+    pageLog("Initial course/plans fetch complete", {
+        courseId,
+        courseFetched: !!courseResp?.data?.value?.course,
+        plansCount: (plansResp?.data?.value?.plans || []).length,
+        activitiesCount: (activitiesResp?.data?.value?.activities || []).length,
+    });
 }
 
 const { data: courseData, pending, error, refresh } = courseResp;
@@ -191,15 +193,12 @@ const { data: courseData, pending, error, refresh } = courseResp;
 const refreshWaypoints = () => {};
 
 const {
-  data: plansData,
-  pending: _plansPending,
-  error: _plansError,
-  refresh: refreshPlans,
+    data: plansData,
+    pending: _plansPending,
+    error: _plansError,
+    refresh: refreshPlans,
 } = plansResp;
-const {
-  data: activitiesData,
-  refresh: refreshActivities,
-} = activitiesResp;
+const { data: activitiesData, refresh: refreshActivities } = activitiesResp;
 
 // Plans state
 const plans = computed(() => plansData.value?.plans || []);
@@ -213,122 +212,128 @@ const publicSharedPlan = ref<SelectPlan | null>(null); // populated when viewing
 const NO_ACTIVITY_QUERY_VALUE = "none";
 
 function replaceCourseSelectionQuery(updates: {
-  planId?: string | null;
-  activityParam?: string | null;
+    planId?: string | null;
+    activityParam?: string | null;
 }) {
-  const query = { ...route.query };
-  delete query.mapEngine;
+    const query = { ...route.query };
+    delete query.mapEngine;
 
-  if (updates.planId !== undefined) {
-    if (updates.planId) {
-      query.plan = updates.planId;
-    } else {
-      delete query.plan;
+    if (updates.planId !== undefined) {
+        if (updates.planId) {
+            query.plan = updates.planId;
+        } else {
+            delete query.plan;
+        }
     }
-  }
 
-  if (updates.activityParam !== undefined) {
-    if (updates.activityParam) {
-      query.activity = updates.activityParam;
-    } else {
-      delete query.activity;
+    if (updates.activityParam !== undefined) {
+        if (updates.activityParam) {
+            query.activity = updates.activityParam;
+        } else {
+            delete query.activity;
+        }
     }
-  }
 
-  router.replace({
-    path: route.path,
-    query,
-  });
+    router.replace({
+        path: route.path,
+        query,
+    });
 }
 
 // Optional deferral for initial ancillary fetch to test perceived performance.
 // Enable deferral by default; disable with ?deferAncillary=0 or ?deferAncillary=false
 const deferAncillaryInitial = computed<boolean>(() => {
-  const q = route.query?.deferAncillary as string | undefined;
-  // default to true unless explicitly "0" or "false"
-  return !(q === "0" || q === "false");
+    const q = route.query?.deferAncillary as string | undefined;
+    // default to true unless explicitly "0" or "false"
+    return !(q === "0" || q === "false");
 });
 
 // Initialize plan from URL query parameter
 watchEffect(async () => {
-  const planIdFromUrl = route.query.plan as string | undefined;
-  if (isClient && isDev)
-    pageLog("Plan watchEffect: extracted planIdFromUrl", {
-      planIdFromUrl,
-    });
-  if (!planIdFromUrl) {
-    if (isClient && isDev) pageLog("Plan watchEffect: no planId in URL");
-    currentPlanId.value = null;
-    publicSharedPlan.value = null;
-    return;
-  }
-  // Member mode: use existing plans list
-  const effectiveMode =
-    courseData.value?.mode === "public" ? "public" : "member";
-  if (isClient && isDev)
-    pageLog("Plan watchEffect: effective mode", { effectiveMode });
-  if (effectiveMode === "member") {
-    if (plans.value.some((p) => p.id === planIdFromUrl)) {
-      if (isClient && isDev)
-        pageLog("Plan watchEffect: matching plan found in member mode", {
-          planIdFromUrl,
+    const planIdFromUrl = route.query.plan as string | undefined;
+    if (isClient && isDev)
+        pageLog("Plan watchEffect: extracted planIdFromUrl", {
+            planIdFromUrl,
         });
-      currentPlanId.value = planIdFromUrl;
-      return;
+    if (!planIdFromUrl) {
+        if (isClient && isDev) pageLog("Plan watchEffect: no planId in URL");
+        currentPlanId.value = null;
+        publicSharedPlan.value = null;
+        return;
     }
-    if (plans.value.length > 0) {
-      replaceCourseSelectionQuery({ planId: null });
+    // Member mode: use existing plans list
+    const effectiveMode =
+        courseData.value?.mode === "public" ? "public" : "member";
+    if (isClient && isDev)
+        pageLog("Plan watchEffect: effective mode", { effectiveMode });
+    if (effectiveMode === "member") {
+        if (plans.value.some((p) => p.id === planIdFromUrl)) {
+            if (isClient && isDev)
+                pageLog(
+                    "Plan watchEffect: matching plan found in member mode",
+                    {
+                        planIdFromUrl,
+                    },
+                );
+            currentPlanId.value = planIdFromUrl;
+            return;
+        }
+        if (plans.value.length > 0) {
+            replaceCourseSelectionQuery({ planId: null });
+        }
+        return;
     }
-    return;
-  }
-  // Public mode: fetch plan directly (shared plan)
-  try {
-    const __pfStart = pageNow();
-    if (isClient && isDev) console.time("Public plan fetch");
-    const resp = await $fetch<{
-      mode: "member" | "public";
-      plan: SelectPlan;
-      course: unknown;
-      notes: { waypointId: string; notes: string }[];
-      stoppageTimes: { waypointId: string; stoppageTime: number }[];
-    }>(`/api/plans/${planIdFromUrl}`);
-    if (isClient && isDev) {
-      console.timeEnd("Public plan fetch");
-      pageLog("Public plan fetched", {
-        ms: pageNow() - __pfStart,
-        planId: resp.plan.id,
-      });
+    // Public mode: fetch plan directly (shared plan)
+    try {
+        const __pfStart = pageNow();
+        if (isClient && isDev) console.time("Public plan fetch");
+        const resp = await $fetch<{
+            mode: "member" | "public";
+            plan: SelectPlan;
+            course: unknown;
+            notes: { waypointId: string; notes: string }[];
+            stoppageTimes: { waypointId: string; stoppageTime: number }[];
+        }>(`/api/plans/${planIdFromUrl}`);
+        if (isClient && isDev) {
+            console.timeEnd("Public plan fetch");
+            pageLog("Public plan fetched", {
+                ms: pageNow() - __pfStart,
+                planId: resp.plan.id,
+            });
+        }
+        publicSharedPlan.value = resp.plan;
+        currentPlanId.value = resp.plan.id;
+        // Populate notes / stoppage times with synthetic objects matching SelectWaypointNote/SelectWaypointStoppageTime
+        waypointNotes.value = resp.notes.map(
+            (n) =>
+                ({
+                    id: `${resp.plan.id}:${n.waypointId}`,
+                    planId: resp.plan.id,
+                    waypointId: n.waypointId,
+                    userId: "public",
+                    notes: n.notes,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                }) as unknown as SelectWaypointNote,
+        );
+        waypointStoppageTimes.value = resp.stoppageTimes.map(
+            (s) =>
+                ({
+                    id: `${resp.plan.id}:${s.waypointId}`,
+                    planId: resp.plan.id,
+                    waypointId: s.waypointId,
+                    stoppageTime: s.stoppageTime,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                }) as unknown as SelectWaypointStoppageTime,
+        );
+    } catch (e) {
+        if (isClient && isDev) pageLog("Public plan fetch failed", e);
+        console.warn(
+            "Failed to load public shared plan (maybe not shared):",
+            e,
+        );
     }
-    publicSharedPlan.value = resp.plan;
-    currentPlanId.value = resp.plan.id;
-    // Populate notes / stoppage times with synthetic objects matching SelectWaypointNote/SelectWaypointStoppageTime
-    waypointNotes.value = resp.notes.map(
-      (n) =>
-        ({
-          id: `${resp.plan.id}:${n.waypointId}`,
-          planId: resp.plan.id,
-          waypointId: n.waypointId,
-          userId: "public",
-          notes: n.notes,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }) as unknown as SelectWaypointNote,
-    );
-    waypointStoppageTimes.value = resp.stoppageTimes.map(
-      (s) =>
-        ({
-          id: `${resp.plan.id}:${s.waypointId}`,
-          planId: resp.plan.id,
-          waypointId: s.waypointId,
-          stoppageTime: s.stoppageTime,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }) as unknown as SelectWaypointStoppageTime,
-    );
-  } catch (e) {
-    if (isClient && isDev) pageLog("Public plan fetch failed", e);
-    console.warn("Failed to load public shared plan (maybe not shared):", e);
-  }
 });
 const waypointNotes = ref<SelectWaypointNote[]>([]);
 const waypointStoppageTimes = ref<SelectWaypointStoppageTime[]>([]);
@@ -336,20 +341,20 @@ const isExportingPlanPdf = ref(false);
 const planSetupModalOpen = ref(false);
 const editingPlan = ref<SelectPlan | null>(null);
 const editingPlanPayload = computed(() => {
-  const ep = editingPlan.value;
-  if (!ep) return null;
-  return {
-    id: ep.id,
-    name: ep.name,
-    pace: ep.pace ?? undefined,
-    paceUnit: ep.paceUnit,
-    defaultStoppageTime: ep.defaultStoppageTime ?? undefined,
-    paceMode: (ep.paceMode as "pace" | "time" | "normalized") ?? undefined,
-    targetTimeSeconds: ep.targetTimeSeconds ?? undefined,
-    targetIncludesStoppages: ep.targetIncludesStoppages ?? undefined,
-    pacingStrategy: (ep.pacingStrategy as "flat" | "linear") ?? "flat",
-    pacingLinearPercent: ep.pacingLinearPercent ?? undefined,
-  };
+    const ep = editingPlan.value;
+    if (!ep) return null;
+    return {
+        id: ep.id,
+        name: ep.name,
+        pace: ep.pace ?? undefined,
+        paceUnit: ep.paceUnit,
+        defaultStoppageTime: ep.defaultStoppageTime ?? undefined,
+        paceMode: (ep.paceMode as "pace" | "time" | "normalized") ?? undefined,
+        targetTimeSeconds: ep.targetTimeSeconds ?? undefined,
+        targetIncludesStoppages: ep.targetIncludesStoppages ?? undefined,
+        pacingStrategy: (ep.pacingStrategy as "flat" | "linear") ?? "flat",
+        pacingLinearPercent: ep.pacingLinearPercent ?? undefined,
+    };
 });
 
 // Store the course and waypoints data in computed properties
@@ -361,270 +366,274 @@ const course = computed(() => courseData.value?.course);
 // logic (plan loading) runs before the previous computed declarations
 const mode = ref<"member" | "public">("member");
 const capabilities = ref({
-  canEditCourse: false,
-  canDeleteCourse: false,
-  canTogglePublic: false,
-  canToggleShare: false,
-  canManagePlans: false,
-  canViewPlans: false,
-  canManageActivities: false,
-  canViewActivities: false,
-  canEditWaypoints: false,
-  canMutateNotes: false,
-  canClone: false,
-  canDownloadOriginal: false,
-  canSeeRawFileName: false,
+    canEditCourse: false,
+    canDeleteCourse: false,
+    canTogglePublic: false,
+    canToggleShare: false,
+    canManagePlans: false,
+    canViewPlans: false,
+    canManageActivities: false,
+    canViewActivities: false,
+    canEditWaypoints: false,
+    canMutateNotes: false,
+    canClone: false,
+    canDownloadOriginal: false,
+    canSeeRawFileName: false,
 });
 // Keep these derived from courseData reactively
 watchEffect(() => {
-  // Safe guards: only update when response object present
-  if (courseData.value?.mode === "public") {
-    mode.value = "public";
-  } else {
-    mode.value = "member";
-  }
-  if (courseData.value?.capabilities) {
-    capabilities.value = courseData.value
-      .capabilities as typeof capabilities.value;
-  }
+    // Safe guards: only update when response object present
+    if (courseData.value?.mode === "public") {
+        mode.value = "public";
+    } else {
+        mode.value = "member";
+    }
+    if (courseData.value?.capabilities) {
+        capabilities.value = courseData.value
+            .capabilities as typeof capabilities.value;
+    }
 });
 const waypoints = computed<Waypoint[]>(() => {
-  const w = (course.value as { waypoints?: unknown })?.waypoints;
-  return Array.isArray(w) ? (w as Waypoint[]) : [];
+    const w = (course.value as { waypoints?: unknown })?.waypoints;
+    return Array.isArray(w) ? (w as Waypoint[]) : [];
 });
 const currentPlan = computed(() =>
-  currentPlanId.value
-    ? plans.value.find((p) => p.id === currentPlanId.value) ||
-      publicSharedPlan.value
-    : null,
+    currentPlanId.value
+        ? plans.value.find((p) => p.id === currentPlanId.value) ||
+          publicSharedPlan.value
+        : null,
 );
 const currentActivitySummary = computed<CourseActivitySummary | null>(() =>
-  currentActivityId.value
-    ? activities.value.find((activity) => activity.id === currentActivityId.value) ||
-      null
-    : null,
+    currentActivityId.value
+        ? activities.value.find(
+              (activity) => activity.id === currentActivityId.value,
+          ) || null
+        : null,
 );
 const currentActivity = computed<CourseActivityDetail | null>(
-  () => currentActivityDetail.value,
+    () => currentActivityDetail.value,
 );
 const currentActivityInfo = computed<
-  CourseActivitySummary | CourseActivityDetail | null
+    CourseActivitySummary | CourseActivityDetail | null
 >(() => currentActivityDetail.value ?? currentActivitySummary.value);
 
 watch(currentPlan, (plan) => {
-  if (!plan) {
-    paceExplanationModalOpen.value = false;
-  }
+    if (!plan) {
+        paceExplanationModalOpen.value = false;
+    }
 });
 
 const activityPlanDetail = ref<CourseActivityPlanDetail | null>(null);
 const activityPlanDetailPending = ref(false);
 
 const distanceUnit = computed<DistanceUnit>(() =>
-  userSettingsStore.getDistanceUnitForCourse(
-    (course.value as unknown as { defaultDistanceUnit?: DistanceUnit }) ||
-      undefined,
-  ),
+    userSettingsStore.getDistanceUnitForCourse(
+        (course.value as unknown as { defaultDistanceUnit?: DistanceUnit }) ||
+            undefined,
+    ),
 );
 
 const elevationUnit = computed<"meters" | "feet">(() =>
-  userSettingsStore.getElevationUnitForCourse(
-    (course.value as unknown as { defaultElevationUnit?: "meters" | "feet" }) ||
-      undefined,
-  ),
+    userSettingsStore.getElevationUnitForCourse(
+        (course.value as unknown as {
+            defaultElevationUnit?: "meters" | "feet";
+        }) || undefined,
+    ),
 );
 
 const smoothingConfig = computed(() =>
-  normalizeCourseAnalysisSettings(course.value?.courseSettings ?? null),
+    normalizeCourseAnalysisSettings(course.value?.courseSettings ?? null),
 );
 
 watchEffect(() => {
-  if (mode.value !== "member") {
-    currentActivityId.value = null;
-    activitySelectionInitialized.value = false;
-    activityPlanDetail.value = null;
-    return;
-  }
-
-  const availableActivities = activities.value;
-  if (!availableActivities.length) {
-    currentActivityId.value = null;
-    activitySelectionInitialized.value = false;
-    activityPlanDetail.value = null;
-    if (route.query.activity) {
-      replaceCourseSelectionQuery({ activityParam: null });
-    }
-    return;
-  }
-
-  const activityIdFromUrl = route.query.activity as string | undefined;
-  if (!activityIdFromUrl) {
-    currentActivityId.value = null;
-    activitySelectionInitialized.value = true;
-    replaceCourseSelectionQuery({
-      activityParam: NO_ACTIVITY_QUERY_VALUE,
-    });
-    return;
-  }
-
-  if (activityIdFromUrl === NO_ACTIVITY_QUERY_VALUE) {
-    currentActivityId.value = null;
-    activitySelectionInitialized.value = true;
-    return;
-  }
-
-  if (activityIdFromUrl) {
-    if (
-      availableActivities.some((activity) => activity.id === activityIdFromUrl)
-    ) {
-      currentActivityId.value = activityIdFromUrl;
-      activitySelectionInitialized.value = true;
-      return;
+    if (mode.value !== "member") {
+        currentActivityId.value = null;
+        activitySelectionInitialized.value = false;
+        activityPlanDetail.value = null;
+        return;
     }
 
-    currentActivityId.value = null;
-    activitySelectionInitialized.value = true;
-    replaceCourseSelectionQuery({
-      activityParam: NO_ACTIVITY_QUERY_VALUE,
-    });
-  }
+    const availableActivities = activities.value;
+    if (!availableActivities.length) {
+        currentActivityId.value = null;
+        activitySelectionInitialized.value = false;
+        activityPlanDetail.value = null;
+        if (route.query.activity) {
+            replaceCourseSelectionQuery({ activityParam: null });
+        }
+        return;
+    }
+
+    const activityIdFromUrl = route.query.activity as string | undefined;
+    if (!activityIdFromUrl) {
+        currentActivityId.value = null;
+        activitySelectionInitialized.value = true;
+        replaceCourseSelectionQuery({
+            activityParam: NO_ACTIVITY_QUERY_VALUE,
+        });
+        return;
+    }
+
+    if (activityIdFromUrl === NO_ACTIVITY_QUERY_VALUE) {
+        currentActivityId.value = null;
+        activitySelectionInitialized.value = true;
+        return;
+    }
+
+    if (activityIdFromUrl) {
+        if (
+            availableActivities.some(
+                (activity) => activity.id === activityIdFromUrl,
+            )
+        ) {
+            currentActivityId.value = activityIdFromUrl;
+            activitySelectionInitialized.value = true;
+            return;
+        }
+
+        currentActivityId.value = null;
+        activitySelectionInitialized.value = true;
+        replaceCourseSelectionQuery({
+            activityParam: NO_ACTIVITY_QUERY_VALUE,
+        });
+    }
 });
 
 let currentActivityDetailRequestId = 0;
 
 async function refreshCurrentActivityDetail() {
-  const requestId = ++currentActivityDetailRequestId;
-
-  if (
-    mode.value !== "member" ||
-    !currentActivityId.value ||
-    !capabilities.value.canViewActivities
-  ) {
-    currentActivityDetail.value = null;
-    currentActivityDetailPending.value = false;
-    return;
-  }
-
-  currentActivityDetailPending.value = true;
-
-  try {
-    const requestHeaders = import.meta.server
-      ? useRequestHeaders(["cookie", "authorization"])
-      : undefined;
-    const response = await $fetch<CourseActivityDetailResponse>(
-      `/api/courses/${courseId}/activities/${currentActivityId.value}`,
-      {
-        headers: requestHeaders,
-      },
-    );
+    const requestId = ++currentActivityDetailRequestId;
 
     if (
-      requestId !== currentActivityDetailRequestId ||
-      response.activity.id !== currentActivityId.value
+        mode.value !== "member" ||
+        !currentActivityId.value ||
+        !capabilities.value.canViewActivities
     ) {
-      return;
+        currentActivityDetail.value = null;
+        currentActivityDetailPending.value = false;
+        return;
     }
 
-    currentActivityDetail.value = response.activity;
-  } catch (error) {
-    if (requestId === currentActivityDetailRequestId) {
-      console.error("Failed to load activity detail", error);
-      currentActivityDetail.value = null;
+    currentActivityDetailPending.value = true;
+
+    try {
+        const requestHeaders = import.meta.server
+            ? useRequestHeaders(["cookie", "authorization"])
+            : undefined;
+        const response = await $fetch<CourseActivityDetailResponse>(
+            `/api/courses/${courseId}/activities/${currentActivityId.value}`,
+            {
+                headers: requestHeaders,
+            },
+        );
+
+        if (
+            requestId !== currentActivityDetailRequestId ||
+            response.activity.id !== currentActivityId.value
+        ) {
+            return;
+        }
+
+        currentActivityDetail.value = response.activity;
+    } catch (error) {
+        if (requestId === currentActivityDetailRequestId) {
+            console.error("Failed to load activity detail", error);
+            currentActivityDetail.value = null;
+        }
+    } finally {
+        if (requestId === currentActivityDetailRequestId) {
+            currentActivityDetailPending.value = false;
+        }
     }
-  } finally {
-    if (requestId === currentActivityDetailRequestId) {
-      currentActivityDetailPending.value = false;
-    }
-  }
 }
 
 watch(
-  [
-    () => mode.value,
-    () => currentActivityId.value,
-    () => capabilities.value.canViewActivities,
-  ],
-  () => {
-    refreshCurrentActivityDetail();
-  },
-  { immediate: true },
+    [
+        () => mode.value,
+        () => currentActivityId.value,
+        () => capabilities.value.canViewActivities,
+    ],
+    () => {
+        refreshCurrentActivityDetail();
+    },
+    { immediate: true },
 );
 
 async function refreshActivityComparisons() {
-  if (
-    mode.value !== "member" ||
-    !currentActivityId.value ||
-    !capabilities.value.canViewActivities ||
-    !currentPlanId.value
-  ) {
-    activityPlanDetail.value = null;
-    return;
-  }
+    if (
+        mode.value !== "member" ||
+        !currentActivityId.value ||
+        !capabilities.value.canViewActivities ||
+        !currentPlanId.value
+    ) {
+        activityPlanDetail.value = null;
+        return;
+    }
 
-  activityPlanDetailPending.value = true;
-  try {
-    const requestHeaders = import.meta.server
-      ? useRequestHeaders(["cookie", "authorization"])
-      : undefined;
-    const activityCompareUrl: string = `/api/courses/${courseId}/activities/${currentActivityId.value}/compare`;
-    const activityCompareFetch = $fetch as unknown as (
-      url: string,
-      options?: {
-        headers?: HeadersInit;
-        query?: Record<string, string | number>;
-      },
-    ) => Promise<unknown>;
-    const response = (await activityCompareFetch(activityCompareUrl, {
-      headers: requestHeaders,
-      query: {
-        planId: currentPlanId.value,
-        distanceUnit: distanceUnit.value,
-        gradeWindowMeters: smoothingConfig.value.gradeWindowMeters,
-        sampleStepMeters: smoothingConfig.value.sampleStepMeters,
-      },
-    })) as { detail: CourseActivityPlanDetail };
-    activityPlanDetail.value = response.detail;
-  } catch (error) {
-    console.error("Failed to load activity plan detail", error);
-    activityPlanDetail.value = null;
-  } finally {
-    activityPlanDetailPending.value = false;
-  }
+    activityPlanDetailPending.value = true;
+    try {
+        const requestHeaders = import.meta.server
+            ? useRequestHeaders(["cookie", "authorization"])
+            : undefined;
+        const activityCompareUrl: string = `/api/courses/${courseId}/activities/${currentActivityId.value}/compare`;
+        const activityCompareFetch = $fetch as unknown as (
+            url: string,
+            options?: {
+                headers?: HeadersInit;
+                query?: Record<string, string | number>;
+            },
+        ) => Promise<unknown>;
+        const response = (await activityCompareFetch(activityCompareUrl, {
+            headers: requestHeaders,
+            query: {
+                planId: currentPlanId.value,
+                distanceUnit: distanceUnit.value,
+                gradeWindowMeters: smoothingConfig.value.gradeWindowMeters,
+                sampleStepMeters: smoothingConfig.value.sampleStepMeters,
+            },
+        })) as { detail: CourseActivityPlanDetail };
+        activityPlanDetail.value = response.detail;
+    } catch (error) {
+        console.error("Failed to load activity plan detail", error);
+        activityPlanDetail.value = null;
+    } finally {
+        activityPlanDetailPending.value = false;
+    }
 }
 
 watch(
-  [
-    () => mode.value,
-    () => currentActivityId.value,
-    () => currentPlanId.value,
-    () => distanceUnit.value,
-    () => smoothingConfig.value.gradeWindowMeters,
-    () => smoothingConfig.value.sampleStepMeters,
-    () => plans.value.length,
-  ],
-  () => {
-    refreshActivityComparisons();
-  },
-  { immediate: true },
+    [
+        () => mode.value,
+        () => currentActivityId.value,
+        () => currentPlanId.value,
+        () => distanceUnit.value,
+        () => smoothingConfig.value.gradeWindowMeters,
+        () => smoothingConfig.value.sampleStepMeters,
+        () => plans.value.length,
+    ],
+    () => {
+        refreshActivityComparisons();
+    },
+    { immediate: true },
 );
 
 // Set the page title dynamically; always discourage SEO indexing for any public (shared) view
 useHead({
-  title: computed(() => {
-    const base = course.value?.name || "Course";
-    if (mode.value === "public" && currentPlan.value) {
-      return `${base} — Plan: ${currentPlan.value.name}`;
-    }
-    return base;
-  }),
-  meta: computed(() => {
-    // Always add noindex,nofollow for shared (public mode) pages
-    const tags: { name: string; content: string }[] = [];
-    if (mode.value === "public") {
-      tags.push({ name: "robots", content: "noindex,nofollow" });
-    }
-    return tags;
-  }),
+    title: computed(() => {
+        const base = course.value?.name || "Course";
+        if (mode.value === "public" && currentPlan.value) {
+            return `${base} — Plan: ${currentPlan.value.name}`;
+        }
+        return base;
+    }),
+    meta: computed(() => {
+        // Always add noindex,nofollow for shared (public mode) pages
+        const tags: { name: string; content: string }[] = [];
+        if (mode.value === "public") {
+            tags.push({ name: "robots", content: "noindex,nofollow" });
+        }
+        return tags;
+    }),
 });
 
 // Course edit modal state
@@ -633,506 +642,527 @@ const courseInfoModalOpen = ref(false);
 const paceExplanationModalOpen = ref(false);
 
 async function toggleCoursePublic() {
-  if (!course.value) return;
-  const originalPublic = course.value.public;
-  const nextPublic = !originalPublic;
+    if (!course.value) return;
+    const originalPublic = course.value.public;
+    const nextPublic = !originalPublic;
 
-  // Optimistic UI update so the menu item flips immediately
-  // Preserve existing waypoints during optimistic update
-  const existingWaypoints = (() => {
-    const c = course.value as unknown;
-    if (
-      c &&
-      typeof c === "object" &&
-      "waypoints" in (c as Record<string, unknown>)
-    ) {
-      const w = (c as { waypoints?: unknown }).waypoints;
-      return Array.isArray(w) ? (w as Waypoint[]) : [];
-    }
-    return [] as Waypoint[];
-  })();
-  courseData.value = {
-    mode: courseData.value?.mode || mode.value,
-    capabilities: courseData.value?.capabilities || capabilities.value,
-    course: {
-      ...(course.value as SelectCourse),
-      public: nextPublic,
-      ...(existingWaypoints ? { waypoints: existingWaypoints } : {}),
-    },
-  };
-
-  try {
-    const response = await $fetch<{ course: SelectCourse }>(
-      `/api/courses/${course.value.id}`,
-      {
-        method: "PUT",
-        body: {
-          public: nextPublic,
-        },
-      },
-    );
-    // Replace with authoritative server response (includes role)
-    // Server response omits waypoints; merge them back in to avoid UI flicker
-    courseData.value = {
-      mode: courseData.value?.mode || mode.value,
-      capabilities: courseData.value?.capabilities || capabilities.value,
-      course: {
-        ...response.course,
-        ...((() => {
-          const c = course.value as unknown;
-          if (
+    // Optimistic UI update so the menu item flips immediately
+    // Preserve existing waypoints during optimistic update
+    const existingWaypoints = (() => {
+        const c = course.value as unknown;
+        if (
             c &&
             typeof c === "object" &&
             "waypoints" in (c as Record<string, unknown>)
-          ) {
+        ) {
             const w = (c as { waypoints?: unknown }).waypoints;
-            return Array.isArray(w) && w.length > 0 ? w : null;
-          }
-          return null;
-        })()
-          ? {
-              waypoints: (() => {
-                const c = course.value as unknown;
-                if (
-                  c &&
-                  typeof c === "object" &&
-                  "waypoints" in (c as Record<string, unknown>)
-                ) {
-                  const w = (c as { waypoints?: unknown }).waypoints;
-                  return Array.isArray(w) ? (w as Waypoint[]) : [];
-                }
-                return [];
-              })(),
-            }
-          : {}),
-      },
-    };
-  } catch (err) {
-    // Revert on failure
+            return Array.isArray(w) ? (w as Waypoint[]) : [];
+        }
+        return [] as Waypoint[];
+    })();
     courseData.value = {
-      mode: courseData.value?.mode || mode.value,
-      capabilities: courseData.value?.capabilities || capabilities.value,
-      course: {
-        ...(course.value as SelectCourse),
-        public: originalPublic,
-      },
+        mode: courseData.value?.mode || mode.value,
+        capabilities: courseData.value?.capabilities || capabilities.value,
+        course: {
+            ...(course.value as SelectCourse),
+            public: nextPublic,
+            ...(existingWaypoints ? { waypoints: existingWaypoints } : {}),
+        },
     };
-    console.error("Failed to toggle course public flag:", err);
-    alert("Failed to update course visibility. Please try again.");
-  }
+
+    try {
+        const response = await $fetch<{ course: SelectCourse }>(
+            `/api/courses/${course.value.id}`,
+            {
+                method: "PUT",
+                body: {
+                    public: nextPublic,
+                },
+            },
+        );
+        // Replace with authoritative server response (includes role)
+        // Server response omits waypoints; merge them back in to avoid UI flicker
+        courseData.value = {
+            mode: courseData.value?.mode || mode.value,
+            capabilities: courseData.value?.capabilities || capabilities.value,
+            course: {
+                ...response.course,
+                ...((() => {
+                    const c = course.value as unknown;
+                    if (
+                        c &&
+                        typeof c === "object" &&
+                        "waypoints" in (c as Record<string, unknown>)
+                    ) {
+                        const w = (c as { waypoints?: unknown }).waypoints;
+                        return Array.isArray(w) && w.length > 0 ? w : null;
+                    }
+                    return null;
+                })()
+                    ? {
+                          waypoints: (() => {
+                              const c = course.value as unknown;
+                              if (
+                                  c &&
+                                  typeof c === "object" &&
+                                  "waypoints" in (c as Record<string, unknown>)
+                              ) {
+                                  const w = (c as { waypoints?: unknown })
+                                      .waypoints;
+                                  return Array.isArray(w)
+                                      ? (w as Waypoint[])
+                                      : [];
+                              }
+                              return [];
+                          })(),
+                      }
+                    : {}),
+            },
+        };
+    } catch (err) {
+        // Revert on failure
+        courseData.value = {
+            mode: courseData.value?.mode || mode.value,
+            capabilities: courseData.value?.capabilities || capabilities.value,
+            course: {
+                ...(course.value as SelectCourse),
+                public: originalPublic,
+            },
+        };
+        console.error("Failed to toggle course public flag:", err);
+        alert("Failed to update course visibility. Please try again.");
+    }
 }
 
 async function toggleCourseShare() {
-  if (!course.value) return;
-  const originalShare = !!course.value.shareEnabled;
-  const nextShare = !originalShare;
+    if (!course.value) return;
+    const originalShare = !!course.value.shareEnabled;
+    const nextShare = !originalShare;
 
-  // If disabling and any plans are currently shared, warn the user
-  if (!nextShare) {
-    const sharedPlans = (plansData.value?.plans || []).filter(
-      (p) => p.shareEnabled,
-    );
-    if (sharedPlans.length > 0) {
-      const proceed = confirm(
-        "Disabling course sharing will make any plan share links unviewable. Continue?",
-      );
-      if (!proceed) {
-        return;
-      }
+    // If disabling and any plans are currently shared, warn the user
+    if (!nextShare) {
+        const sharedPlans = (plansData.value?.plans || []).filter(
+            (p) => p.shareEnabled,
+        );
+        if (sharedPlans.length > 0) {
+            const proceed = confirm(
+                "Disabling course sharing will make any plan share links unviewable. Continue?",
+            );
+            if (!proceed) {
+                return;
+            }
+        }
     }
-  }
 
-  // Optimistic update
-  // Preserve existing waypoints during optimistic share toggle
-  const existingWaypointsShare = (() => {
-    const c = course.value as unknown;
-    if (
-      c &&
-      typeof c === "object" &&
-      "waypoints" in (c as Record<string, unknown>)
-    ) {
-      const w = (c as { waypoints?: unknown }).waypoints;
-      return Array.isArray(w) ? (w as Waypoint[]) : [];
-    }
-    return [] as Waypoint[];
-  })();
-  courseData.value = {
-    mode: courseData.value?.mode || mode.value,
-    capabilities: courseData.value?.capabilities || capabilities.value,
-    course: {
-      ...(course.value as SelectCourse),
-      shareEnabled: nextShare,
-      ...(existingWaypointsShare ? { waypoints: existingWaypointsShare } : {}),
-    },
-  };
-
-  try {
-    const response = await $fetch<{ course: SelectCourse }>(
-      `/api/courses/${course.value.id}`,
-      {
-        method: "PUT",
-        body: {
-          shareEnabled: nextShare,
-        },
-      },
-    );
-    // Merge waypoints back after server response
-    courseData.value = {
-      mode: courseData.value?.mode || mode.value,
-      capabilities: courseData.value?.capabilities || capabilities.value,
-      course: {
-        ...response.course,
-        ...((() => {
-          const c = course.value as unknown;
-          if (
+    // Optimistic update
+    // Preserve existing waypoints during optimistic share toggle
+    const existingWaypointsShare = (() => {
+        const c = course.value as unknown;
+        if (
             c &&
             typeof c === "object" &&
             "waypoints" in (c as Record<string, unknown>)
-          ) {
+        ) {
             const w = (c as { waypoints?: unknown }).waypoints;
-            return Array.isArray(w) && w.length > 0 ? w : null;
-          }
-          return null;
-        })()
-          ? {
-              waypoints: (() => {
-                const c = course.value as unknown;
-                if (
-                  c &&
-                  typeof c === "object" &&
-                  "waypoints" in (c as Record<string, unknown>)
-                ) {
-                  const w = (c as { waypoints?: unknown }).waypoints;
-                  return Array.isArray(w) ? (w as Waypoint[]) : [];
-                }
-                return [];
-              })(),
-            }
-          : {}),
-      },
-    };
-  } catch (err) {
-    // Revert
+            return Array.isArray(w) ? (w as Waypoint[]) : [];
+        }
+        return [] as Waypoint[];
+    })();
     courseData.value = {
-      mode: courseData.value?.mode || mode.value,
-      capabilities: courseData.value?.capabilities || capabilities.value,
-      course: {
-        ...(course.value as SelectCourse),
-        shareEnabled: originalShare,
-      },
+        mode: courseData.value?.mode || mode.value,
+        capabilities: courseData.value?.capabilities || capabilities.value,
+        course: {
+            ...(course.value as SelectCourse),
+            shareEnabled: nextShare,
+            ...(existingWaypointsShare
+                ? { waypoints: existingWaypointsShare }
+                : {}),
+        },
     };
-    console.error("Failed to toggle course share link:", err);
-    alert("Failed to update sharing status. Please try again.");
-  }
+
+    try {
+        const response = await $fetch<{ course: SelectCourse }>(
+            `/api/courses/${course.value.id}`,
+            {
+                method: "PUT",
+                body: {
+                    shareEnabled: nextShare,
+                },
+            },
+        );
+        // Merge waypoints back after server response
+        courseData.value = {
+            mode: courseData.value?.mode || mode.value,
+            capabilities: courseData.value?.capabilities || capabilities.value,
+            course: {
+                ...response.course,
+                ...((() => {
+                    const c = course.value as unknown;
+                    if (
+                        c &&
+                        typeof c === "object" &&
+                        "waypoints" in (c as Record<string, unknown>)
+                    ) {
+                        const w = (c as { waypoints?: unknown }).waypoints;
+                        return Array.isArray(w) && w.length > 0 ? w : null;
+                    }
+                    return null;
+                })()
+                    ? {
+                          waypoints: (() => {
+                              const c = course.value as unknown;
+                              if (
+                                  c &&
+                                  typeof c === "object" &&
+                                  "waypoints" in (c as Record<string, unknown>)
+                              ) {
+                                  const w = (c as { waypoints?: unknown })
+                                      .waypoints;
+                                  return Array.isArray(w)
+                                      ? (w as Waypoint[])
+                                      : [];
+                              }
+                              return [];
+                          })(),
+                      }
+                    : {}),
+            },
+        };
+    } catch (err) {
+        // Revert
+        courseData.value = {
+            mode: courseData.value?.mode || mode.value,
+            capabilities: courseData.value?.capabilities || capabilities.value,
+            course: {
+                ...(course.value as SelectCourse),
+                shareEnabled: originalShare,
+            },
+        };
+        console.error("Failed to toggle course share link:", err);
+        alert("Failed to update sharing status. Please try again.");
+    }
 }
 
 function handleCopyShareLink() {
-  if (!course.value?.id || !course.value?.shareEnabled) return;
-  const shareUrl = `${window.location.origin}/courses/${course.value.id}`;
-  try {
-    if (navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(shareUrl).then(
-        () => {
-          // Optional: toast could be added here
-        },
-        () => {
-          window.alert("Share URL: " + shareUrl);
-        },
-      );
-    } else {
-      window.alert("Share URL: " + shareUrl);
+    if (!course.value?.id || !course.value?.shareEnabled) return;
+    const shareUrl = `${window.location.origin}/courses/${course.value.id}`;
+    try {
+        if (navigator?.clipboard?.writeText) {
+            navigator.clipboard.writeText(shareUrl).then(
+                () => {
+                    // Optional: toast could be added here
+                },
+                () => {
+                    window.alert("Share URL: " + shareUrl);
+                },
+            );
+        } else {
+            window.alert("Share URL: " + shareUrl);
+        }
+    } catch {
+        window.alert("Share URL: " + shareUrl);
     }
-  } catch {
-    window.alert("Share URL: " + shareUrl);
-  }
 }
 
 // Clone (copy) the current course (used when user is non-owner)
 async function cloneCourse() {
-  if (!course.value) return;
-  try {
-    const resp = await $fetch<{ course: SelectCourse & { role?: string } }>(
-      `/api/courses/${course.value.id}/clone`,
-      { method: "POST" },
-    );
-    if (resp?.course?.id) {
-      navigateTo(`/courses/${resp.course.id}`);
+    if (!course.value) return;
+    try {
+        const resp = await $fetch<{ course: SelectCourse & { role?: string } }>(
+            `/api/courses/${course.value.id}/clone`,
+            { method: "POST" },
+        );
+        if (resp?.course?.id) {
+            navigateTo(`/courses/${resp.course.id}`);
+        }
+    } catch (e) {
+        console.error(e);
+        if (globalThis.alert) {
+            globalThis.alert("Failed to copy course");
+        }
     }
-  } catch (e) {
-    console.error(e);
-    if (globalThis.alert) {
-      globalThis.alert("Failed to copy course");
-    }
-  }
 }
 async function toggleCurrentPlanShare() {
-  if (!currentPlan.value) return;
-  const targetPlanId = currentPlan.value.id;
-  const original = !!currentPlan.value.shareEnabled;
-  const next = !original;
+    if (!currentPlan.value) return;
+    const targetPlanId = currentPlan.value.id;
+    const original = !!currentPlan.value.shareEnabled;
+    const next = !original;
 
-  // If enabling plan share and course share is disabled, warn and enable course share first
-  if (next && course.value && !course.value.shareEnabled) {
-    const proceed = confirm(
-      "Enabling plan sharing will also enable course sharing so the plan can be viewed. Continue?",
-    );
-    if (!proceed) {
-      return;
-    }
+    // If enabling plan share and course share is disabled, warn and enable course share first
+    if (next && course.value && !course.value.shareEnabled) {
+        const proceed = confirm(
+            "Enabling plan sharing will also enable course sharing so the plan can be viewed. Continue?",
+        );
+        if (!proceed) {
+            return;
+        }
 
-    // Optimistically enable course sharing
-    const existingWaypointsShare = (() => {
-      const c = course.value as unknown;
-      if (
-        c &&
-        typeof c === "object" &&
-        "waypoints" in (c as Record<string, unknown>)
-      ) {
-        const w = (c as { waypoints?: unknown }).waypoints;
-        return Array.isArray(w) ? (w as Waypoint[]) : [];
-      }
-      return [] as Waypoint[];
-    })();
-    courseData.value = {
-      mode: courseData.value?.mode || mode.value,
-      capabilities: courseData.value?.capabilities || capabilities.value,
-      course: {
-        ...(course.value as SelectCourse),
-        shareEnabled: true,
-        ...(existingWaypointsShare
-          ? { waypoints: existingWaypointsShare }
-          : {}),
-      },
-    };
-    try {
-      const response = await $fetch<{ course: SelectCourse }>(
-        `/api/courses/${course.value.id}`,
-        {
-          method: "PUT",
-          body: { shareEnabled: true },
-        },
-      );
-      // Merge waypoints back after server response
-      courseData.value = {
-        mode: courseData.value?.mode || mode.value,
-        capabilities: courseData.value?.capabilities || capabilities.value,
-        course: {
-          ...response.course,
-          ...((() => {
+        // Optimistically enable course sharing
+        const existingWaypointsShare = (() => {
             const c = course.value as unknown;
             if (
-              c &&
-              typeof c === "object" &&
-              "waypoints" in (c as Record<string, unknown>)
+                c &&
+                typeof c === "object" &&
+                "waypoints" in (c as Record<string, unknown>)
             ) {
-              const w = (c as { waypoints?: unknown }).waypoints;
-              return Array.isArray(w) && w.length > 0 ? w : null;
+                const w = (c as { waypoints?: unknown }).waypoints;
+                return Array.isArray(w) ? (w as Waypoint[]) : [];
             }
-            return null;
-          })()
-            ? {
-                waypoints: (() => {
-                  const c = course.value as unknown;
-                  if (
-                    c &&
-                    typeof c === "object" &&
-                    "waypoints" in (c as Record<string, unknown>)
-                  ) {
-                    const w = (c as { waypoints?: unknown }).waypoints;
-                    return Array.isArray(w) ? (w as Waypoint[]) : [];
-                  }
-                  return [];
-                })(),
-              }
-            : {}),
-        },
-      };
-    } catch (e) {
-      // Revert on failure
-      courseData.value = {
-        mode: courseData.value?.mode || mode.value,
-        capabilities: courseData.value?.capabilities || capabilities.value,
-        course: {
-          ...(course.value as SelectCourse),
-          shareEnabled: false,
-        },
-      };
-      console.error(
-        "Failed to enable course share before enabling plan share",
-        e,
-      );
-      alert(
-        "Failed to enable course sharing required to share a plan. Please try again.",
-      );
-      return;
-    }
-  }
-
-  // Optimistic update for plan share toggle
-  if (plansData.value?.plans) {
-    const idx = plansData.value.plans.findIndex((p) => p.id === targetPlanId);
-    if (idx !== -1) {
-      const updated: SelectPlan = {
-        ...plansData.value.plans[idx]!,
-        shareEnabled: next,
-      };
-      plansData.value.plans[idx] = updated;
-    }
-  }
-  try {
-    const response = await $fetch<{ plan: SelectPlan }>(
-      `/api/plans/${targetPlanId}`,
-      {
-        method: "PUT",
-        body: { shareEnabled: next },
-      },
-    );
-    if (plansData.value?.plans) {
-      const idx = plansData.value.plans.findIndex((p) => p.id === targetPlanId);
-      if (idx !== -1) {
-        plansData.value.plans[idx] = response.plan;
-      }
-    }
-  } catch (e) {
-    // Revert
-    if (plansData.value?.plans) {
-      const idx = plansData.value.plans.findIndex((p) => p.id === targetPlanId);
-      if (idx !== -1) {
-        const reverted: SelectPlan = {
-          ...plansData.value.plans[idx]!,
-          shareEnabled: original,
+            return [] as Waypoint[];
+        })();
+        courseData.value = {
+            mode: courseData.value?.mode || mode.value,
+            capabilities: courseData.value?.capabilities || capabilities.value,
+            course: {
+                ...(course.value as SelectCourse),
+                shareEnabled: true,
+                ...(existingWaypointsShare
+                    ? { waypoints: existingWaypointsShare }
+                    : {}),
+            },
         };
-        plansData.value.plans[idx] = reverted;
-      }
+        try {
+            const response = await $fetch<{ course: SelectCourse }>(
+                `/api/courses/${course.value.id}`,
+                {
+                    method: "PUT",
+                    body: { shareEnabled: true },
+                },
+            );
+            // Merge waypoints back after server response
+            courseData.value = {
+                mode: courseData.value?.mode || mode.value,
+                capabilities:
+                    courseData.value?.capabilities || capabilities.value,
+                course: {
+                    ...response.course,
+                    ...((() => {
+                        const c = course.value as unknown;
+                        if (
+                            c &&
+                            typeof c === "object" &&
+                            "waypoints" in (c as Record<string, unknown>)
+                        ) {
+                            const w = (c as { waypoints?: unknown }).waypoints;
+                            return Array.isArray(w) && w.length > 0 ? w : null;
+                        }
+                        return null;
+                    })()
+                        ? {
+                              waypoints: (() => {
+                                  const c = course.value as unknown;
+                                  if (
+                                      c &&
+                                      typeof c === "object" &&
+                                      "waypoints" in
+                                          (c as Record<string, unknown>)
+                                  ) {
+                                      const w = (c as { waypoints?: unknown })
+                                          .waypoints;
+                                      return Array.isArray(w)
+                                          ? (w as Waypoint[])
+                                          : [];
+                                  }
+                                  return [];
+                              })(),
+                          }
+                        : {}),
+                },
+            };
+        } catch (e) {
+            // Revert on failure
+            courseData.value = {
+                mode: courseData.value?.mode || mode.value,
+                capabilities:
+                    courseData.value?.capabilities || capabilities.value,
+                course: {
+                    ...(course.value as SelectCourse),
+                    shareEnabled: false,
+                },
+            };
+            console.error(
+                "Failed to enable course share before enabling plan share",
+                e,
+            );
+            alert(
+                "Failed to enable course sharing required to share a plan. Please try again.",
+            );
+            return;
+        }
     }
-    console.error("Failed to toggle plan shareEnabled", e);
-    alert("Failed to update plan sharing status.");
-  }
+
+    // Optimistic update for plan share toggle
+    if (plansData.value?.plans) {
+        const idx = plansData.value.plans.findIndex(
+            (p) => p.id === targetPlanId,
+        );
+        if (idx !== -1) {
+            const updated: SelectPlan = {
+                ...plansData.value.plans[idx]!,
+                shareEnabled: next,
+            };
+            plansData.value.plans[idx] = updated;
+        }
+    }
+    try {
+        const response = await $fetch<{ plan: SelectPlan }>(
+            `/api/plans/${targetPlanId}`,
+            {
+                method: "PUT",
+                body: { shareEnabled: next },
+            },
+        );
+        if (plansData.value?.plans) {
+            const idx = plansData.value.plans.findIndex(
+                (p) => p.id === targetPlanId,
+            );
+            if (idx !== -1) {
+                plansData.value.plans[idx] = response.plan;
+            }
+        }
+    } catch (e) {
+        // Revert
+        if (plansData.value?.plans) {
+            const idx = plansData.value.plans.findIndex(
+                (p) => p.id === targetPlanId,
+            );
+            if (idx !== -1) {
+                const reverted: SelectPlan = {
+                    ...plansData.value.plans[idx]!,
+                    shareEnabled: original,
+                };
+                plansData.value.plans[idx] = reverted;
+            }
+        }
+        console.error("Failed to toggle plan shareEnabled", e);
+        alert("Failed to update plan sharing status.");
+    }
 }
 function copyPlanShareLink() {
-  if (!currentPlan.value?.shareEnabled || !course.value?.id) return;
-  const url = `${window.location.origin}/courses/${course.value.id}?plan=${currentPlan.value.id}`;
-  if (navigator?.clipboard?.writeText) {
-    navigator.clipboard.writeText(url).catch(() => alert(url));
-  } else {
-    alert(url);
-  }
+    if (!currentPlan.value?.shareEnabled || !course.value?.id) return;
+    const url = `${window.location.origin}/courses/${course.value.id}?plan=${currentPlan.value.id}`;
+    if (navigator?.clipboard?.writeText) {
+        navigator.clipboard.writeText(url).catch(() => alert(url));
+    } else {
+        alert(url);
+    }
 }
 // Client-only fetch of waypoint notes & stoppage times to avoid SSR 401 issues
 if (import.meta.client && mode.value === "member") {
-  const loadPlanAncillary = async (planId: string | null) => {
-    if (!planId) {
-      waypointNotes.value = [];
-      waypointStoppageTimes.value = [];
-      return;
-    }
-    try {
-      const __ancStart = pageNow();
-      if (isClient && isDev) console.time("Ancillary (notes+stoppage) fetch");
-      const notesStart = pageNow();
-      if (isClient && isDev) console.time("Ancillary: notes fetch");
-      const notesUrl = `/api/courses/${courseId}/plans/${planId}/waypoint-notes`;
-      const notesPromise = $fetch<{ notes: SelectWaypointNote[] }>(
-        notesUrl,
-      ).then((res) => {
-        if (isClient && isDev) {
-          console.timeEnd("Ancillary: notes fetch");
-          pageLog("Ancillary notes response", {
-            ms: pageNow() - notesStart,
-            count: res.notes.length,
-            planId,
-          });
-          // Log detailed network phase timings if available
-          logResourceTiming(notesUrl, "Ancillary notes");
+    const loadPlanAncillary = async (planId: string | null) => {
+        if (!planId) {
+            waypointNotes.value = [];
+            waypointStoppageTimes.value = [];
+            return;
         }
-        return res;
-      });
-      const stopStart = pageNow();
-      if (isClient && isDev) console.time("Ancillary: stoppages fetch");
-      const stoppagesUrl = `/api/courses/${courseId}/plans/${planId}/waypoint-stoppage-times`;
-      const stoppagePromise = $fetch<{
-        stoppageTimes: SelectWaypointStoppageTime[];
-      }>(stoppagesUrl).then((res) => {
-        if (isClient && isDev) {
-          console.timeEnd("Ancillary: stoppages fetch");
-          pageLog("Ancillary stoppages response", {
-            ms: pageNow() - stopStart,
-            count: res.stoppageTimes.length,
-            planId,
-          });
-          // Log detailed network phase timings if available
-          logResourceTiming(stoppagesUrl, "Ancillary stoppages");
+        try {
+            const __ancStart = pageNow();
+            if (isClient && isDev)
+                console.time("Ancillary (notes+stoppage) fetch");
+            const notesStart = pageNow();
+            if (isClient && isDev) console.time("Ancillary: notes fetch");
+            const notesUrl = `/api/courses/${courseId}/plans/${planId}/waypoint-notes`;
+            const notesPromise = $fetch<{ notes: SelectWaypointNote[] }>(
+                notesUrl,
+            ).then((res) => {
+                if (isClient && isDev) {
+                    console.timeEnd("Ancillary: notes fetch");
+                    pageLog("Ancillary notes response", {
+                        ms: pageNow() - notesStart,
+                        count: res.notes.length,
+                        planId,
+                    });
+                    // Log detailed network phase timings if available
+                    logResourceTiming(notesUrl, "Ancillary notes");
+                }
+                return res;
+            });
+            const stopStart = pageNow();
+            if (isClient && isDev) console.time("Ancillary: stoppages fetch");
+            const stoppagesUrl = `/api/courses/${courseId}/plans/${planId}/waypoint-stoppage-times`;
+            const stoppagePromise = $fetch<{
+                stoppageTimes: SelectWaypointStoppageTime[];
+            }>(stoppagesUrl).then((res) => {
+                if (isClient && isDev) {
+                    console.timeEnd("Ancillary: stoppages fetch");
+                    pageLog("Ancillary stoppages response", {
+                        ms: pageNow() - stopStart,
+                        count: res.stoppageTimes.length,
+                        planId,
+                    });
+                    // Log detailed network phase timings if available
+                    logResourceTiming(stoppagesUrl, "Ancillary stoppages");
+                }
+                return res;
+            });
+            const [notesResponse, stoppageTimesResponse] = await Promise.all([
+                notesPromise,
+                stoppagePromise,
+            ]);
+            if (isClient && isDev) {
+                console.timeEnd("Ancillary (notes+stoppage) fetch");
+                pageLog("Ancillary data loaded", {
+                    ms: pageNow() - __ancStart,
+                    notes: notesResponse.notes.length,
+                    stoppageTimes: stoppageTimesResponse.stoppageTimes.length,
+                    planId,
+                });
+            }
+            waypointNotes.value = notesResponse.notes;
+            waypointStoppageTimes.value = stoppageTimesResponse.stoppageTimes;
+        } catch (error) {
+            // Ignore 401 silently (likely hydration/session timing); log others
+            if (
+                !(
+                    error &&
+                    typeof error === "object" &&
+                    "statusCode" in error &&
+                    // runtime narrowing (statusCode validated above)
+                    error.statusCode === 401
+                )
+            ) {
+                console.error("Error fetching waypoint ancillary data", error);
+                if (isClient && isDev) pageLog("Ancillary fetch error", error);
+            }
+            waypointNotes.value = [];
+            waypointStoppageTimes.value = [];
         }
-        return res;
-      });
-      const [notesResponse, stoppageTimesResponse] = await Promise.all([
-        notesPromise,
-        stoppagePromise,
-      ]);
-      if (isClient && isDev) {
-        console.timeEnd("Ancillary (notes+stoppage) fetch");
-        pageLog("Ancillary data loaded", {
-          ms: pageNow() - __ancStart,
-          notes: notesResponse.notes.length,
-          stoppageTimes: stoppageTimesResponse.stoppageTimes.length,
-          planId,
-        });
-      }
-      waypointNotes.value = notesResponse.notes;
-      waypointStoppageTimes.value = stoppageTimesResponse.stoppageTimes;
-    } catch (error) {
-      // Ignore 401 silently (likely hydration/session timing); log others
-      if (
-        !(
-          error &&
-          typeof error === "object" &&
-          "statusCode" in error &&
-          // runtime narrowing (statusCode validated above)
-          error.statusCode === 401
-        )
-      ) {
-        console.error("Error fetching waypoint ancillary data", error);
-        if (isClient && isDev) pageLog("Ancillary fetch error", error);
-      }
-      waypointNotes.value = [];
-      waypointStoppageTimes.value = [];
-    }
-  };
-  watch(
-    () => currentPlanId.value,
-    (pid, oldPid) => {
-      if (isClient && isDev)
-        pageLog("Ancillary watch: currentPlanId changed", {
-          pid,
-          oldPid,
-        });
-      // Only auto-load on actual changes after mount; initial load is handled separately
-      if (oldPid !== undefined) {
-        loadPlanAncillary(pid);
-      }
-    },
-  );
+    };
+    watch(
+        () => currentPlanId.value,
+        (pid, oldPid) => {
+            if (isClient && isDev)
+                pageLog("Ancillary watch: currentPlanId changed", {
+                    pid,
+                    oldPid,
+                });
+            // Only auto-load on actual changes after mount; initial load is handled separately
+            if (oldPid !== undefined) {
+                loadPlanAncillary(pid);
+            }
+        },
+    );
 
-  onMounted(() => {
-    const initialPlanId = currentPlanId.value;
-    if (isClient && isDev)
-      pageLog("Ancillary initial load scheduling", {
-        planId: initialPlanId,
-        defer: deferAncillaryInitial.value,
-      });
+    onMounted(() => {
+        const initialPlanId = currentPlanId.value;
+        if (isClient && isDev)
+            pageLog("Ancillary initial load scheduling", {
+                planId: initialPlanId,
+                defer: deferAncillaryInitial.value,
+            });
 
-    if (deferAncillaryInitial.value) {
-      // Defer to after first paint (double RAF) to improve perceived performance
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          loadPlanAncillary(initialPlanId);
-        });
-      });
-    } else {
-      // Eager load ancillary data immediately on mount
-      loadPlanAncillary(initialPlanId);
-    }
-  });
+        if (deferAncillaryInitial.value) {
+            // Defer to after first paint (double RAF) to improve perceived performance
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    loadPlanAncillary(initialPlanId);
+                });
+            });
+        } else {
+            // Eager load ancillary data immediately on mount
+            loadPlanAncillary(initialPlanId);
+        }
+    });
 }
 
 // Panel resizing state
@@ -1146,14 +1176,14 @@ const resizeStartWidth = ref(0);
  * @param event MouseEvent
  */
 function startResize(event: MouseEvent) {
-  isResizing.value = true;
-  resizeStartX.value = event.clientX;
-  resizeStartWidth.value = uiStore.waypointPanelWidth;
+    isResizing.value = true;
+    resizeStartX.value = event.clientX;
+    resizeStartWidth.value = uiStore.waypointPanelWidth;
 
-  document.addEventListener("mousemove", handleResize);
-  document.addEventListener("mouseup", stopResize);
-  document.body.style.cursor = "col-resize";
-  document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", handleResize);
+    document.addEventListener("mouseup", stopResize);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
 }
 
 /**
@@ -1161,22 +1191,22 @@ function startResize(event: MouseEvent) {
  * @param event MouseEvent
  */
 function handleResize(event: MouseEvent) {
-  if (!isResizing.value) return;
+    if (!isResizing.value) return;
 
-  const deltaX = resizeStartX.value - event.clientX; // Subtract because we're resizing from the left
-  const newWidth = resizeStartWidth.value + deltaX;
-  uiStore.setWaypointPanelWidth(newWidth);
+    const deltaX = resizeStartX.value - event.clientX; // Subtract because we're resizing from the left
+    const newWidth = resizeStartWidth.value + deltaX;
+    uiStore.setWaypointPanelWidth(newWidth);
 }
 
 /**
  * Stop resizing the waypoint panel
  */
 function stopResize() {
-  isResizing.value = false;
-  document.removeEventListener("mousemove", handleResize);
-  document.removeEventListener("mouseup", stopResize);
-  document.body.style.cursor = "";
-  document.body.style.userSelect = "";
+    isResizing.value = false;
+    document.removeEventListener("mousemove", handleResize);
+    document.removeEventListener("mouseup", stopResize);
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
 }
 
 // Chart panel resizing state (simple 1:1 like waypoint panel)
@@ -1186,424 +1216,439 @@ const chartResizeStartHeight = ref(320);
 
 // Computed chart height for current mode (course vs plan) stored in UI store
 const chartPanelHeight = computed<number>({
-  get() {
-    return currentPlan.value
-      ? uiStore.chartPanelHeightPlan
-      : uiStore.chartPanelHeightCourse;
-  },
-  set(val: number) {
-    const clamped = clampChartHeight(val);
-    if (currentPlan.value) {
-      uiStore.setChartPanelHeightPlan(clamped);
-    } else {
-      uiStore.setChartPanelHeightCourse(clamped);
-    }
-  },
+    get() {
+        return currentPlan.value
+            ? uiStore.chartPanelHeightPlan
+            : uiStore.chartPanelHeightCourse;
+    },
+    set(val: number) {
+        const clamped = clampChartHeight(val);
+        if (currentPlan.value) {
+            uiStore.setChartPanelHeightPlan(clamped);
+        } else {
+            uiStore.setChartPanelHeightCourse(clamped);
+        }
+    },
 });
 
 // Clamp helper for height
 function clampChartHeight(h: number) {
-  return clampChartPanelHeight(h);
+    return clampChartPanelHeight(h);
 }
 
 // Start resizing the chart panel
 function startChartResize(event: MouseEvent | TouchEvent) {
-  chartIsResizing.value = true;
+    chartIsResizing.value = true;
 
-  const clientY =
-    (event as TouchEvent)?.touches && (event as TouchEvent).touches.length
-      ? (event as TouchEvent).touches[0]!.clientY
-      : (event as MouseEvent).clientY;
+    const clientY =
+        (event as TouchEvent)?.touches && (event as TouchEvent).touches.length
+            ? (event as TouchEvent).touches[0]!.clientY
+            : (event as MouseEvent).clientY;
 
-  chartResizeStartY.value = clientY;
-  chartResizeStartHeight.value = chartPanelHeight.value;
+    chartResizeStartY.value = clientY;
+    chartResizeStartHeight.value = chartPanelHeight.value;
 
-  document.addEventListener("mousemove", handleChartResize as EventListener);
-  document.addEventListener("mouseup", stopChartResize as EventListener);
-  document.addEventListener("touchmove", handleChartResize as EventListener, {
-    passive: false,
-  });
-  document.addEventListener("touchend", stopChartResize as EventListener, {
-    passive: false,
-  });
+    document.addEventListener("mousemove", handleChartResize as EventListener);
+    document.addEventListener("mouseup", stopChartResize as EventListener);
+    document.addEventListener("touchmove", handleChartResize as EventListener, {
+        passive: false,
+    });
+    document.addEventListener("touchend", stopChartResize as EventListener, {
+        passive: false,
+    });
 
-  document.body.style.cursor = "row-resize";
-  document.body.style.userSelect = "none";
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
 }
 
 // Handle chart panel resize
 function handleChartResize(event: MouseEvent | TouchEvent) {
-  if (!chartIsResizing.value) return;
+    if (!chartIsResizing.value) return;
 
-  if ("preventDefault" in event) {
-    event.preventDefault();
-  }
+    if ("preventDefault" in event) {
+        event.preventDefault();
+    }
 
-  const clientY =
-    (event as TouchEvent)?.touches && (event as TouchEvent).touches.length
-      ? (event as TouchEvent).touches[0]!.clientY
-      : (event as MouseEvent).clientY;
+    const clientY =
+        (event as TouchEvent)?.touches && (event as TouchEvent).touches.length
+            ? (event as TouchEvent).touches[0]!.clientY
+            : (event as MouseEvent).clientY;
 
-  const deltaY = clientY - chartResizeStartY.value; // dragging down increases height
-  const next = clampChartHeight(chartResizeStartHeight.value + deltaY);
-  chartPanelHeight.value = next;
+    const deltaY = clientY - chartResizeStartY.value; // dragging down increases height
+    const next = clampChartHeight(chartResizeStartHeight.value + deltaY);
+    chartPanelHeight.value = next;
 }
 
 // Stop resizing the chart panel
 function stopChartResize() {
-  chartIsResizing.value = false;
-  document.removeEventListener("mousemove", handleChartResize as EventListener);
-  document.removeEventListener("mouseup", stopChartResize as EventListener);
-  document.removeEventListener("touchmove", handleChartResize as EventListener);
-  document.removeEventListener("touchend", stopChartResize as EventListener);
-  document.body.style.cursor = "";
-  document.body.style.userSelect = "";
+    chartIsResizing.value = false;
+    document.removeEventListener(
+        "mousemove",
+        handleChartResize as EventListener,
+    );
+    document.removeEventListener("mouseup", stopChartResize as EventListener);
+    document.removeEventListener(
+        "touchmove",
+        handleChartResize as EventListener,
+    );
+    document.removeEventListener("touchend", stopChartResize as EventListener);
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
 }
 
 /**
  * Download the original course file (GPX or TCX)
  */
 async function downloadOriginalFile() {
-  if (!course.value) return;
+    if (!course.value) return;
 
-  try {
-    const response = await fetch(`/api/courses/${courseId}/download`);
-    if (!response.ok) throw new Error("Download failed");
+    try {
+        const response = await fetch(`/api/courses/${courseId}/download`);
+        if (!response.ok) throw new Error("Download failed");
 
-    const blob = await response.blob();
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = course.value.originalFileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    } catch (error) {
+        console.error("Error downloading file:", error);
+        alert("Failed to download file");
+    }
+}
+
+function slugifyFilePart(value: string): string {
+    return (
+        value
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "") || "export"
+    );
+}
+
+function formatExportDistance(meters: number | null): string {
+    if (meters == null) return "";
+    const value =
+        distanceUnit.value === "miles" ? meters / 1609.344 : meters / 1000;
+    return Number(value.toFixed(2)).toString();
+}
+
+function formatExportDistanceWithUnit(meters: number | null): string {
+    const value = formatExportDistance(meters);
+    if (!value) return "";
+    const unit = distanceUnit.value === "miles" ? "mi" : "km";
+    return `${value} ${unit}`;
+}
+
+function formatExportElevation(meters: number | null): string {
+    if (meters == null) return "";
+    const value = elevationUnit.value === "feet" ? meters * 3.28084 : meters;
+    return Math.round(value).toString();
+}
+
+function formatExportElevationWithUnit(meters: number | null): string {
+    const value = formatExportElevation(meters);
+    if (!value) return "";
+    const unit = elevationUnit.value === "feet" ? "ft" : "m";
+    return `${value} ${unit}`;
+}
+
+function formatExportPace(paceSeconds: number | null): string {
+    if (paceSeconds == null || !currentPlan.value) return "";
+    const minutes = Math.floor(paceSeconds / 60);
+    const seconds = Math.round(paceSeconds % 60);
+    const unit = currentPlan.value.paceUnit === "min_per_mi" ? "/mi" : "/km";
+    return `${minutes}:${seconds.toString().padStart(2, "0")}${unit}`;
+}
+
+function formatExportGrade(grade: number | null): string {
+    if (grade == null) return "";
+    const sign = grade >= 0 ? "+" : "";
+    return `${sign}${grade.toFixed(1)}%`;
+}
+
+function withFallback(value: string, fallback = "—"): string {
+    return value.trim() ? value : fallback;
+}
+
+function escapeCsvCell(value: string): string {
+    return `"${value.replace(/"/g, '""')}"`;
+}
+
+function downloadFile(filename: string, contents: BlobPart, mimeType: string) {
+    const blob = new Blob([contents], { type: mimeType });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = course.value.originalFileName;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
-  } catch (error) {
-    console.error("Error downloading file:", error);
-    alert("Failed to download file");
-  }
-}
-
-function slugifyFilePart(value: string): string {
-  return (
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "export"
-  );
-}
-
-function formatExportDistance(meters: number | null): string {
-  if (meters == null) return "";
-  const value =
-    distanceUnit.value === "miles" ? meters / 1609.344 : meters / 1000;
-  return Number(value.toFixed(2)).toString();
-}
-
-function formatExportDistanceWithUnit(meters: number | null): string {
-  const value = formatExportDistance(meters);
-  if (!value) return "";
-  const unit = distanceUnit.value === "miles" ? "mi" : "km";
-  return `${value} ${unit}`;
-}
-
-function formatExportElevation(meters: number | null): string {
-  if (meters == null) return "";
-  const value = elevationUnit.value === "feet" ? meters * 3.28084 : meters;
-  return Math.round(value).toString();
-}
-
-function formatExportElevationWithUnit(meters: number | null): string {
-  const value = formatExportElevation(meters);
-  if (!value) return "";
-  const unit = elevationUnit.value === "feet" ? "ft" : "m";
-  return `${value} ${unit}`;
-}
-
-function formatExportPace(paceSeconds: number | null): string {
-  if (paceSeconds == null || !currentPlan.value) return "";
-  const minutes = Math.floor(paceSeconds / 60);
-  const seconds = Math.round(paceSeconds % 60);
-  const unit = currentPlan.value.paceUnit === "min_per_mi" ? "/mi" : "/km";
-  return `${minutes}:${seconds.toString().padStart(2, "0")}${unit}`;
-}
-
-function formatExportGrade(grade: number | null): string {
-  if (grade == null) return "";
-  const sign = grade >= 0 ? "+" : "";
-  return `${sign}${grade.toFixed(1)}%`;
-}
-
-function withFallback(value: string, fallback = "—"): string {
-  return value.trim() ? value : fallback;
-}
-
-function escapeCsvCell(value: string): string {
-  return `"${value.replace(/"/g, '""')}"`;
-}
-
-function downloadFile(filename: string, contents: BlobPart, mimeType: string) {
-  const blob = new Blob([contents], { type: mimeType });
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  window.URL.revokeObjectURL(url);
 }
 
 function printHtmlDocument(html: string) {
-  const iframe = document.createElement("iframe");
-  iframe.style.position = "fixed";
-  iframe.style.right = "0";
-  iframe.style.bottom = "0";
-  iframe.style.width = "0";
-  iframe.style.height = "0";
-  iframe.style.border = "0";
-  iframe.setAttribute("aria-hidden", "true");
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    iframe.setAttribute("aria-hidden", "true");
 
-  const cleanup = () => {
-    window.setTimeout(() => {
-      iframe.remove();
-    }, 250);
-  };
-
-  iframe.onload = () => {
-    const frameWindow = iframe.contentWindow;
-    if (!frameWindow) {
-      cleanup();
-      alert("Unable to open the PDF export preview. Please try again.");
-      return;
-    }
-
-    const handleAfterPrint = () => {
-      frameWindow.removeEventListener("afterprint", handleAfterPrint);
-      cleanup();
+    const cleanup = () => {
+        window.setTimeout(() => {
+            iframe.remove();
+        }, 250);
     };
 
-    frameWindow.addEventListener("afterprint", handleAfterPrint);
-    window.setTimeout(() => {
-      frameWindow.focus();
-      frameWindow.print();
-    }, 150);
-  };
+    iframe.onload = () => {
+        const frameWindow = iframe.contentWindow;
+        if (!frameWindow) {
+            cleanup();
+            alert("Unable to open the PDF export preview. Please try again.");
+            return;
+        }
 
-  document.body.appendChild(iframe);
-  iframe.srcdoc = html;
+        const handleAfterPrint = () => {
+            frameWindow.removeEventListener("afterprint", handleAfterPrint);
+            cleanup();
+        };
+
+        frameWindow.addEventListener("afterprint", handleAfterPrint);
+        window.setTimeout(() => {
+            frameWindow.focus();
+            frameWindow.print();
+        }, 150);
+    };
+
+    document.body.appendChild(iframe);
+    iframe.srcdoc = html;
 }
 
 function buildPlanExportRows(includeUnits = false) {
-  if (!course.value || !currentPlan.value || !waypoints.value.length) return null;
-  const exportRows = buildPlanWaypointExportRows({
-    plan: effectivePlanForTiming.value,
-    waypoints: waypoints.value,
-    waypointStoppageTimes: waypointStoppageTimes.value,
-    getDefaultStoppageTime,
-    elevationProfile: elevationPointsForDisplay.value,
-    useGradeAdjustment: effectivePlanForTiming.value?.useGradeAdjustment ?? true,
-    gradeWindowMeters: smoothingConfig.value.gradeWindowMeters,
-    sampleStepMeters: smoothingConfig.value.sampleStepMeters,
-    maintainTargetAverage:
-      (effectivePlanForTiming.value?.paceMode || "pace") !== "normalized",
-  });
+    if (!course.value || !currentPlan.value || !waypoints.value.length)
+        return null;
+    const exportRows = buildPlanWaypointExportRows({
+        plan: effectivePlanForTiming.value,
+        waypoints: waypoints.value,
+        waypointStoppageTimes: waypointStoppageTimes.value,
+        getDefaultStoppageTime,
+        elevationProfile: elevationPointsForDisplay.value,
+        useGradeAdjustment:
+            effectivePlanForTiming.value?.useGradeAdjustment ?? true,
+        gradeWindowMeters: smoothingConfig.value.gradeWindowMeters,
+        sampleStepMeters: smoothingConfig.value.sampleStepMeters,
+        maintainTargetAverage:
+            (effectivePlanForTiming.value?.paceMode || "pace") !== "normalized",
+    });
 
-  return exportRows.map((row) => ({
-    waypointId: row.waypointId,
-    waypointName: row.waypointName,
-    distanceFromStart: withFallback(
-      includeUnits
-        ? formatExportDistanceWithUnit(row.distanceFromStartMeters)
-        : formatExportDistance(row.distanceFromStartMeters),
-    ),
-    waypointElevation: withFallback(
-      includeUnits
-        ? formatExportElevationWithUnit(row.waypointElevationMeters)
-        : formatExportElevation(row.waypointElevationMeters),
-    ),
-    timeEstimate: withFallback(
-      row.elapsedTimeSeconds != null ? formatElapsedTime(row.elapsedTimeSeconds) : "",
-    ),
-    plannedDelay:
-      row.delaySeconds != null ? formatDelayTime(row.delaySeconds) : "No delay",
-    distanceToNext: withFallback(
-      includeUnits
-        ? formatExportDistanceWithUnit(row.distanceToNextMeters)
-        : formatExportDistance(row.distanceToNextMeters),
-    ),
-    timeToNext: withFallback(
-      row.timeToNextSeconds != null ? formatElapsedTime(row.timeToNextSeconds) : "",
-    ),
-    elevationGainToNext: withFallback(
-      includeUnits
-        ? formatExportElevationWithUnit(row.elevationGainToNextMeters)
-        : formatExportElevation(row.elevationGainToNextMeters),
-    ),
-    elevationLossToNext: withFallback(
-      includeUnits
-        ? formatExportElevationWithUnit(row.elevationLossToNextMeters)
-        : formatExportElevation(row.elevationLossToNextMeters),
-    ),
-    segmentPace: withFallback(formatExportPace(row.segmentAdjustedPace)),
-    segmentGrade: withFallback(formatExportGrade(row.segmentAverageGrade)),
-    tags: withFallback(
-      getTagsByIds(row.tagIds)
-        .map((tag) => tag.label)
-        .join(", "),
-    ),
-    notes: withFallback(getWaypointNote(row.waypointId), "No notes"),
-  }));
+    return exportRows.map((row) => ({
+        waypointId: row.waypointId,
+        waypointName: row.waypointName,
+        distanceFromStart: withFallback(
+            includeUnits
+                ? formatExportDistanceWithUnit(row.distanceFromStartMeters)
+                : formatExportDistance(row.distanceFromStartMeters),
+        ),
+        waypointElevation: withFallback(
+            includeUnits
+                ? formatExportElevationWithUnit(row.waypointElevationMeters)
+                : formatExportElevation(row.waypointElevationMeters),
+        ),
+        timeEstimate: withFallback(
+            row.elapsedTimeSeconds != null
+                ? formatElapsedTime(row.elapsedTimeSeconds)
+                : "",
+        ),
+        plannedDelay:
+            row.delaySeconds != null
+                ? formatDelayTime(row.delaySeconds)
+                : "No delay",
+        distanceToNext: withFallback(
+            includeUnits
+                ? formatExportDistanceWithUnit(row.distanceToNextMeters)
+                : formatExportDistance(row.distanceToNextMeters),
+        ),
+        timeToNext: withFallback(
+            row.timeToNextSeconds != null
+                ? formatElapsedTime(row.timeToNextSeconds)
+                : "",
+        ),
+        elevationGainToNext: withFallback(
+            includeUnits
+                ? formatExportElevationWithUnit(row.elevationGainToNextMeters)
+                : formatExportElevation(row.elevationGainToNextMeters),
+        ),
+        elevationLossToNext: withFallback(
+            includeUnits
+                ? formatExportElevationWithUnit(row.elevationLossToNextMeters)
+                : formatExportElevation(row.elevationLossToNextMeters),
+        ),
+        segmentPace: withFallback(formatExportPace(row.segmentAdjustedPace)),
+        segmentGrade: withFallback(formatExportGrade(row.segmentAverageGrade)),
+        tags: withFallback(
+            getTagsByIds(row.tagIds)
+                .map((tag) => tag.label)
+                .join(", "),
+        ),
+        notes: withFallback(getWaypointNote(row.waypointId), "No notes"),
+    }));
 }
 
 function exportPlanCsv() {
-  if (!course.value || !currentPlan.value) return;
-  const exportRows = buildPlanExportRows(false);
-  if (!exportRows) return;
+    if (!course.value || !currentPlan.value) return;
+    const exportRows = buildPlanExportRows(false);
+    if (!exportRows) return;
 
-  const distanceHeaderUnit = distanceUnit.value === "miles" ? "mi" : "km";
-  const elevationHeaderUnit = elevationUnit.value === "feet" ? "ft" : "m";
-  const headers = [
-    "Waypoint",
-    `Distance from start (${distanceHeaderUnit})`,
-    "Time estimate",
-    `Distance to next waypoint (${distanceHeaderUnit})`,
-    "Estimated time to next waypoint",
-    `Elevation gain to next waypoint (${elevationHeaderUnit})`,
-    `Elevation loss to next waypoint (${elevationHeaderUnit})`,
-    "Tags",
-    "Notes",
-  ];
+    const distanceHeaderUnit = distanceUnit.value === "miles" ? "mi" : "km";
+    const elevationHeaderUnit = elevationUnit.value === "feet" ? "ft" : "m";
+    const headers = [
+        "Waypoint",
+        `Distance from start (${distanceHeaderUnit})`,
+        "Time estimate",
+        `Distance to next waypoint (${distanceHeaderUnit})`,
+        "Estimated time to next waypoint",
+        `Elevation gain to next waypoint (${elevationHeaderUnit})`,
+        `Elevation loss to next waypoint (${elevationHeaderUnit})`,
+        "Tags",
+        "Notes",
+    ];
 
-  const csvRows = exportRows.map((row) => [
-    row.waypointName,
-    row.distanceFromStart,
-    row.timeEstimate,
-    row.distanceToNext,
-    row.timeToNext,
-    row.elevationGainToNext,
-    row.elevationLossToNext,
-    row.tags,
-    row.notes,
-  ]);
+    const csvRows = exportRows.map((row) => [
+        row.waypointName,
+        row.distanceFromStart,
+        row.timeEstimate,
+        row.distanceToNext,
+        row.timeToNext,
+        row.elevationGainToNext,
+        row.elevationLossToNext,
+        row.tags,
+        row.notes,
+    ]);
 
-  const csv = [headers, ...csvRows]
-    .map((row) => row.map((value) => escapeCsvCell(value)).join(","))
-    .join("\r\n");
+    const csv = [headers, ...csvRows]
+        .map((row) => row.map((value) => escapeCsvCell(value)).join(","))
+        .join("\r\n");
 
-  downloadFile(
-    `${slugifyFilePart(course.value.name)}-${slugifyFilePart(currentPlan.value.name)}-waypoints.csv`,
-    csv,
-    "text/csv;charset=utf-8;",
-  );
+    downloadFile(
+        `${slugifyFilePart(course.value.name)}-${slugifyFilePart(currentPlan.value.name)}-waypoints.csv`,
+        csv,
+        "text/csv;charset=utf-8;",
+    );
 }
 
 async function exportPlanPdf() {
-  if (!course.value || !currentPlan.value || isExportingPlanPdf.value) return;
-  const exportRows = buildPlanExportRows(true);
-  if (!exportRows) return;
+    if (!course.value || !currentPlan.value || isExportingPlanPdf.value) return;
+    const exportRows = buildPlanExportRows(true);
+    if (!exportRows) return;
 
-  isExportingPlanPdf.value = true;
-  document.body.style.cursor = "progress";
-
-  try {
-    const waypointById = new Map(
-      waypoints.value.map((waypoint) => [waypoint.id, waypoint]),
-    );
-    const exportBasemap = getMapBasemapById(
-      userSettingsStore.settings.mapStyle?.basemapId,
-    );
-    const exportWaypoints = waypoints.value.map((waypoint) => ({
-      id: waypoint.id,
-      name: waypoint.name,
-      lat: waypoint.lat,
-      lng: waypoint.lng,
-      order: waypoint.order,
-    }));
-    let overviewMapImageDataUrl = "";
-    let overviewMapError = "";
+    isExportingPlanPdf.value = true;
+    document.body.style.cursor = "progress";
 
     try {
-      overviewMapImageDataUrl = await captureCourseOverviewMapImage({
-        geoJsonData: geoJsonData.value,
-        allWaypoints: exportWaypoints,
-        basemapId: exportBasemap.id,
-        size: {
-          width: 620,
-          height: 360,
-        },
-      });
-    } catch (error) {
-      console.error("Error capturing course overview map image:", error);
-      overviewMapError = "Overview map unavailable for this export.";
-    }
+        const waypointById = new Map(
+            waypoints.value.map((waypoint) => [waypoint.id, waypoint]),
+        );
+        const exportBasemap = getMapBasemapById(
+            userSettingsStore.settings.mapStyle?.basemapId,
+        );
+        const exportWaypoints = waypoints.value.map((waypoint) => ({
+            id: waypoint.id,
+            name: waypoint.name,
+            lat: waypoint.lat,
+            lng: waypoint.lng,
+            order: waypoint.order,
+        }));
+        let overviewMapImageDataUrl = "";
+        let overviewMapError = "";
 
-    const detailRows = [];
-    for (const row of exportRows) {
-      const waypoint = waypointById.get(row.waypointId);
-      let mapImageDataUrl = "";
-      let mapImageError = "";
-
-      if (waypoint) {
         try {
-          mapImageDataUrl = await captureWaypointMapImage({
-            geoJsonData: geoJsonData.value,
-            waypoint: {
-              id: waypoint.id,
-              name: waypoint.name,
-              lat: waypoint.lat,
-              lng: waypoint.lng,
-              order: waypoint.order,
-            },
-            allWaypoints: exportWaypoints,
-            basemapId: exportBasemap.id,
-            size: {
-              width: 420,
-              height: 250,
-            },
-          });
+            overviewMapImageDataUrl = await captureCourseOverviewMapImage({
+                geoJsonData: geoJsonData.value,
+                allWaypoints: exportWaypoints,
+                basemapId: exportBasemap.id,
+                size: {
+                    width: 620,
+                    height: 360,
+                },
+            });
         } catch (error) {
-          console.error("Error capturing waypoint map image:", error);
-          mapImageError = "Map snapshot unavailable for this waypoint.";
+            console.error("Error capturing course overview map image:", error);
+            overviewMapError = "Overview map unavailable for this export.";
         }
-      } else {
-        mapImageError = "Map snapshot unavailable for this waypoint.";
-      }
 
-      detailRows.push({
-        ...row,
-        mapImageDataUrl,
-        mapImageError,
-        mapAttribution: exportBasemap.attributionText,
-      });
+        const detailRows = [];
+        for (const row of exportRows) {
+            const waypoint = waypointById.get(row.waypointId);
+            let mapImageDataUrl = "";
+            let mapImageError = "";
+
+            if (waypoint) {
+                try {
+                    mapImageDataUrl = await captureWaypointMapImage({
+                        geoJsonData: geoJsonData.value,
+                        waypoint: {
+                            id: waypoint.id,
+                            name: waypoint.name,
+                            lat: waypoint.lat,
+                            lng: waypoint.lng,
+                            order: waypoint.order,
+                        },
+                        allWaypoints: exportWaypoints,
+                        basemapId: exportBasemap.id,
+                        size: {
+                            width: 420,
+                            height: 250,
+                        },
+                    });
+                } catch (error) {
+                    console.error("Error capturing waypoint map image:", error);
+                    mapImageError =
+                        "Map snapshot unavailable for this waypoint.";
+                }
+            } else {
+                mapImageError = "Map snapshot unavailable for this waypoint.";
+            }
+
+            detailRows.push({
+                ...row,
+                mapImageDataUrl,
+                mapImageError,
+                mapAttribution: exportBasemap.attributionText,
+            });
+        }
+
+        const html = buildPlanPdfHtml({
+            courseName: course.value.name,
+            planName: currentPlan.value.name,
+            generatedAt: new Date().toLocaleString("en-US", {
+                dateStyle: "medium",
+                timeStyle: "short",
+            }),
+            overviewMapImageDataUrl,
+            overviewMapError,
+            overviewMapAttribution: exportBasemap.attributionText,
+            overviewRows: detailRows.map((row) => ({
+                waypointName: row.waypointName,
+                distanceFromStart: row.distanceFromStart,
+                timeEstimate: row.timeEstimate,
+                distanceToNext: row.distanceToNext,
+                timeToNext: row.timeToNext,
+            })),
+            detailRows,
+        });
+
+        printHtmlDocument(html);
+    } finally {
+        isExportingPlanPdf.value = false;
+        document.body.style.cursor = "";
     }
-
-    const html = buildPlanPdfHtml({
-      courseName: course.value.name,
-      planName: currentPlan.value.name,
-      generatedAt: new Date().toLocaleString("en-US", {
-        dateStyle: "medium",
-        timeStyle: "short",
-      }),
-      overviewMapImageDataUrl,
-      overviewMapError,
-      overviewMapAttribution: exportBasemap.attributionText,
-      overviewRows: detailRows.map((row) => ({
-        waypointName: row.waypointName,
-        distanceFromStart: row.distanceFromStart,
-        timeEstimate: row.timeEstimate,
-        distanceToNext: row.distanceToNext,
-        timeToNext: row.timeToNext,
-      })),
-      detailRows,
-    });
-
-    printHtmlDocument(html);
-  } finally {
-    isExportingPlanPdf.value = false;
-    document.body.style.cursor = "";
-  }
 }
 
 /**
@@ -1611,32 +1656,32 @@ async function exportPlanPdf() {
  * When un-starring, also deletes the user's plans / notes / stoppage times (handled server-side).
  */
 async function deleteCourse() {
-  if (!course.value) return;
+    if (!course.value) return;
 
-  const role = (course.value as { role?: string }).role;
-  const isOwner = role === "owner";
+    const role = (course.value as { role?: string }).role;
+    const isOwner = role === "owner";
 
-  const message = isOwner
-    ? `Are you sure you want to delete "${course.value.name}"? This action cannot be undone.`
-    : `Remove "${course.value.name}" from My Courses?\n\nAll of your plans, waypoint notes, and stoppage times for this course will be deleted.`;
+    const message = isOwner
+        ? `Are you sure you want to delete "${course.value.name}"? This action cannot be undone.`
+        : `Remove "${course.value.name}" from My Courses?\n\nAll of your plans, waypoint notes, and stoppage times for this course will be deleted.`;
 
-  if (!confirm(message)) return;
+    if (!confirm(message)) return;
 
-  try {
-    if (isOwner) {
-      await $fetch(`/api/courses/${courseId}`, {
-        method: "DELETE",
-      });
-    } else {
-      await $fetch(`/api/courses/${courseId}/remove`, {
-        method: "DELETE",
-      });
+    try {
+        if (isOwner) {
+            await $fetch(`/api/courses/${courseId}`, {
+                method: "DELETE",
+            });
+        } else {
+            await $fetch(`/api/courses/${courseId}/remove`, {
+                method: "DELETE",
+            });
+        }
+        await navigateTo("/courses");
+    } catch (error) {
+        console.error("Error removing course or membership:", error);
+        alert(isOwner ? "Failed to delete course" : "Failed to remove course");
     }
-    await navigateTo("/courses");
-  } catch (error) {
-    console.error("Error removing course or membership:", error);
-    alert(isOwner ? "Failed to delete course" : "Failed to remove course");
-  }
 }
 
 /**
@@ -1644,164 +1689,164 @@ async function deleteCourse() {
  * @param date Date | string | number | null
  */
 function formatRaceDate(date: Date | string | number | null) {
-  if (!date) return null;
-  // Use UTC methods to avoid timezone conversion
-  const dateObj = new Date(date);
-  const year = dateObj.getUTCFullYear();
-  const month = dateObj.getUTCMonth();
-  const day = dateObj.getUTCDate();
-  const hours = dateObj.getUTCHours();
-  const minutes = dateObj.getUTCMinutes();
+    if (!date) return null;
+    // Use UTC methods to avoid timezone conversion
+    const dateObj = new Date(date);
+    const year = dateObj.getUTCFullYear();
+    const month = dateObj.getUTCMonth();
+    const day = dateObj.getUTCDate();
+    const hours = dateObj.getUTCHours();
+    const minutes = dateObj.getUTCMinutes();
 
-  const dateStr = new Date(year, month, day).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+    const dateStr = new Date(year, month, day).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+    });
 
-  // Add time if it's not midnight
-  if (hours !== 0 || minutes !== 0) {
-    const timeStr = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
-    return `${dateStr} at ${timeStr}`;
-  }
+    // Add time if it's not midnight
+    if (hours !== 0 || minutes !== 0) {
+        const timeStr = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+        return `${dateStr} at ${timeStr}`;
+    }
 
-  return dateStr;
+    return dateStr;
 }
 
 // Compute GeoJSON data for the map. This is used to render the course on the map.
 const geoJsonData = computed(() => {
-  if (!course.value?.geoJsonData) return [];
-  const arr = [course.value.geoJsonData as GeoJSON.FeatureCollection];
-  if (isClient && isDev) {
-    const featureCount = arr.reduce(
-      (sum, fc) => sum + (fc.features?.length || 0),
-      0,
-    );
-    pageLog("geoJsonData ready", {
-      collections: arr.length,
-      features: featureCount,
-    });
-  }
-  return arr;
+    if (!course.value?.geoJsonData) return [];
+    const arr = [course.value.geoJsonData as GeoJSON.FeatureCollection];
+    if (isClient && isDev) {
+        const featureCount = arr.reduce(
+            (sum, fc) => sum + (fc.features?.length || 0),
+            0,
+        );
+        pageLog("geoJsonData ready", {
+            collections: arr.length,
+            features: featureCount,
+        });
+    }
+    return arr;
 });
 const activityOverlayGeoJsonData = computed(() => {
-  if (!currentActivity.value?.geoJsonData) return [];
-  return [currentActivity.value.geoJsonData as GeoJSON.FeatureCollection];
+    if (!currentActivity.value?.geoJsonData) return [];
+    return [currentActivity.value.geoJsonData as GeoJSON.FeatureCollection];
 });
 
 // Build elevation points and per-unit split waypoints for display switching
 const elevationPointsForDisplay = computed(() => {
-  if (!geoJsonData.value?.length) return [];
-  const combined: GeoJSON.FeatureCollection = {
-    type: "FeatureCollection",
-    features: geoJsonData.value.flatMap((fc) => fc.features),
-  };
-  const __t = pageNow();
-  if (isClient && isDev) console.time("extractElevationProfile");
-  const result = extractElevationProfile(combined);
-  if (isClient && isDev) {
-    console.timeEnd("extractElevationProfile");
-    pageLog("elevationPointsForDisplay computed", {
-      points: result.length,
-      ms: pageNow() - __t,
-    });
-  }
-  return result;
+    if (!geoJsonData.value?.length) return [];
+    const combined: GeoJSON.FeatureCollection = {
+        type: "FeatureCollection",
+        features: geoJsonData.value.flatMap((fc) => fc.features),
+    };
+    const __t = pageNow();
+    if (isClient && isDev) console.time("extractElevationProfile");
+    const result = extractElevationProfile(combined);
+    if (isClient && isDev) {
+        console.timeEnd("extractElevationProfile");
+        pageLog("elevationPointsForDisplay computed", {
+            points: result.length,
+            ms: pageNow() - __t,
+        });
+    }
+    return result;
 });
 
 const totalCourseDistanceMeters = computed(() => {
-  const pts = elevationPointsForDisplay.value;
-  if (!pts.length) return 0;
-  const total = Math.max(...pts.map((p) => p.distance));
-  if (isClient && isDev)
-    pageLog("totalCourseDistanceMeters computed", { total });
-  return total;
+    const pts = elevationPointsForDisplay.value;
+    if (!pts.length) return 0;
+    const total = Math.max(...pts.map((p) => p.distance));
+    if (isClient && isDev)
+        pageLog("totalCourseDistanceMeters computed", { total });
+    return total;
 });
 
 // Generate synthetic per-mile/km "waypoints" for the splits tab
 const splitWaypoints = computed<Waypoint[]>(() => {
-  const pts = elevationPointsForDisplay.value;
-  const total = totalCourseDistanceMeters.value;
-  if (!pts.length || total <= 0) return [];
+    const pts = elevationPointsForDisplay.value;
+    const total = totalCourseDistanceMeters.value;
+    if (!pts.length || total <= 0) return [];
 
-  const isMiles = distanceUnit.value === "miles";
-  const unitMeters = isMiles ? 1609.344 : 1000;
+    const isMiles = distanceUnit.value === "miles";
+    const unitMeters = isMiles ? 1609.344 : 1000;
 
-  const result: Waypoint[] = [];
+    const result: Waypoint[] = [];
 
-  // Include a start marker so chart numbering for subsequent markers is numeric (avoids first being "S")
-  const start = pts[0];
-  if (start) {
-    result.push({
-      id: "split-start",
-      name: "S",
-      description: null,
-      lat: start.lat,
-      lng: start.lng,
-      elevation: start.elevation,
-      distance: 0,
-      tags: [],
-      order: 0,
-    });
-  }
+    // Include a start marker so chart numbering for subsequent markers is numeric (avoids first being "S")
+    const start = pts[0];
+    if (start) {
+        result.push({
+            id: "split-start",
+            name: "S",
+            description: null,
+            lat: start.lat,
+            lng: start.lng,
+            elevation: start.elevation,
+            distance: 0,
+            tags: [],
+            order: 0,
+        });
+    }
 
-  const __t = pageNow();
-  if (isClient && isDev) console.time("splitWaypoints interpolation/build");
-  let i = 1;
-  for (let d = unitMeters; d < total - 1e-6; d += unitMeters, i++) {
-    const ip = interpolateAtDistance(pts, d);
-    if (!ip) continue;
-    result.push({
-      id: `split-${i}`,
-      name: isMiles ? `Mile ${i}` : `Km ${i}`,
-      description: null,
-      lat: ip.lat,
-      lng: ip.lng,
-      elevation: ip.elevation,
-      distance: d,
-      tags: [],
-      order: i,
-    });
-  }
-  if (isClient && isDev) {
-    console.timeEnd("splitWaypoints interpolation/build");
-    pageLog("splitWaypoints built", {
-      count: result.length,
-      ms: pageNow() - __t,
-    });
-  }
+    const __t = pageNow();
+    if (isClient && isDev) console.time("splitWaypoints interpolation/build");
+    let i = 1;
+    for (let d = unitMeters; d < total - 1e-6; d += unitMeters, i++) {
+        const ip = interpolateAtDistance(pts, d);
+        if (!ip) continue;
+        result.push({
+            id: `split-${i}`,
+            name: isMiles ? `Mile ${i}` : `Km ${i}`,
+            description: null,
+            lat: ip.lat,
+            lng: ip.lng,
+            elevation: ip.elevation,
+            distance: d,
+            tags: [],
+            order: i,
+        });
+    }
+    if (isClient && isDev) {
+        console.timeEnd("splitWaypoints interpolation/build");
+        pageLog("splitWaypoints built", {
+            count: result.length,
+            ms: pageNow() - __t,
+        });
+    }
 
-  // Include finish so users can still see the end of course
-  const finish = pts[pts.length - 1];
-  if (finish) {
-    result.push({
-      id: "split-finish",
-      name: "F",
-      description: null,
-      lat: finish.lat,
-      lng: finish.lng,
-      elevation: finish.elevation,
-      distance: finish.distance,
-      tags: [],
-      order: Number.MAX_SAFE_INTEGER,
-    });
-  }
+    // Include finish so users can still see the end of course
+    const finish = pts[pts.length - 1];
+    if (finish) {
+        result.push({
+            id: "split-finish",
+            name: "F",
+            description: null,
+            lat: finish.lat,
+            lng: finish.lng,
+            elevation: finish.elevation,
+            distance: finish.distance,
+            tags: [],
+            order: Number.MAX_SAFE_INTEGER,
+        });
+    }
 
-  return result;
+    return result;
 });
 
 // Waypoints to display on map and chart based on selected tab
 const displayWaypoints = computed<Waypoint[]>(() => {
-  return waypointPanelTab.value === "splits"
-    ? splitWaypoints.value
-    : waypoints.value;
+    return waypointPanelTab.value === "splits"
+        ? splitWaypoints.value
+        : waypoints.value;
 });
 
 // Route segment highlight state and helpers
 const routeSegmentHighlight = ref<RouteSegmentHighlight | null>(null);
 const selectedSplitIndex = ref<number | null>(null);
 const selectedSplitRange = ref<{ startIndex: number; endIndex: number } | null>(
-  null,
+    null,
 );
 const selectedWaypointSegment = ref<SelectedWaypointSegment | null>(null);
 const chartZoomRange = ref<{ start: number; end: number } | null>(null);
@@ -1809,426 +1854,427 @@ const mapResetKey = ref(0);
 const courseViewerMapKey = computed(() => `${mapResetKey.value}`);
 
 onMounted(() => {
-  if (route.query.mapEngine) {
-    const query = { ...route.query };
-    delete query.mapEngine;
-    router.replace({
-      path: route.path,
-      query,
-    });
-  }
+    if (route.query.mapEngine) {
+        const query = { ...route.query };
+        delete query.mapEngine;
+        router.replace({
+            path: route.path,
+            query,
+        });
+    }
 
-  if (isClient && isDev) {
-    const t = pageNow();
-    pageLog("CoursePage mounted");
-    requestAnimationFrame(() => {
-      pageLog("CoursePage first RAF after mount", {
-        ms: pageNow() - t,
-      });
-    });
-  }
+    if (isClient && isDev) {
+        const t = pageNow();
+        pageLog("CoursePage mounted");
+        requestAnimationFrame(() => {
+            pageLog("CoursePage first RAF after mount", {
+                ms: pageNow() - t,
+            });
+        });
+    }
 });
 
 // Trace when pace chart inputs are ready and first render frame is reached
 watch(
-  () => ({
-    planId: currentPlan.value?.id || null,
-    pts: elevationPointsForDisplay.value.length,
-    waypointsCount: waypoints.value.length,
-  }),
-  async ({ planId, pts, waypointsCount }) => {
-    if (isClient && isDev && planId && pts > 0) {
-      pageLog("Pace chart inputs ready", {
-        planId,
-        elevationPoints: pts,
-        displayWaypoints: waypointsCount,
-      });
-      const start = pageNow();
-      await nextTick();
-      if (isClient && isDev) {
-        pageLog("Pace chart nextTick resolved", {
-          ms: pageNow() - start,
-        });
-      }
-      requestAnimationFrame(() => {
-        pageLog("Pace chart initial render frame reached", {
-          ms: pageNow() - start,
-        });
-      });
-    }
-  },
-  { immediate: true, deep: false },
+    () => ({
+        planId: currentPlan.value?.id || null,
+        pts: elevationPointsForDisplay.value.length,
+        waypointsCount: waypoints.value.length,
+    }),
+    async ({ planId, pts, waypointsCount }) => {
+        if (isClient && isDev && planId && pts > 0) {
+            pageLog("Pace chart inputs ready", {
+                planId,
+                elevationPoints: pts,
+                displayWaypoints: waypointsCount,
+            });
+            const start = pageNow();
+            await nextTick();
+            if (isClient && isDev) {
+                pageLog("Pace chart nextTick resolved", {
+                    ms: pageNow() - start,
+                });
+            }
+            requestAnimationFrame(() => {
+                pageLog("Pace chart initial render frame reached", {
+                    ms: pageNow() - start,
+                });
+            });
+        }
+    },
+    { immediate: true, deep: false },
 );
 
 function isHighlightSourceActive(source: RouteSegmentHighlightSource): boolean {
-  if (source === "split") return waypointPanelTab.value === "splits";
-  if (source === "chart-range") return true;
-  return waypointPanelTab.value === "waypoints";
+    if (source === "split") return waypointPanelTab.value === "splits";
+    if (source === "chart-range") return true;
+    return waypointPanelTab.value === "waypoints";
 }
 
 const stableHighlightSegment = computed(() => {
-  if (
-    !routeSegmentHighlight.value ||
-    !isHighlightSourceActive(routeSegmentHighlight.value.source)
-  ) {
-    return null;
-  }
-  return {
-    start: routeSegmentHighlight.value.start,
-    end: routeSegmentHighlight.value.end,
-  };
+    if (
+        !routeSegmentHighlight.value ||
+        !isHighlightSourceActive(routeSegmentHighlight.value.source)
+    ) {
+        return null;
+    }
+    return {
+        start: routeSegmentHighlight.value.start,
+        end: routeSegmentHighlight.value.end,
+    };
 });
 
 const shouldFitHighlightSegment = computed(
-  () => !!stableHighlightSegment.value,
+    () => !!stableHighlightSegment.value,
 );
 /* Removed highlight-controlled center/zoom to avoid snapping map view during other interactions */
 
 function buildChartZoomRange(start: number, end: number) {
-  const rangeStart = Math.min(start, end);
-  const rangeEnd = Math.max(start, end);
-  const totalDistance = totalCourseDistanceMeters.value;
+    const rangeStart = Math.min(start, end);
+    const rangeEnd = Math.max(start, end);
+    const totalDistance = totalCourseDistanceMeters.value;
 
-  if (!Number.isFinite(rangeStart) || !Number.isFinite(rangeEnd)) {
-    return null;
-  }
+    if (!Number.isFinite(rangeStart) || !Number.isFinite(rangeEnd)) {
+        return null;
+    }
 
-  if (totalDistance <= 0) {
+    if (totalDistance <= 0) {
+        return {
+            start: rangeStart,
+            end: rangeEnd,
+        };
+    }
+
+    const selectionWidth = Math.max(0, rangeEnd - rangeStart);
+    const padding = selectionWidth * 0.05;
+
     return {
-      start: rangeStart,
-      end: rangeEnd,
+        start: Math.max(0, rangeStart - padding),
+        end: Math.min(totalDistance, rangeEnd + padding),
     };
-  }
-
-  const selectionWidth = Math.max(0, rangeEnd - rangeStart);
-  const padding = selectionWidth * 0.05;
-
-  return {
-    start: Math.max(0, rangeStart - padding),
-    end: Math.min(totalDistance, rangeEnd + padding),
-  };
 }
 
 function clearWaypointSegmentSelection(options?: { resetMap?: boolean }) {
-  const resetMap = options?.resetMap ?? true;
-  const hadSelection =
-    !!selectedWaypointSegment.value ||
-    routeSegmentHighlight.value?.source === "waypoint-segment";
+    const resetMap = options?.resetMap ?? true;
+    const hadSelection =
+        !!selectedWaypointSegment.value ||
+        routeSegmentHighlight.value?.source === "waypoint-segment";
 
-  selectedWaypointSegment.value = null;
+    selectedWaypointSegment.value = null;
 
-  if (routeSegmentHighlight.value?.source === "waypoint-segment") {
-    routeSegmentHighlight.value = null;
-  }
-
-  if (hadSelection) {
-    elevationHoverPoint.value = null;
-    if (resetMap) {
-      mapResetKey.value++;
+    if (routeSegmentHighlight.value?.source === "waypoint-segment") {
+        routeSegmentHighlight.value = null;
     }
-  }
+
+    if (hadSelection) {
+        elevationHoverPoint.value = null;
+        if (resetMap) {
+            mapResetKey.value++;
+        }
+    }
 }
 
 function clearSplitSelection(options?: { resetMap?: boolean }) {
-  const resetMap = options?.resetMap ?? true;
-  const hadSelection =
-    selectedSplitIndex.value !== null ||
-    selectedSplitRange.value !== null ||
-    routeSegmentHighlight.value?.source === "split";
+    const resetMap = options?.resetMap ?? true;
+    const hadSelection =
+        selectedSplitIndex.value !== null ||
+        selectedSplitRange.value !== null ||
+        routeSegmentHighlight.value?.source === "split";
 
-  selectedSplitIndex.value = null;
-  selectedSplitRange.value = null;
+    selectedSplitIndex.value = null;
+    selectedSplitRange.value = null;
 
-  if (routeSegmentHighlight.value?.source === "split") {
-    routeSegmentHighlight.value = null;
-  }
-
-  if (hadSelection) {
-    elevationHoverPoint.value = null;
-    if (resetMap) {
-      mapResetKey.value++;
+    if (routeSegmentHighlight.value?.source === "split") {
+        routeSegmentHighlight.value = null;
     }
-  }
+
+    if (hadSelection) {
+        elevationHoverPoint.value = null;
+        if (resetMap) {
+            mapResetKey.value++;
+        }
+    }
 }
 
 function clearChartZoom(options?: { resetMap?: boolean }) {
-  const resetMap = options?.resetMap ?? true;
-  const hadSelection =
-    !!chartZoomRange.value || routeSegmentHighlight.value?.source === "chart-range";
+    const resetMap = options?.resetMap ?? true;
+    const hadSelection =
+        !!chartZoomRange.value ||
+        routeSegmentHighlight.value?.source === "chart-range";
 
-  chartZoomRange.value = null;
+    chartZoomRange.value = null;
 
-  if (routeSegmentHighlight.value?.source === "chart-range") {
-    routeSegmentHighlight.value = null;
-  }
-
-  if (hadSelection) {
-    elevationHoverPoint.value = null;
-    mapHoverDistances.value = null;
-    if (resetMap) {
-      mapResetKey.value++;
+    if (routeSegmentHighlight.value?.source === "chart-range") {
+        routeSegmentHighlight.value = null;
     }
-  }
+
+    if (hadSelection) {
+        elevationHoverPoint.value = null;
+        mapHoverDistances.value = null;
+        if (resetMap) {
+            mapResetKey.value++;
+        }
+    }
 }
 
 function handleSplitClick(payload: {
-  start: number;
-  end: number;
-  index: number;
+    start: number;
+    end: number;
+    index: number;
 }) {
-  // Toggle selection: deselect if clicking the same row
-  if (selectedSplitIndex.value === payload.index) {
-    clearSplitSelection();
-    return;
-  }
+    // Toggle selection: deselect if clicking the same row
+    if (selectedSplitIndex.value === payload.index) {
+        clearSplitSelection();
+        return;
+    }
 
-  // Select this single split and highlight segment; clear any range selection
-  clearWaypointSegmentSelection({ resetMap: false });
-  clearChartZoom({ resetMap: false });
-  selectedSplitRange.value = null;
-  selectedSplitIndex.value = payload.index;
-  routeSegmentHighlight.value = {
-    start: payload.start,
-    end: payload.end,
-    source: "split",
-  };
+    // Select this single split and highlight segment; clear any range selection
+    clearWaypointSegmentSelection({ resetMap: false });
+    clearChartZoom({ resetMap: false });
+    selectedSplitRange.value = null;
+    selectedSplitIndex.value = payload.index;
+    routeSegmentHighlight.value = {
+        start: payload.start,
+        end: payload.end,
+        source: "split",
+    };
 }
 
 function handleSplitRangeClick(payload: {
-  startIndex: number;
-  endIndex: number;
-  start: number;
-  end: number;
+    startIndex: number;
+    endIndex: number;
+    start: number;
+    end: number;
 }) {
-  clearWaypointSegmentSelection({ resetMap: false });
-  clearChartZoom({ resetMap: false });
-  selectedSplitIndex.value = null;
-  selectedSplitRange.value = {
-    startIndex: Math.min(payload.startIndex, payload.endIndex),
-    endIndex: Math.max(payload.startIndex, payload.endIndex),
-  };
-  routeSegmentHighlight.value = {
-    start: payload.start,
-    end: payload.end,
-    source: "split",
-  };
+    clearWaypointSegmentSelection({ resetMap: false });
+    clearChartZoom({ resetMap: false });
+    selectedSplitIndex.value = null;
+    selectedSplitRange.value = {
+        startIndex: Math.min(payload.startIndex, payload.endIndex),
+        endIndex: Math.max(payload.startIndex, payload.endIndex),
+    };
+    routeSegmentHighlight.value = {
+        start: payload.start,
+        end: payload.end,
+        source: "split",
+    };
 }
 
 function handleSplitCancel() {
-  clearSplitSelection();
+    clearSplitSelection();
 }
 
 function handleWaypointSegmentClick(payload: SelectedWaypointSegment) {
-  clearSplitSelection({ resetMap: false });
-  clearChartZoom({ resetMap: false });
-  selectedWaypoint.value = null;
-  selectedWaypointSegment.value = payload;
-  routeSegmentHighlight.value = {
-    start: payload.start,
-    end: payload.end,
-    source: "waypoint-segment",
-  };
+    clearSplitSelection({ resetMap: false });
+    clearChartZoom({ resetMap: false });
+    selectedWaypoint.value = null;
+    selectedWaypointSegment.value = payload;
+    routeSegmentHighlight.value = {
+        start: payload.start,
+        end: payload.end,
+        source: "waypoint-segment",
+    };
 }
 
 function handleWaypointSegmentCancel() {
-  clearWaypointSegmentSelection();
+    clearWaypointSegmentSelection();
 }
 
 function handleChartRangeSelect(payload: { start: number; end: number }) {
-  clearSplitSelection({ resetMap: false });
-  clearWaypointSegmentSelection({ resetMap: false });
-  selectedWaypoint.value = null;
+    clearSplitSelection({ resetMap: false });
+    clearWaypointSegmentSelection({ resetMap: false });
+    selectedWaypoint.value = null;
 
-  const nextZoomRange = buildChartZoomRange(payload.start, payload.end);
-  if (!nextZoomRange) return;
+    const nextZoomRange = buildChartZoomRange(payload.start, payload.end);
+    if (!nextZoomRange) return;
 
-  chartZoomRange.value = nextZoomRange;
-  routeSegmentHighlight.value = {
-    start: Math.min(payload.start, payload.end),
-    end: Math.max(payload.start, payload.end),
-    source: "chart-range",
-  };
+    chartZoomRange.value = nextZoomRange;
+    routeSegmentHighlight.value = {
+        start: Math.min(payload.start, payload.end),
+        end: Math.max(payload.start, payload.end),
+        source: "chart-range",
+    };
 }
 
 function handleChartZoomReset() {
-  clearChartZoom();
+    clearChartZoom();
 }
 
 // -------- Plan Stats (header) helpers --------
 function formatHMS(totalSeconds: number): string {
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = Math.round(totalSeconds % 60);
-  return `${h.toString()}:${m.toString().padStart(2, "0")}:${s
-    .toString()
-    .padStart(2, "0")}`;
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = Math.round(totalSeconds % 60);
+    return `${h.toString()}:${m.toString().padStart(2, "0")}:${s
+        .toString()
+        .padStart(2, "0")}`;
 }
 
 const planPaceDisplay = computed(() => {
-  const p = currentPlan.value;
-  if (!p) return "-";
+    const p = currentPlan.value;
+    if (!p) return "-";
 
-  // In target time mode, show the *moving* pace implied by the target + stoppage settings
-  const paceSecondsRaw =
-    p.paceMode === "time"
-      ? (effectivePlanForTiming.value?.pace ?? p.pace)
-      : p.pace;
-  if (!paceSecondsRaw) return "-";
+    // In target time mode, show the *moving* pace implied by the target + stoppage settings
+    const paceSecondsRaw =
+        p.paceMode === "time"
+            ? (effectivePlanForTiming.value?.pace ?? p.pace)
+            : p.pace;
+    if (!paceSecondsRaw) return "-";
 
-  let paceSeconds = paceSecondsRaw;
-  const originalUnit = p.paceUnit;
-  const desiredUnit =
-    distanceUnit.value === "miles" ? "min_per_mi" : "min_per_km";
-  if (originalUnit !== desiredUnit) {
-    const conversionFactor = 1609.344 / 1000; // miles per kilometer
-    paceSeconds =
-      originalUnit === "min_per_km"
-        ? paceSeconds * conversionFactor
-        : paceSeconds / conversionFactor;
-  }
+    let paceSeconds = paceSecondsRaw;
+    const originalUnit = p.paceUnit;
+    const desiredUnit =
+        distanceUnit.value === "miles" ? "min_per_mi" : "min_per_km";
+    if (originalUnit !== desiredUnit) {
+        const conversionFactor = 1609.344 / 1000; // miles per kilometer
+        paceSeconds =
+            originalUnit === "min_per_km"
+                ? paceSeconds * conversionFactor
+                : paceSeconds / conversionFactor;
+    }
 
-  const total = Math.round(paceSeconds);
-  const mm = Math.floor(total / 60);
-  const ss = total % 60;
-  const unit = desiredUnit === "min_per_mi" ? "/mi" : "/km";
-  return `${mm}:${ss.toString().padStart(2, "0")}${unit}`;
+    const total = Math.round(paceSeconds);
+    const mm = Math.floor(total / 60);
+    const ss = total % 60;
+    const unit = desiredUnit === "min_per_mi" ? "/mi" : "/km";
+    return `${mm}:${ss.toString().padStart(2, "0")}${unit}`;
 });
 
 const planStrategyDisplay = computed(() => {
-  const p = currentPlan.value;
-  if (!p) return "-";
-  if (p.pacingStrategy === "linear") {
-    const pct = p.pacingLinearPercent ?? 0;
-    const sign = pct > 0 ? "+" : "";
-    return `Linear (${sign}${pct}%)`;
-  }
-  return "Flat";
+    const p = currentPlan.value;
+    if (!p) return "-";
+    if (p.pacingStrategy === "linear") {
+        const pct = p.pacingLinearPercent ?? 0;
+        const sign = pct > 0 ? "+" : "";
+        return `Linear (${sign}${pct}%)`;
+    }
+    return "Flat";
 });
 
 const courseDistanceMetersForTiming = computed(() => {
-  if (course.value?.totalDistance && course.value.totalDistance > 0) {
-    return course.value.totalDistance;
-  }
-  const wps = waypoints.value || [];
-  if (!wps.length) return 0;
-  const sorted = [...wps].sort((a, b) => a.order - b.order);
-  const last = sorted[sorted.length - 1];
-  return last?.distance || 0;
+    if (course.value?.totalDistance && course.value.totalDistance > 0) {
+        return course.value.totalDistance;
+    }
+    const wps = waypoints.value || [];
+    if (!wps.length) return 0;
+    const sorted = [...wps].sort((a, b) => a.order - b.order);
+    const last = sorted[sorted.length - 1];
+    return last?.distance || 0;
 });
 
 const intermediateWaypointCount = computed(() => {
-  const wps = waypoints.value || [];
-  if (!wps.length) return 0;
-  const maxOrder = Math.max(...wps.map((w) => w.order));
-  return wps.filter(
-    (w) => w.order !== 0 && !(w.order === maxOrder && maxOrder > 0),
-  ).length;
+    const wps = waypoints.value || [];
+    if (!wps.length) return 0;
+    const maxOrder = Math.max(...wps.map((w) => w.order));
+    return wps.filter(
+        (w) => w.order !== 0 && !(w.order === maxOrder && maxOrder > 0),
+    ).length;
 });
 
 const plannedTotalStoppageSeconds = computed(() => {
-  const p = currentPlan.value;
-  const wps = waypoints.value || [];
-  if (!p || !wps.length) return 0;
+    const p = currentPlan.value;
+    const wps = waypoints.value || [];
+    if (!p || !wps.length) return 0;
 
-  const maxOrder = Math.max(...wps.map((w) => w.order));
-  let total = 0;
-  for (const w of wps) {
-    if (w.order === 0) continue;
-    if (w.order === maxOrder && maxOrder > 0) continue;
-    const custom = waypointStoppageTimes.value.find(
-      (st) => st.waypointId === w.id,
-    );
-    total += custom ? custom.stoppageTime : p.defaultStoppageTime || 0;
-  }
-  return total;
+    const maxOrder = Math.max(...wps.map((w) => w.order));
+    let total = 0;
+    for (const w of wps) {
+        if (w.order === 0) continue;
+        if (w.order === maxOrder && maxOrder > 0) continue;
+        const custom = waypointStoppageTimes.value.find(
+            (st) => st.waypointId === w.id,
+        );
+        total += custom ? custom.stoppageTime : p.defaultStoppageTime || 0;
+    }
+    return total;
 });
 
 const effectivePlanForTiming = computed<SelectPlan | null>(() => {
-  const p = currentPlan.value;
-  if (!p) return null;
+    const p = currentPlan.value;
+    if (!p) return null;
 
-  const includeStops = p.targetIncludesStoppages === true;
-  if (!includeStops) return p;
+    const includeStops = p.targetIncludesStoppages === true;
+    if (!includeStops) return p;
 
-  const distanceMeters = courseDistanceMetersForTiming.value;
-  const unitMeters = p.paceUnit === "min_per_mi" ? 1609.344 : 1000;
-  const distanceUnits = distanceMeters > 0 ? distanceMeters / unitMeters : 0;
-  if (!p.pace || p.pace <= 0 || distanceUnits <= 0) return p;
+    const distanceMeters = courseDistanceMetersForTiming.value;
+    const unitMeters = p.paceUnit === "min_per_mi" ? 1609.344 : 1000;
+    const distanceUnits = distanceMeters > 0 ? distanceMeters / unitMeters : 0;
+    if (!p.pace || p.pace <= 0 || distanceUnits <= 0) return p;
 
-  const plannedStops = plannedTotalStoppageSeconds.value;
-  const paceMode = (p.paceMode as "pace" | "time" | "normalized") || "pace";
+    const plannedStops = plannedTotalStoppageSeconds.value;
+    const paceMode = (p.paceMode as "pace" | "time" | "normalized") || "pace";
 
-  const desiredTotalSeconds =
-    paceMode === "time" &&
-    typeof p.targetTimeSeconds === "number" &&
-    p.targetTimeSeconds > 0
-      ? p.targetTimeSeconds
-      : p.pace * distanceUnits;
+    const desiredTotalSeconds =
+        paceMode === "time" &&
+        typeof p.targetTimeSeconds === "number" &&
+        p.targetTimeSeconds > 0
+            ? p.targetTimeSeconds
+            : p.pace * distanceUnits;
 
-  const travelSeconds = Math.max(0, desiredTotalSeconds - plannedStops);
-  const adjustedPace = travelSeconds > 0 ? travelSeconds / distanceUnits : 0;
-  return { ...p, pace: adjustedPace };
+    const travelSeconds = Math.max(0, desiredTotalSeconds - plannedStops);
+    const adjustedPace = travelSeconds > 0 ? travelSeconds / distanceUnits : 0;
+    return { ...p, pace: adjustedPace };
 });
 
 const planEstimatedElapsedDisplay = computed(() => {
-  const p = currentPlan.value;
-  if (!p) return "-";
+    const p = currentPlan.value;
+    if (!p) return "-";
 
-  // In target time mode, display the exact target finish time
-  if (
-    p.paceMode === "time" &&
-    typeof p.targetTimeSeconds === "number" &&
-    p.targetTimeSeconds > 0
-  ) {
+    // In target time mode, display the exact target finish time
+    if (
+        p.paceMode === "time" &&
+        typeof p.targetTimeSeconds === "number" &&
+        p.targetTimeSeconds > 0
+    ) {
+        const elapsed =
+            p.targetIncludesStoppages === true
+                ? p.targetTimeSeconds
+                : p.targetTimeSeconds + plannedTotalStoppageSeconds.value;
+        return formatHMS(elapsed);
+    }
+
+    // For pace/normalized modes, estimate from distance and stoppages
+    const distanceMeters = courseDistanceMetersForTiming.value;
+    if (!p.pace || !distanceMeters) return "-";
+
+    const unitMeters = p.paceUnit === "min_per_mi" ? 1609.344 : 1000;
+    const distanceUnits = distanceMeters / unitMeters;
+    const travel = p.pace * distanceUnits;
     const elapsed =
-      p.targetIncludesStoppages === true
-        ? p.targetTimeSeconds
-        : p.targetTimeSeconds + plannedTotalStoppageSeconds.value;
-    return formatHMS(elapsed);
-  }
+        p.targetIncludesStoppages === true
+            ? travel
+            : travel + plannedTotalStoppageSeconds.value;
 
-  // For pace/normalized modes, estimate from distance and stoppages
-  const distanceMeters = courseDistanceMetersForTiming.value;
-  if (!p.pace || !distanceMeters) return "-";
-
-  const unitMeters = p.paceUnit === "min_per_mi" ? 1609.344 : 1000;
-  const distanceUnits = distanceMeters / unitMeters;
-  const travel = p.pace * distanceUnits;
-  const elapsed =
-    p.targetIncludesStoppages === true
-      ? travel
-      : travel + plannedTotalStoppageSeconds.value;
-
-  return formatHMS(Math.round(elapsed));
+    return formatHMS(Math.round(elapsed));
 });
 
 const planTargetInterpretationNote = computed(() => {
-  const p = currentPlan.value;
-  if (!p) return null;
-  if (plannedTotalStoppageSeconds.value <= 0) return null;
+    const p = currentPlan.value;
+    if (!p) return null;
+    if (plannedTotalStoppageSeconds.value <= 0) return null;
 
-  const stops = formatHMS(plannedTotalStoppageSeconds.value);
-  const includeStops = p.targetIncludesStoppages === true;
-  const paceMode = (p.paceMode as "pace" | "time" | "normalized") || "pace";
+    const stops = formatHMS(plannedTotalStoppageSeconds.value);
+    const includeStops = p.targetIncludesStoppages === true;
+    const paceMode = (p.paceMode as "pace" | "time" | "normalized") || "pace";
 
-  if (includeStops) {
-    return `Pacing includes planned waypoint stops (${stops} subtracted for moving pace).`;
-  }
+    if (includeStops) {
+        return `Pacing includes planned waypoint stops (${stops} subtracted for moving pace).`;
+    }
 
-  if (paceMode === "time") {
-    return `Target time excludes planned waypoint stops (+${stops} to elapsed).`;
-  }
+    if (paceMode === "time") {
+        return `Target time excludes planned waypoint stops (+${stops} to elapsed).`;
+    }
 
-  return null;
+    return null;
 });
 
 // Elevation chart interaction state
 const elevationHoverPoint = ref<{
-  lat: number;
-  lng: number;
-  distance: number;
-  elevation: number;
-  grade: number;
+    lat: number;
+    lng: number;
+    distance: number;
+    elevation: number;
+    grade: number;
 } | null>(null);
 
 // Stores one or two candidate distances for mouse hover on the map course
@@ -2236,1332 +2282,1527 @@ const mapHoverDistances = ref<number[] | null>(null);
 
 // Handle elevation chart hover events
 function handleElevationHover(event: {
-  lat: number;
-  lng: number;
-  distance: number;
-  elevation: number;
-  grade: number;
+    lat: number;
+    lng: number;
+    distance: number;
+    elevation: number;
+    grade: number;
 }) {
-  elevationHoverPoint.value = event;
+    elevationHoverPoint.value = event;
 }
 
 // Reset elevation hover point when leaving the chart
 function handleElevationLeave() {
-  elevationHoverPoint.value = null;
+    elevationHoverPoint.value = null;
 }
 
 // Handle pace chart hover events (reuse elevation hover point state)
 function handlePaceHover(event: {
-  lat: number;
-  lng: number;
-  distance: number;
-  elevation: number;
-  grade: number;
+    lat: number;
+    lng: number;
+    distance: number;
+    elevation: number;
+    grade: number;
 }) {
-  elevationHoverPoint.value = event;
+    elevationHoverPoint.value = event;
 }
 
 // Reset pace hover point when leaving the chart
 function handlePaceLeave() {
-  elevationHoverPoint.value = null;
+    elevationHoverPoint.value = null;
 }
 
 // Handle map hover events
 function handleMapHover(event: {
-  lat: number;
-  lng: number;
-  distance: number;
-  distances?: number[];
+    lat: number;
+    lng: number;
+    distance: number;
+    distances?: number[];
 }) {
-  if (event.distances && event.distances.length > 0) {
-    mapHoverDistances.value = event.distances;
-    return;
-  }
-  mapHoverDistances.value = [event.distance];
+    if (event.distances && event.distances.length > 0) {
+        mapHoverDistances.value = event.distances;
+        return;
+    }
+    mapHoverDistances.value = [event.distance];
 }
 
 function handleMapLeave() {
-  mapHoverDistances.value = null;
+    mapHoverDistances.value = null;
 }
 
 // Waypoint interaction state
 const selectedWaypoint = ref<Waypoint | null>(null);
 const waypointPanelTab = ref<"waypoints" | "splits">("waypoints");
 const mobilePanelTab = ref<"info" | "map" | "charts" | "waypoints" | "splits">(
-  "map",
+    "map",
 );
 
 const publicViewLabel = computed(() => {
-  if (mode.value !== "public") return null;
-  return currentPlan.value ? `Plan — ${currentPlan.value.name}` : "Course";
+    if (mode.value !== "public") return null;
+    return currentPlan.value ? `Plan — ${currentPlan.value.name}` : "Course";
 });
 
 // Handle waypoint events
 function handleWaypointSelect(waypoint: Waypoint) {
-  clearWaypointSegmentSelection();
-  clearChartZoom();
-  // Toggle selection: if the same waypoint is clicked, deselect it
-  if (selectedWaypoint.value?.id === waypoint.id) {
-    selectedWaypoint.value = null;
-  } else {
-    selectedWaypoint.value = waypoint;
-  }
+    clearWaypointSegmentSelection();
+    clearChartZoom();
+    // Toggle selection: if the same waypoint is clicked, deselect it
+    if (selectedWaypoint.value?.id === waypoint.id) {
+        selectedWaypoint.value = null;
+    } else {
+        selectedWaypoint.value = waypoint;
+    }
 }
 
 function handleWaypointHover(_waypoint: Waypoint) {
-  // Could add hover effects here if needed
+    // Could add hover effects here if needed
 }
 
 function handleWaypointLeave() {
-  // Could clear hover effects here if needed
+    // Could clear hover effects here if needed
 }
 
 function handleWaypointClick(waypoint: Waypoint) {
-  clearWaypointSegmentSelection();
-  clearChartZoom();
-  // Toggle selection: if the same waypoint is clicked, deselect it
-  if (selectedWaypoint.value?.id === waypoint.id) {
-    selectedWaypoint.value = null;
-  } else {
-    selectedWaypoint.value = waypoint;
-  }
+    clearWaypointSegmentSelection();
+    clearChartZoom();
+    // Toggle selection: if the same waypoint is clicked, deselect it
+    if (selectedWaypoint.value?.id === waypoint.id) {
+        selectedWaypoint.value = null;
+    } else {
+        selectedWaypoint.value = waypoint;
+    }
 }
 
 function handleElevationWaypointClick(chartWaypoint: {
-  id: string;
-  name: string;
-  distance: number;
-  order: number;
-  tags: string[];
+    id: string;
+    name: string;
+    distance: number;
+    order: number;
+    tags: string[];
 }) {
-  // Find the full waypoint object from the waypoints array
-  const fullWaypoint = waypoints.value.find((wp) => wp.id === chartWaypoint.id);
-  if (fullWaypoint) {
-    handleWaypointClick(fullWaypoint);
-  }
+    // Find the full waypoint object from the waypoints array
+    const fullWaypoint = waypoints.value.find(
+        (wp) => wp.id === chartWaypoint.id,
+    );
+    if (fullWaypoint) {
+        handleWaypointClick(fullWaypoint);
+    }
 }
 
 // Course edit modal handlers
 function openCourseEditModal() {
-  // Only allow owners to open the edit modal
-  if (!course.value || (course.value as { role?: string }).role !== "owner")
-    return;
-  courseEditModalOpen.value = true;
+    // Only allow owners to open the edit modal
+    if (!course.value || (course.value as { role?: string }).role !== "owner")
+        return;
+    courseEditModalOpen.value = true;
 }
 
 function closeCourseEditModal() {
-  courseEditModalOpen.value = false;
+    courseEditModalOpen.value = false;
 }
 
 function openCourseInfoModal() {
-  courseInfoModalOpen.value = true;
+    courseInfoModalOpen.value = true;
 }
 
 function closeCourseInfoModal() {
-  courseInfoModalOpen.value = false;
+    courseInfoModalOpen.value = false;
 }
 
 function openPaceExplanationModal() {
-  if (!currentPlan.value) return;
-  mobilePanelTab.value = "charts";
-  paceExplanationModalOpen.value = true;
+    if (!currentPlan.value) return;
+    mobilePanelTab.value = "charts";
+    paceExplanationModalOpen.value = true;
 }
 
 function setWaypointDetailTab(tab: "waypoints" | "splits") {
-  waypointPanelTab.value = tab;
+    waypointPanelTab.value = tab;
 }
 
 function setMobileWaypointDetailTab(tab: "waypoints" | "splits") {
-  waypointPanelTab.value = tab;
-  mobilePanelTab.value = tab;
+    waypointPanelTab.value = tab;
+    mobilePanelTab.value = tab;
 }
 
 function closePaceExplanationModal() {
-  paceExplanationModalOpen.value = false;
+    paceExplanationModalOpen.value = false;
 }
 
 function handleCourseUpdated(updatedCourse: SelectCourse) {
-  if (courseData.value) {
-    courseData.value.course = {
-      ...courseData.value.course,
-      ...updatedCourse,
-    };
-  }
-  refresh(); // Refresh to get the latest data
+    if (courseData.value) {
+        courseData.value.course = {
+            ...courseData.value.course,
+            ...updatedCourse,
+        };
+    }
+    refresh(); // Refresh to get the latest data
 }
 
 function handleCourseSettingsUpdated(updatedSettings: CourseAnalysisSettings) {
-  if (courseData.value?.course) {
-    courseData.value.course = {
-      ...courseData.value.course,
-      courseSettings: updatedSettings,
-    };
-  }
+    if (courseData.value?.course) {
+        courseData.value.course = {
+            ...courseData.value.course,
+            courseSettings: updatedSettings,
+        };
+    }
 }
 
 function handleWaypointUpdated(_updatedWaypoint: Waypoint) {
-  // Refresh waypoints to get the latest data
-  refreshWaypoints();
+    // Refresh waypoints to get the latest data
+    refreshWaypoints();
 }
 
 function handleActivitySelected(activityId: string) {
-  const normalizedActivityId = activityId || null;
-  activitySelectionInitialized.value = true;
-  currentActivityId.value = normalizedActivityId;
-  replaceCourseSelectionQuery({
-    activityParam: normalizedActivityId || NO_ACTIVITY_QUERY_VALUE,
-  });
+    const normalizedActivityId = activityId || null;
+    activitySelectionInitialized.value = true;
+    currentActivityId.value = normalizedActivityId;
+    replaceCourseSelectionQuery({
+        activityParam: normalizedActivityId || NO_ACTIVITY_QUERY_VALUE,
+    });
 }
 
 async function handleActivitiesChanged() {
-  await refreshActivities();
-  const availableActivities = activitiesData.value?.activities || [];
-  if (
-    currentActivityId.value &&
-    !availableActivities.some((activity) => activity.id === currentActivityId.value)
-  ) {
-    currentActivityId.value = null;
-    activitySelectionInitialized.value = true;
-    replaceCourseSelectionQuery({
-      activityParam: availableActivities.length ? NO_ACTIVITY_QUERY_VALUE : null,
-    });
-  }
+    await refreshActivities();
+    const availableActivities = activitiesData.value?.activities || [];
+    if (
+        currentActivityId.value &&
+        !availableActivities.some(
+            (activity) => activity.id === currentActivityId.value,
+        )
+    ) {
+        currentActivityId.value = null;
+        activitySelectionInitialized.value = true;
+        replaceCourseSelectionQuery({
+            activityParam: availableActivities.length
+                ? NO_ACTIVITY_QUERY_VALUE
+                : null,
+        });
+    }
 }
 
 // Plan management functions
 function handlePlanSelected(planId: string) {
-  currentPlanId.value = planId || null;
+    currentPlanId.value = planId || null;
 
-  // Update URL with plan query parameter
-  replaceCourseSelectionQuery({
-    planId: planId || null,
-  });
+    // Update URL with plan query parameter
+    replaceCourseSelectionQuery({
+        planId: planId || null,
+    });
 }
 
 function openPlanSetupModal() {
-  editingPlan.value = null;
-  planSetupModalOpen.value = true;
+    editingPlan.value = null;
+    planSetupModalOpen.value = true;
 }
 
 function openEditPlanModal(plan: SelectPlan) {
-  editingPlan.value = plan;
-  planSetupModalOpen.value = true;
+    editingPlan.value = plan;
+    planSetupModalOpen.value = true;
 }
 
 function closePlanSetupModal() {
-  planSetupModalOpen.value = false;
-  editingPlan.value = null;
+    planSetupModalOpen.value = false;
+    editingPlan.value = null;
 }
 
 async function handlePlanCreated(plan: unknown) {
-  await refreshPlans();
-  await refreshActivityComparisons();
-  const planId = (plan as SelectPlan).id;
-  currentPlanId.value = planId;
+    await refreshPlans();
+    await refreshActivityComparisons();
+    const planId = (plan as SelectPlan).id;
+    currentPlanId.value = planId;
 
-  // Update URL with new plan
-  replaceCourseSelectionQuery({
-    planId,
-  });
+    // Update URL with new plan
+    replaceCourseSelectionQuery({
+        planId,
+    });
 }
 
 async function handlePlanUpdated(plan: unknown) {
-  const typedPlan = plan as SelectPlan;
-  await refreshPlans();
-  await refreshActivityComparisons();
-  if (currentPlanId.value === typedPlan.id) {
-    // Refresh waypoint notes and stoppage times in case plan details changed
-    try {
-      const [notesResponse, stoppageTimesResponse] = await Promise.all([
-        $fetch<{ notes: SelectWaypointNote[] }>(
-          `/api/courses/${courseId}/plans/${typedPlan.id}/waypoint-notes`,
-        ),
-        $fetch<{ stoppageTimes: SelectWaypointStoppageTime[] }>(
-          `/api/courses/${courseId}/plans/${typedPlan.id}/waypoint-stoppage-times`,
-        ),
-      ]);
-      waypointNotes.value = notesResponse.notes;
-      waypointStoppageTimes.value = stoppageTimesResponse.stoppageTimes;
-    } catch (error) {
-      console.error("Error refreshing waypoint data:", error);
+    const typedPlan = plan as SelectPlan;
+    await refreshPlans();
+    await refreshActivityComparisons();
+    if (currentPlanId.value === typedPlan.id) {
+        // Refresh waypoint notes and stoppage times in case plan details changed
+        try {
+            const [notesResponse, stoppageTimesResponse] = await Promise.all([
+                $fetch<{ notes: SelectWaypointNote[] }>(
+                    `/api/courses/${courseId}/plans/${typedPlan.id}/waypoint-notes`,
+                ),
+                $fetch<{ stoppageTimes: SelectWaypointStoppageTime[] }>(
+                    `/api/courses/${courseId}/plans/${typedPlan.id}/waypoint-stoppage-times`,
+                ),
+            ]);
+            waypointNotes.value = notesResponse.notes;
+            waypointStoppageTimes.value = stoppageTimesResponse.stoppageTimes;
+        } catch (error) {
+            console.error("Error refreshing waypoint data:", error);
+        }
     }
-  }
 }
 
 async function handlePlanDeleted(planId: string) {
-  try {
-    await $fetch(`/api/courses/${courseId}/plans/${planId}`, {
-      method: "DELETE",
-    });
+    try {
+        await $fetch(`/api/courses/${courseId}/plans/${planId}`, {
+            method: "DELETE",
+        });
 
-    await refreshPlans();
-    await refreshActivityComparisons();
+        await refreshPlans();
+        await refreshActivityComparisons();
 
-    if (currentPlanId.value === planId) {
-      currentPlanId.value = null;
-      waypointNotes.value = [];
-      waypointStoppageTimes.value = [];
+        if (currentPlanId.value === planId) {
+            currentPlanId.value = null;
+            waypointNotes.value = [];
+            waypointStoppageTimes.value = [];
 
-      // Remove plan from URL
-      replaceCourseSelectionQuery({ planId: null });
+            // Remove plan from URL
+            replaceCourseSelectionQuery({ planId: null });
+        }
+    } catch (error) {
+        console.error("Error deleting plan:", error);
     }
-  } catch (error) {
-    console.error("Error deleting plan:", error);
-  }
 }
 
 // Waypoint notes functions
 function getWaypointNote(waypointId: string): string {
-  const note = waypointNotes.value.find((n) => n.waypointId === waypointId);
-  return note?.notes || "";
+    const note = waypointNotes.value.find((n) => n.waypointId === waypointId);
+    return note?.notes || "";
 }
 
-function getWaypointCustomStoppageTime(
-  waypointId: string,
-): number | undefined {
-  const stoppageTime = waypointStoppageTimes.value.find(
-    (st) => st.waypointId === waypointId,
-  );
-  return stoppageTime?.stoppageTime;
+function getWaypointCustomStoppageTime(waypointId: string): number | undefined {
+    const stoppageTime = waypointStoppageTimes.value.find(
+        (st) => st.waypointId === waypointId,
+    );
+    return stoppageTime?.stoppageTime;
 }
 
 function getDefaultStoppageTime(): number {
-  return currentPlan.value?.defaultStoppageTime || 0;
+    return currentPlan.value?.defaultStoppageTime || 0;
 }
 
 async function saveWaypointNote(waypointId: string, notes: string) {
-  if (!currentPlanId.value) return;
+    if (!currentPlanId.value) return;
 
-  try {
-    const response = await fetch(
-      `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-notes`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          waypointId,
-          notes: notes.trim(),
-        }),
-      },
-    );
+    try {
+        const response = await fetch(
+            `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-notes`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    waypointId,
+                    notes: notes.trim(),
+                }),
+            },
+        );
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        // Refresh waypoint notes
+        const notesResponse = await $fetch<{ notes: SelectWaypointNote[] }>(
+            `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-notes`,
+        );
+        waypointNotes.value = notesResponse.notes;
+    } catch (error) {
+        console.error("Error saving waypoint note:", error);
     }
-
-    // Refresh waypoint notes
-    const notesResponse = await $fetch<{ notes: SelectWaypointNote[] }>(
-      `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-notes`,
-    );
-    waypointNotes.value = notesResponse.notes;
-  } catch (error) {
-    console.error("Error saving waypoint note:", error);
-  }
 }
 
 async function deleteWaypointNote(waypointId: string) {
-  if (!currentPlanId.value) return;
+    if (!currentPlanId.value) return;
 
-  try {
-    await $fetch(
-      `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-notes/${waypointId}`,
-      {
-        method: "DELETE",
-      },
-    );
+    try {
+        await $fetch(
+            `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-notes/${waypointId}`,
+            {
+                method: "DELETE",
+            },
+        );
 
-    // Refresh waypoint notes
-    const response = await $fetch<{ notes: SelectWaypointNote[] }>(
-      `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-notes`,
-    );
-    waypointNotes.value = response.notes;
-  } catch (error) {
-    console.error("Error deleting waypoint note:", error);
-  }
+        // Refresh waypoint notes
+        const response = await $fetch<{ notes: SelectWaypointNote[] }>(
+            `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-notes`,
+        );
+        waypointNotes.value = response.notes;
+    } catch (error) {
+        console.error("Error deleting waypoint note:", error);
+    }
 }
 
 async function saveWaypointStoppageTime(
-  waypointId: string,
-  stoppageTime: number,
+    waypointId: string,
+    stoppageTime: number,
 ) {
-  if (!currentPlanId.value) return;
+    if (!currentPlanId.value) return;
 
-  try {
-    await fetch(
-      `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-stoppage-times`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          waypointId,
-          stoppageTime,
-        }),
-      },
-    );
+    try {
+        await fetch(
+            `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-stoppage-times`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    waypointId,
+                    stoppageTime,
+                }),
+            },
+        );
 
-    // Refresh waypoint stoppage times
-    const response = await $fetch<{
-      stoppageTimes: SelectWaypointStoppageTime[];
-    }>(
-      `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-stoppage-times`,
-    );
-    waypointStoppageTimes.value = response.stoppageTimes;
-  } catch (error) {
-    console.error("Error saving waypoint stoppage time:", error);
-  }
+        // Refresh waypoint stoppage times
+        const response = await $fetch<{
+            stoppageTimes: SelectWaypointStoppageTime[];
+        }>(
+            `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-stoppage-times`,
+        );
+        waypointStoppageTimes.value = response.stoppageTimes;
+    } catch (error) {
+        console.error("Error saving waypoint stoppage time:", error);
+    }
 }
 
 async function deleteWaypointStoppageTime(waypointId: string) {
-  if (!currentPlanId.value) return;
+    if (!currentPlanId.value) return;
 
-  try {
-    await $fetch(
-      `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-stoppage-times/${waypointId}`,
-      {
-        method: "DELETE",
-      },
-    );
+    try {
+        await $fetch(
+            `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-stoppage-times/${waypointId}`,
+            {
+                method: "DELETE",
+            },
+        );
 
-    // Refresh waypoint stoppage times
-    const response = await $fetch<{
-      stoppageTimes: SelectWaypointStoppageTime[];
-    }>(
-      `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-stoppage-times`,
-    );
-    waypointStoppageTimes.value = response.stoppageTimes;
-  } catch (error) {
-    console.error("Error deleting waypoint stoppage time:", error);
-  }
+        // Refresh waypoint stoppage times
+        const response = await $fetch<{
+            stoppageTimes: SelectWaypointStoppageTime[];
+        }>(
+            `/api/courses/${courseId}/plans/${currentPlanId.value}/waypoint-stoppage-times`,
+        );
+        waypointStoppageTimes.value = response.stoppageTimes;
+    } catch (error) {
+        console.error("Error deleting waypoint stoppage time:", error);
+    }
 }
 
 function handleWaypointDeleted(_waypointId: string) {
-  // Refresh waypoints to get the latest data after deletion
-  refreshWaypoints();
+    // Refresh waypoints to get the latest data after deletion
+    refreshWaypoints();
 }
 
 function handleWaypointCreated(_createdWaypoint: Waypoint) {
-  // Refresh waypoints to get the latest data after creation
-  refreshWaypoints();
+    // Refresh waypoints to get the latest data after creation
+    refreshWaypoints();
 }
 
 // Cleanup resize listeners on unmount
 onUnmounted(() => {
-  if (isResizing.value) {
-    stopResize();
-  }
-  if (chartIsResizing.value) {
-    stopChartResize();
-  }
+    if (isResizing.value) {
+        stopResize();
+    }
+    if (chartIsResizing.value) {
+        stopChartResize();
+    }
 });
 </script>
 
 <template>
-  <div class="flex flex-col w-full h-full overflow-hidden">
-    <AppHeader class="w-full" />
+    <div class="flex flex-col w-full h-full overflow-hidden">
+        <AppHeader class="w-full" />
 
-    <div class="w-full h-full flex flex-col overflow-hidden">
-      <div v-if="pending" class="flex items-center justify-center h-full">
-        <Icon
-          name="svg-spinners:6-dots-scale"
-          class="text-(--main-color) scale-200"
+        <div class="w-full h-full flex flex-col overflow-hidden">
+            <div v-if="pending" class="flex items-center justify-center h-full">
+                <Icon
+                    name="svg-spinners:6-dots-scale"
+                    class="text-(--main-color) scale-200"
+                />
+            </div>
+
+            <div
+                v-else-if="error"
+                class="flex items-center justify-center h-full"
+            >
+                <div class="text-center">
+                    <Icon
+                        name="lucide:triangle-alert"
+                        class="h-16 w-16 text-(--error-color) mx-auto mb-4"
+                    />
+                    <h2 class="text-(--main-color) mb-2">Course Not Found</h2>
+                    <p class="text-(--sub-color) mb-4">
+                        The course you're looking for doesn't exist or you don't
+                        have access to it.
+                    </p>
+                    <NuxtLink
+                        to="/courses"
+                        class="px-4 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity"
+                    >
+                        Back to Courses
+                    </NuxtLink>
+                </div>
+            </div>
+
+            <div v-else-if="course" class="flex flex-col h-full">
+                <!-- Header Section -->
+                <div
+                    class="p-2 md:px-4 border-b border-(--sub-color) bg-(--bg-color)"
+                >
+                    <div
+                        class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-1"
+                    >
+                        <div class="flex-1">
+                            <div
+                                class="text-2xl md:text-4xl font-medium text-(--main-color)"
+                            >
+                                <span class="inline-flex items-center gap-2">
+                                    <span>{{ course.name }}</span>
+                                    <Icon
+                                        v-tooltip="
+                                            course.public
+                                                ? 'Public course'
+                                                : 'Private course'
+                                        "
+                                        :name="
+                                            course.public
+                                                ? 'lucide:globe'
+                                                : 'lucide:lock'
+                                        "
+                                        class="h-4 w-4 scale-70 text-(--sub-color)"
+                                    />
+                                </span>
+                            </div>
+                            <div
+                                v-if="mode === 'public'"
+                                class="mt-1 text-xs text-(--sub-color)"
+                            >
+                                {{ publicViewLabel }}
+                            </div>
+                            <div
+                                v-if="course.description"
+                                class="mt-2 course-description"
+                            >
+                                <div
+                                    class="text-(--sub-color) course-description"
+                                >
+                                    <MDC :value="course.description" />
+                                </div>
+                            </div>
+                        </div>
+                        <div
+                            v-if="mode === 'member'"
+                            class="flex items-center gap-2 flex-wrap justify-start md:justify-end mt-1 md:mt-0 w-full md:w-auto"
+                        >
+                            <ActivitySelector
+                                v-if="capabilities.canManageActivities"
+                                :activities="activities"
+                                :current-activity-id="currentActivityId"
+                                :course-id="courseId"
+                                @activity-selected="handleActivitySelected"
+                                @activities-changed="handleActivitiesChanged"
+                            />
+
+                            <PlanSelector
+                                v-if="
+                                    mode === 'member' &&
+                                    capabilities.canManagePlans
+                                "
+                                :plans="plans"
+                                :current-plan-id="currentPlanId"
+                                :course-id="courseId"
+                                @plan-selected="handlePlanSelected"
+                                @add-plan="openPlanSetupModal"
+                                @edit-plan="openEditPlanModal"
+                                @delete-plan="handlePlanDeleted"
+                            />
+
+                            <CourseActionsDropdown
+                                v-if="course && mode === 'member'"
+                                :course="course"
+                                :current-plan="effectivePlanForTiming"
+                                @edit-course="openCourseEditModal"
+                                @download-file="downloadOriginalFile"
+                                @export-plan-csv="exportPlanCsv"
+                                @export-plan-pdf="exportPlanPdf"
+                                @delete-course="deleteCourse"
+                                @toggle-public="toggleCoursePublic"
+                                @toggle-share="toggleCourseShare"
+                                @toggle-plan-share="toggleCurrentPlanShare"
+                                @copy-share-link="handleCopyShareLink"
+                                @copy-plan-share-link="copyPlanShareLink"
+                                @info-course="openCourseInfoModal"
+                                @show-pace-explanation="
+                                    openPaceExplanationModal
+                                "
+                                @copy-course="cloneCourse"
+                            />
+                        </div>
+                    </div>
+
+                    <div class="hidden md:flex flex-col gap-4">
+                        <!-- Course Metrics -->
+                        <div class="flex items-center gap-2 text-sm">
+                            <div
+                                v-if="course.totalDistance != null"
+                                class="flex items-center gap-2 text-(--main-color)"
+                            >
+                                <Icon
+                                    name="lucide:map-pin"
+                                    class="h-5 w-5 scale-150 -translate-y-0.5"
+                                />
+                                <div class="flex flex-col">
+                                    <span class="font-medium">{{
+                                        formatDistance(
+                                            course.totalDistance,
+                                            userSettingsStore.getDistanceUnitForCourse
+                                                ? userSettingsStore.getDistanceUnitForCourse(
+                                                      course || undefined,
+                                                  )
+                                                : (course?.defaultDistanceUnit ??
+                                                      "miles"),
+                                        )
+                                    }}</span>
+                                    <span class="text-xs text-(--sub-color)"
+                                        >Distance</span
+                                    >
+                                </div>
+                            </div>
+                            <div
+                                v-if="course.elevationGain != null"
+                                class="flex items-center gap-2 text-(--main-color)"
+                            >
+                                <Icon
+                                    name="lucide:arrow-up"
+                                    class="h-5 w-5 scale-150 -translate-y-0.5"
+                                />
+                                <div class="flex flex-col">
+                                    <span class="font-medium">{{
+                                        formatElevation(
+                                            course.elevationGain,
+                                            userSettingsStore.getElevationUnitForCourse
+                                                ? userSettingsStore.getElevationUnitForCourse(
+                                                      course || undefined,
+                                                  )
+                                                : (course?.defaultElevationUnit ??
+                                                      "feet"),
+                                        )
+                                    }}</span>
+                                    <span class="text-xs text-(--sub-color)"
+                                        >Elevation Gain</span
+                                    >
+                                </div>
+                            </div>
+                            <div
+                                v-if="course.elevationLoss != null"
+                                class="flex items-center gap-2 text-(--main-color)"
+                            >
+                                <Icon
+                                    name="lucide:arrow-down"
+                                    class="h-5 w-5 scale-150 -translate-y-0.5"
+                                />
+                                <div class="flex flex-col">
+                                    <span class="font-medium">{{
+                                        formatElevation(
+                                            course.elevationLoss,
+                                            userSettingsStore.getElevationUnitForCourse
+                                                ? userSettingsStore.getElevationUnitForCourse(
+                                                      course || undefined,
+                                                  )
+                                                : (course?.defaultElevationUnit ??
+                                                      "feet"),
+                                        )
+                                    }}</span>
+                                    <span class="text-xs text-(--sub-color)"
+                                        >Elevation Loss</span
+                                    >
+                                </div>
+                            </div>
+                            <div
+                                v-if="formatRaceDate(course.raceDate)"
+                                class="flex items-center gap-2 text-(--main-color)"
+                            >
+                                <Icon
+                                    name="lucide:calendar-clock"
+                                    class="h-5 w-5 scale-150 -translate-y-0.5"
+                                />
+                                <div class="flex flex-col">
+                                    <span class="font-medium">{{
+                                        formatRaceDate(course.raceDate)
+                                    }}</span>
+                                    <span class="text-xs text-(--sub-color)"
+                                        >Race Date</span
+                                    >
+                                </div>
+                            </div>
+
+                            <div
+                                v-if="
+                                    currentPlan &&
+                                    (capabilities.canViewPlans ||
+                                        (mode === 'public' && publicSharedPlan))
+                                "
+                                class="w-px h-8 bg-(--sub-color) opacity-60"
+                            ></div>
+
+                            <div
+                                v-if="
+                                    currentPlan &&
+                                    (capabilities.canViewPlans ||
+                                        (mode === 'public' && publicSharedPlan))
+                                "
+                                class="flex items-center gap-2 text-sm"
+                            >
+                                <div
+                                    class="flex items-center gap-2 text-(--main-color)"
+                                >
+                                    <Icon
+                                        name="lucide:timer"
+                                        class="h-5 w-5 scale-150 -translate-y-0.5"
+                                    />
+                                    <div class="flex flex-col">
+                                        <span class="font-medium">{{
+                                            planPaceDisplay
+                                        }}</span>
+                                        <span class="text-xs text-(--sub-color)"
+                                            >Target Pace</span
+                                        >
+                                    </div>
+                                </div>
+
+                                <div
+                                    class="flex items-center gap-2 text-(--main-color)"
+                                >
+                                    <Icon
+                                        name="lucide:clock-3"
+                                        class="h-5 w-5 scale-150 -translate-y-0.5"
+                                    />
+                                    <div class="flex flex-col">
+                                        <span class="font-medium">{{
+                                            planEstimatedElapsedDisplay
+                                        }}</span>
+                                        <span class="text-xs text-(--sub-color)"
+                                            >Est. Elapsed</span
+                                        >
+                                    </div>
+                                </div>
+
+                                <div
+                                    class="flex items-center gap-2 text-(--main-color)"
+                                >
+                                    <Icon
+                                        name="lucide:notebook-pen"
+                                        class="h-5 w-5 scale-150 -translate-y-0.5"
+                                    />
+                                    <div class="flex flex-col">
+                                        <span class="font-medium">{{
+                                            planStrategyDisplay
+                                        }}</span>
+                                        <span class="text-xs text-(--sub-color)"
+                                            >Strategy</span
+                                        >
+                                    </div>
+                                </div>
+                            </div>
+                            <p
+                                v-if="planTargetInterpretationNote"
+                                class="mt-1 text-xs text-(--sub-color)"
+                            >
+                                {{ planTargetInterpretationNote }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div
+                        v-if="mode === 'member' && currentActivityInfo"
+                        class="mt-2 flex flex-wrap gap-2 text-xs md:text-sm"
+                    >
+                        <div
+                            class="px-3 py-2 rounded-lg border border-(--sub-color) bg-(--sub-alt-color) text-(--main-color)"
+                        >
+                            <span class="font-medium">Activity:</span>
+                            {{ currentActivityInfo.sourceFileName }}
+                        </div>
+                        <div
+                            class="px-3 py-2 rounded-lg border border-(--sub-color) bg-(--sub-alt-color) text-(--main-color)"
+                        >
+                            <span class="font-medium">Actual:</span>
+                            {{
+                                currentActivityInfo.elapsedTimeSeconds != null
+                                    ? formatElapsedTime(
+                                          currentActivityInfo.elapsedTimeSeconds,
+                                      )
+                                    : "—"
+                            }}
+                        </div>
+                        <div
+                            class="px-3 py-2 rounded-lg border border-(--sub-color) bg-(--sub-alt-color) text-(--main-color)"
+                        >
+                            <span class="font-medium">Match:</span>
+                            {{ currentActivityInfo.matchStatus }} ·
+                            {{ currentActivityInfo.matchConfidence }}%
+                        </div>
+                        <div
+                            v-if="
+                                currentActivityInfo &&
+                                currentActivityId &&
+                                currentActivityDetailPending
+                            "
+                            class="px-3 py-2 rounded-lg border border-(--sub-color) bg-(--sub-alt-color) text-(--sub-color)"
+                        >
+                            Loading activity detail…
+                        </div>
+                        <div
+                            v-if="currentPlan && activityPlanDetail"
+                            class="px-3 py-2 rounded-lg border border-(--sub-color) bg-(--sub-alt-color) text-(--main-color)"
+                        >
+                            <span class="font-medium">Planned:</span>
+                            {{
+                                activityPlanDetail.plannedElapsedSeconds != null
+                                    ? formatElapsedTime(
+                                          activityPlanDetail.plannedElapsedSeconds,
+                                      )
+                                    : "—"
+                            }}
+                        </div>
+                        <div
+                            v-if="currentPlan && activityPlanDetail"
+                            class="px-3 py-2 rounded-lg border border-(--sub-color) bg-(--sub-alt-color) text-(--main-color)"
+                        >
+                            <span class="font-medium">Delta:</span>
+                            {{
+                                formatSignedDuration(
+                                    activityPlanDetail.deltaSeconds,
+                                )
+                            }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Content Section -->
+                <!-- Mobile tabs -->
+                <div
+                    class="md:hidden flex flex-col gap-2 border-b border-(--sub-color)"
+                >
+                    <div class="flex items-center">
+                        <button
+                            class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
+                            :class="{
+                                'bg-(--main-color) text-(--bg-color)':
+                                    mobilePanelTab === 'info',
+                                'text-(--sub-color) hover:text-(--main-color)':
+                                    mobilePanelTab !== 'info',
+                            }"
+                            @click="mobilePanelTab = 'info'"
+                        >
+                            Info
+                        </button>
+
+                        <button
+                            class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
+                            :class="{
+                                'bg-(--main-color) text-(--bg-color)':
+                                    mobilePanelTab === 'map',
+                                'text-(--sub-color) hover:text-(--main-color)':
+                                    mobilePanelTab !== 'map',
+                            }"
+                            @click="mobilePanelTab = 'map'"
+                        >
+                            Map
+                        </button>
+                        <button
+                            class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
+                            :class="{
+                                'bg-(--main-color) text-(--bg-color)':
+                                    mobilePanelTab === 'charts',
+                                'text-(--sub-color) hover:text-(--main-color)':
+                                    mobilePanelTab !== 'charts',
+                            }"
+                            @click="mobilePanelTab = 'charts'"
+                        >
+                            Charts
+                        </button>
+                        <button
+                            class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
+                            :class="{
+                                'bg-(--main-color) text-(--bg-color)':
+                                    mobilePanelTab === 'waypoints',
+                                'text-(--sub-color) hover:text-(--main-color)':
+                                    mobilePanelTab !== 'waypoints',
+                            }"
+                            @click="setMobileWaypointDetailTab('waypoints')"
+                        >
+                            Waypoints
+                        </button>
+                        <button
+                            class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
+                            :class="{
+                                'bg-(--main-color) text-(--bg-color)':
+                                    mobilePanelTab === 'splits',
+                                'text-(--sub-color) hover:text-(--main-color)':
+                                    mobilePanelTab !== 'splits',
+                            }"
+                            @click="setMobileWaypointDetailTab('splits')"
+                        >
+                            Splits
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Mobile panels -->
+                <div class="md:hidden flex-1 flex flex-col overflow-hidden">
+                    <div
+                        v-if="mobilePanelTab === 'info'"
+                        class="flex-1 flex flex-col overflow-y-auto p-4"
+                    >
+                        <div class="space-y-4">
+                            <div
+                                v-if="mode === 'public'"
+                                class="text-xs text-(--sub-color)"
+                            >
+                                {{ publicViewLabel }}
+                            </div>
+                            <div
+                                class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-(--main-color)"
+                            >
+                                <div
+                                    v-if="course.totalDistance != null"
+                                    class="flex items-center gap-2"
+                                >
+                                    <Icon
+                                        name="lucide:map-pin"
+                                        class="h-5 w-5"
+                                    />
+                                    <div class="flex flex-col">
+                                        <span class="font-medium">
+                                            {{
+                                                formatDistance(
+                                                    course.totalDistance,
+                                                    userSettingsStore.getDistanceUnitForCourse
+                                                        ? userSettingsStore.getDistanceUnitForCourse(
+                                                              course ||
+                                                                  undefined,
+                                                          )
+                                                        : (course?.defaultDistanceUnit ??
+                                                              "miles"),
+                                                )
+                                            }}
+                                        </span>
+                                        <span class="text-xs text-(--sub-color)"
+                                            >Distance</span
+                                        >
+                                    </div>
+                                </div>
+
+                                <div
+                                    v-if="course.elevationGain != null"
+                                    class="flex items-center gap-2"
+                                >
+                                    <Icon
+                                        name="lucide:arrow-up"
+                                        class="h-5 w-5"
+                                    />
+                                    <div class="flex flex-col">
+                                        <span class="font-medium">
+                                            {{
+                                                formatElevation(
+                                                    course.elevationGain,
+                                                    userSettingsStore.getElevationUnitForCourse
+                                                        ? userSettingsStore.getElevationUnitForCourse(
+                                                              course ||
+                                                                  undefined,
+                                                          )
+                                                        : (course?.defaultElevationUnit ??
+                                                              "feet"),
+                                                )
+                                            }}
+                                        </span>
+                                        <span class="text-xs text-(--sub-color)"
+                                            >Elevation Gain</span
+                                        >
+                                    </div>
+                                </div>
+
+                                <div
+                                    v-if="course.elevationLoss != null"
+                                    class="flex items-center gap-2"
+                                >
+                                    <Icon
+                                        name="lucide:arrow-down"
+                                        class="h-5 w-5"
+                                    />
+                                    <div class="flex flex-col">
+                                        <span class="font-medium">
+                                            {{
+                                                formatElevation(
+                                                    course.elevationLoss,
+                                                    userSettingsStore.getElevationUnitForCourse
+                                                        ? userSettingsStore.getElevationUnitForCourse(
+                                                              course ||
+                                                                  undefined,
+                                                          )
+                                                        : (course?.defaultElevationUnit ??
+                                                              "feet"),
+                                                )
+                                            }}
+                                        </span>
+                                        <span class="text-xs text-(--sub-color)"
+                                            >Elevation Loss</span
+                                        >
+                                    </div>
+                                </div>
+
+                                <div
+                                    v-if="formatRaceDate(course.raceDate)"
+                                    class="flex items-center gap-2"
+                                >
+                                    <Icon
+                                        name="lucide:calendar-clock"
+                                        class="h-5 w-5"
+                                    />
+                                    <div class="flex flex-col">
+                                        <span class="font-medium">{{
+                                            formatRaceDate(course.raceDate)
+                                        }}</span>
+                                        <span class="text-xs text-(--sub-color)"
+                                            >Race Date</span
+                                        >
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center gap-2">
+                                    <Icon
+                                        :name="
+                                            course.public
+                                                ? 'lucide:globe'
+                                                : 'lucide:lock'
+                                        "
+                                        class="h-5 w-5"
+                                    />
+                                    <div class="flex flex-col">
+                                        <span class="font-medium">{{
+                                            course.public ? "Public" : "Private"
+                                        }}</span>
+                                        <span class="text-xs text-(--sub-color)"
+                                            >Visibility</span
+                                        >
+                                    </div>
+                                </div>
+
+                                <div
+                                    v-if="currentPlan"
+                                    class="flex items-center gap-2"
+                                >
+                                    <Icon name="lucide:timer" class="h-5 w-5" />
+                                    <div class="flex flex-col">
+                                        <span class="font-medium">{{
+                                            planPaceDisplay
+                                        }}</span>
+                                        <span class="text-xs text-(--sub-color)"
+                                            >Target Pace</span
+                                        >
+                                    </div>
+                                </div>
+
+                                <div
+                                    v-if="currentPlan"
+                                    class="flex items-center gap-2"
+                                >
+                                    <Icon
+                                        name="lucide:clock-3"
+                                        class="h-5 w-5"
+                                    />
+                                    <div class="flex flex-col">
+                                        <span class="font-medium">{{
+                                            planEstimatedElapsedDisplay
+                                        }}</span>
+                                        <span class="text-xs text-(--sub-color)"
+                                            >Est. Elapsed</span
+                                        >
+                                    </div>
+                                </div>
+
+                                <div
+                                    v-if="currentPlan"
+                                    class="flex items-center gap-2"
+                                >
+                                    <Icon
+                                        name="lucide:notebook-pen"
+                                        class="h-5 w-5"
+                                    />
+                                    <div class="flex flex-col">
+                                        <span class="font-medium">{{
+                                            planStrategyDisplay
+                                        }}</span>
+                                        <span class="text-xs text-(--sub-color)"
+                                            >Strategy</span
+                                        >
+                                    </div>
+                                </div>
+                            </div>
+                            <p
+                                v-if="planTargetInterpretationNote"
+                                class="mt-1 text-xs text-(--sub-color)"
+                            >
+                                {{ planTargetInterpretationNote }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div
+                        v-else-if="mobilePanelTab === 'map'"
+                        class="flex-1 flex flex-col overflow-hidden"
+                    >
+                        <div class="flex-1 md:p-4">
+                            <div class="h-full rounded-lg overflow-hidden">
+                                <ClientOnly>
+                                    <MapLibreCourseMap
+                                        :key="courseViewerMapKey"
+                                        :geo-json-data="geoJsonData"
+                                        :overlay-geo-json-data="
+                                            activityOverlayGeoJsonData
+                                        "
+                                        :waypoints="displayWaypoints"
+                                        :display-markers-as-splits="
+                                            waypointPanelTab === 'splits'
+                                        "
+                                        :selected-waypoint="selectedWaypoint"
+                                        :elevation-hover-point="
+                                            elevationHoverPoint
+                                        "
+                                        :highlight-segment="
+                                            stableHighlightSegment
+                                        "
+                                        highlight-color="#ff0000"
+                                        :fit-highlight="
+                                            shouldFitHighlightSegment
+                                        "
+                                        @map-hover="handleMapHover"
+                                        @map-leave="handleMapLeave"
+                                        @waypoint-click="handleWaypointClick"
+                                    />
+                                    <template #fallback>
+                                        <div
+                                            class="w-full h-full bg-(--sub-alt-color) rounded-lg flex items-center justify-center"
+                                        >
+                                            <div class="text-center">
+                                                <Icon
+                                                    name="svg-spinners:6-dots-scale"
+                                                    class="text-(--main-color) scale-200 mb-2"
+                                                />
+                                                <p class="text-(--sub-color)">
+                                                    Loading map...
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </ClientOnly>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div
+                        v-else-if="mobilePanelTab === 'charts'"
+                        class="flex-1 flex flex-col overflow-hidden"
+                    >
+                        <div
+                            class="border-b border-(--sub-color) relative overflow-hidden"
+                            :style="{ height: `${chartPanelHeight}px` }"
+                        >
+                            <div class="h-full p-2">
+                                <ElevationPaceChart
+                                    :geo-json-data="geoJsonData"
+                                    :course-settings="smoothingConfig"
+                                    :height="Math.max(0, chartPanelHeight - 16)"
+                                    :map-hover-distances="mapHoverDistances"
+                                    :selected-waypoint-distance="
+                                        waypointPanelTab === 'waypoints'
+                                            ? selectedWaypoint?.distance || null
+                                            : null
+                                    "
+                                    :waypoints="displayWaypoints"
+                                    :plan="effectivePlanForTiming"
+                                    :activity="currentActivity"
+                                    :show-pace-chart="!!currentPlan"
+                                    :show-grade-explanation-modal="
+                                        paceExplanationModalOpen
+                                    "
+                                    :zoom-range="chartZoomRange"
+                                    :highlight-segment="stableHighlightSegment"
+                                    highlight-color="#ff0000"
+                                    @elevation-hover="handleElevationHover"
+                                    @elevation-leave="handleElevationLeave"
+                                    @pace-hover="handlePaceHover"
+                                    @pace-leave="handlePaceLeave"
+                                    @grade-explanation-close="
+                                        closePaceExplanationModal
+                                    "
+                                    @range-select="handleChartRangeSelect"
+                                    @zoom-reset="handleChartZoomReset"
+                                    @waypoint-click="
+                                        handleElevationWaypointClick
+                                    "
+                                />
+                                <div
+                                    class="absolute left-0 bottom-0 w-full h-1 cursor-row-resize transition-all duration-200 z-10 hover:h-[3px] hover:bg-(--main-color)"
+                                    :class="{
+                                        'h-2 bg-(--main-color)':
+                                            chartIsResizing,
+                                        'bg-transparent hover:bg-(--main-color)':
+                                            !chartIsResizing,
+                                    }"
+                                    @mousedown="startChartResize"
+                                    @touchstart.stop.prevent="startChartResize"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div
+                        v-else-if="mobilePanelTab === 'waypoints'"
+                        class="flex-1 overflow-hidden"
+                    >
+                        <WaypointList
+                            :read-only="
+                                mode === 'public' ||
+                                !capabilities.canEditWaypoints
+                            "
+                            :course-settings="smoothingConfig"
+                            :waypoints="waypoints"
+                            :selected-waypoint="selectedWaypoint"
+                            :selected-segment="selectedWaypointSegment"
+                            :current-plan-id="currentPlanId"
+                            :current-plan="effectivePlanForTiming"
+                            :activity-comparison-waypoints="
+                                activityPlanDetail?.waypoints || []
+                            "
+                            :activity-comparison-segments="
+                                activityPlanDetail?.segments || []
+                            "
+                            :waypoint-stoppage-times="waypointStoppageTimes"
+                            :get-waypoint-note="getWaypointNote"
+                            :get-waypoint-custom-stoppage-time="
+                                getWaypointCustomStoppageTime
+                            "
+                            :get-default-stoppage-time="getDefaultStoppageTime"
+                            :geo-json-data="geoJsonData"
+                            @waypoint-select="handleWaypointSelect"
+                            @waypoint-hover="handleWaypointHover"
+                            @waypoint-leave="handleWaypointLeave"
+                            @segment-click="handleWaypointSegmentClick"
+                            @segment-cancel="handleWaypointSegmentCancel"
+                            @save-waypoint-note="saveWaypointNote"
+                            @delete-waypoint-note="deleteWaypointNote"
+                            @save-waypoint-stoppage-time="
+                                saveWaypointStoppageTime
+                            "
+                            @delete-waypoint-stoppage-time="
+                                deleteWaypointStoppageTime
+                            "
+                        />
+                    </div>
+
+                    <div v-else class="flex-1 overflow-hidden">
+                        <SplitsTable
+                            :read-only="mode === 'public'"
+                            :course-settings="smoothingConfig"
+                            :geo-json-data="geoJsonData"
+                            :current-plan="effectivePlanForTiming"
+                            :course-defaults="course || null"
+                            :activity-comparison-splits="
+                                activityPlanDetail?.splits || []
+                            "
+                            :waypoints="
+                                waypoints.map((w) => ({
+                                    id: w.id,
+                                    distance: w.distance,
+                                    order: w.order,
+                                }))
+                            "
+                            :waypoint-stoppage-times="waypointStoppageTimes"
+                            :get-default-stoppage-time="getDefaultStoppageTime"
+                            :selected-split-index="selectedSplitIndex"
+                            :selected-split-range="selectedSplitRange"
+                            @split-click="handleSplitClick"
+                            @split-range-click="handleSplitRangeClick"
+                            @split-cancel="handleSplitCancel"
+                        />
+                    </div>
+                </div>
+
+                <!-- Desktop layout -->
+                <div class="hidden md:flex md:flex-1 md:overflow-hidden">
+                    <!-- Left Panel: Charts and Map -->
+                    <div class="flex-1 flex flex-col overflow-hidden">
+                        <!-- Combined Charts Section -->
+                        <div
+                            class="border-b border-(--sub-color) relative overflow-hidden"
+                            :style="{ height: `${chartPanelHeight}px` }"
+                        >
+                            <div class="h-full px-2 pt-2 pb-4">
+                                <ElevationPaceChart
+                                    :geo-json-data="geoJsonData"
+                                    :course-settings="smoothingConfig"
+                                    :height="Math.max(0, chartPanelHeight - 24)"
+                                    :map-hover-distances="mapHoverDistances"
+                                    :selected-waypoint-distance="
+                                        waypointPanelTab === 'waypoints'
+                                            ? selectedWaypoint?.distance || null
+                                            : null
+                                    "
+                                    :waypoints="displayWaypoints"
+                                    :plan="effectivePlanForTiming"
+                                    :activity="currentActivity"
+                                    :show-pace-chart="!!currentPlan"
+                                    :show-grade-explanation-modal="
+                                        paceExplanationModalOpen
+                                    "
+                                    :zoom-range="chartZoomRange"
+                                    :highlight-segment="stableHighlightSegment"
+                                    highlight-color="#ff0000"
+                                    @elevation-hover="handleElevationHover"
+                                    @elevation-leave="handleElevationLeave"
+                                    @pace-hover="handlePaceHover"
+                                    @pace-leave="handlePaceLeave"
+                                    @grade-explanation-close="
+                                        closePaceExplanationModal
+                                    "
+                                    @range-select="handleChartRangeSelect"
+                                    @zoom-reset="handleChartZoomReset"
+                                    @waypoint-click="
+                                        handleElevationWaypointClick
+                                    "
+                                />
+                                <div
+                                    class="absolute left-0 bottom-0 w-full h-1 cursor-row-resize transition-all duration-200 z-10 hover:h-[3px] hover:bg-(--main-color)"
+                                    :class="{
+                                        'h-2 bg-(--main-color)':
+                                            chartIsResizing,
+                                        'bg-transparent hover:bg-(--main-color)':
+                                            !chartIsResizing,
+                                    }"
+                                    @mousedown="startChartResize"
+                                    @touchstart.stop.prevent="startChartResize"
+                                />
+                            </div>
+                        </div>
+
+                        <!-- Map Section -->
+                        <div class="flex-1 p-4">
+                            <div class="h-full rounded-lg overflow-hidden">
+                                <ClientOnly>
+                                    <MapLibreCourseMap
+                                        :key="courseViewerMapKey"
+                                        :geo-json-data="geoJsonData"
+                                        :overlay-geo-json-data="
+                                            activityOverlayGeoJsonData
+                                        "
+                                        :waypoints="displayWaypoints"
+                                        :display-markers-as-splits="
+                                            waypointPanelTab === 'splits'
+                                        "
+                                        :selected-waypoint="selectedWaypoint"
+                                        :elevation-hover-point="
+                                            elevationHoverPoint
+                                        "
+                                        :highlight-segment="
+                                            stableHighlightSegment
+                                        "
+                                        highlight-color="#ff0000"
+                                        :fit-highlight="
+                                            shouldFitHighlightSegment
+                                        "
+                                        @map-hover="handleMapHover"
+                                        @map-leave="handleMapLeave"
+                                        @waypoint-click="handleWaypointClick"
+                                    />
+                                    <template #fallback>
+                                        <div
+                                            class="w-full h-full bg-(--sub-alt-color) rounded-lg flex items-center justify-center"
+                                        >
+                                            <div class="text-center">
+                                                <Icon
+                                                    name="svg-spinners:6-dots-scale"
+                                                    class="text-(--main-color) scale-200 mb-2"
+                                                />
+                                                <p class="text-(--sub-color)">
+                                                    Loading map...
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </ClientOnly>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Panel: Waypoints List -->
+                    <div
+                        class="border-l border-(--sub-color) flex flex-col relative"
+                        :style="{ width: `${uiStore.waypointPanelWidth}px` }"
+                    >
+                        <!-- Resize handle -->
+                        <div
+                            class="absolute left-0 top-0 w-1 h-full cursor-col-resize transition-all duration-200 z-10 hover:w-[3px] hover:bg-(--main-color)"
+                            :class="{
+                                'w-2 bg-(--main-color)': isResizing,
+                                'bg-transparent hover:bg-(--main-color)':
+                                    !isResizing,
+                            }"
+                            @mousedown="startResize"
+                        />
+
+                        <div
+                            class="hidden md:block border-b border-(--sub-color)"
+                        >
+                            <div class="flex items-center">
+                                <button
+                                    class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
+                                    :class="{
+                                        'bg-(--main-color) text-(--bg-color)':
+                                            waypointPanelTab === 'waypoints',
+                                        'text-(--sub-color) hover:text-(--main-color)':
+                                            waypointPanelTab !== 'waypoints',
+                                    }"
+                                    @click="setWaypointDetailTab('waypoints')"
+                                >
+                                    Waypoints
+                                </button>
+                                <button
+                                    class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
+                                    :class="{
+                                        'bg-(--main-color) text-(--bg-color)':
+                                            waypointPanelTab === 'splits',
+                                        'text-(--sub-color) hover:text-(--main-color)':
+                                            waypointPanelTab !== 'splits',
+                                    }"
+                                    @click="setWaypointDetailTab('splits')"
+                                >
+                                    Splits
+                                </button>
+                            </div>
+                        </div>
+                        <div class="flex-1 overflow-hidden">
+                            <div
+                                v-if="waypointPanelTab === 'waypoints'"
+                                class="h-full"
+                            >
+                                <WaypointList
+                                    :read-only="
+                                        mode === 'public' ||
+                                        !capabilities.canEditWaypoints
+                                    "
+                                    :course-settings="smoothingConfig"
+                                    :waypoints="waypoints"
+                                    :selected-waypoint="selectedWaypoint"
+                                    :selected-segment="selectedWaypointSegment"
+                                    :current-plan-id="currentPlanId"
+                                    :current-plan="effectivePlanForTiming"
+                                    :activity-comparison-waypoints="
+                                        activityPlanDetail?.waypoints || []
+                                    "
+                                    :activity-comparison-segments="
+                                        activityPlanDetail?.segments || []
+                                    "
+                                    :waypoint-stoppage-times="
+                                        waypointStoppageTimes
+                                    "
+                                    :get-waypoint-note="getWaypointNote"
+                                    :get-waypoint-custom-stoppage-time="
+                                        getWaypointCustomStoppageTime
+                                    "
+                                    :get-default-stoppage-time="
+                                        getDefaultStoppageTime
+                                    "
+                                    :geo-json-data="geoJsonData"
+                                    @waypoint-select="handleWaypointSelect"
+                                    @waypoint-hover="handleWaypointHover"
+                                    @waypoint-leave="handleWaypointLeave"
+                                    @segment-click="handleWaypointSegmentClick"
+                                    @segment-cancel="
+                                        handleWaypointSegmentCancel
+                                    "
+                                    @save-waypoint-note="saveWaypointNote"
+                                    @delete-waypoint-note="deleteWaypointNote"
+                                    @save-waypoint-stoppage-time="
+                                        saveWaypointStoppageTime
+                                    "
+                                    @delete-waypoint-stoppage-time="
+                                        deleteWaypointStoppageTime
+                                    "
+                                />
+                            </div>
+                            <div v-else class="h-full">
+                                <SplitsTable
+                                    :read-only="mode === 'public'"
+                                    :course-settings="smoothingConfig"
+                                    :geo-json-data="geoJsonData"
+                                    :current-plan="effectivePlanForTiming"
+                                    :course-defaults="course || null"
+                                    :activity-comparison-splits="
+                                        activityPlanDetail?.splits || []
+                                    "
+                                    :waypoints="
+                                        waypoints.map((w) => ({
+                                            id: w.id,
+                                            distance: w.distance,
+                                            order: w.order,
+                                        }))
+                                    "
+                                    :waypoint-stoppage-times="
+                                        waypointStoppageTimes
+                                    "
+                                    :get-default-stoppage-time="
+                                        getDefaultStoppageTime
+                                    "
+                                    :selected-split-index="selectedSplitIndex"
+                                    :selected-split-range="selectedSplitRange"
+                                    @split-click="handleSplitClick"
+                                    @split-range-click="handleSplitRangeClick"
+                                    @split-cancel="handleSplitCancel"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Course Edit Modal -->
+        <CourseEditModal
+            :open="courseEditModalOpen"
+            :course="course || null"
+            :course-settings="smoothingConfig"
+            :waypoints="waypoints"
+            :geo-json-data="geoJsonData"
+            @close="closeCourseEditModal"
+            @course-updated="handleCourseUpdated"
+            @course-settings-updated="handleCourseSettingsUpdated"
+            @waypoint-updated="handleWaypointUpdated"
+            @waypoint-deleted="handleWaypointDeleted"
+            @waypoint-created="handleWaypointCreated"
         />
-      </div>
 
-      <div v-else-if="error" class="flex items-center justify-center h-full">
-        <div class="text-center">
-          <Icon
-            name="lucide:triangle-alert"
-            class="h-16 w-16 text-(--error-color) mx-auto mb-4"
-          />
-          <h2 class="text-xl font-semibold text-(--main-color) mb-2">
-            Course Not Found
-          </h2>
-          <p class="text-(--sub-color) mb-4">
-            The course you're looking for doesn't exist or you don't have access
-            to it.
-          </p>
-          <NuxtLink
-            to="/courses"
-            class="px-4 py-2 bg-(--main-color) text-(--bg-color) rounded-lg hover:opacity-80 transition-opacity"
-          >
-            Back to Courses
-          </NuxtLink>
-        </div>
-      </div>
-
-      <div v-else-if="course" class="flex flex-col h-full">
-        <!-- Header Section -->
-        <div
-          class="pb-2 pt-0 px-2 md:px-4 md:p-2 border-b border-(--sub-color) bg-(--bg-color)"
-        >
-          <div
-            class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-1"
-          >
-            <div class="flex-1">
-              <div class="text-2xl md:text-4xl font-bold text-(--main-color)">
-                <span class="inline-flex items-center gap-2">
-                  <span>{{ course.name }}</span>
-                  <Icon
-                    v-tooltip="
-                      course.public ? 'Public course' : 'Private course'
-                    "
-                    :name="course.public ? 'lucide:globe' : 'lucide:lock'"
-                    class="h-4 w-4 scale-70 text-(--sub-color)"
-                  />
-                </span>
-              </div>
-              <div
-                v-if="mode === 'public'"
-                class="mt-1 text-xs text-(--sub-color)"
-              >
-                {{ publicViewLabel }}
-              </div>
-              <div v-if="course.description" class="mt-2 course-description">
-                <div class="text-(--sub-color) course-description">
-                  <MDC :value="course.description" />
-                </div>
-              </div>
-            </div>
-            <div
-              v-if="mode === 'member'"
-              class="flex items-center gap-2 flex-wrap justify-start md:justify-end mt-1 md:mt-0 w-full md:w-auto"
-            >
-              <ActivitySelector
-                v-if="capabilities.canManageActivities"
-                :activities="activities"
-                :current-activity-id="currentActivityId"
-                :course-id="courseId"
-                @activity-selected="handleActivitySelected"
-                @activities-changed="handleActivitiesChanged"
-              />
-
-              <PlanSelector
-                v-if="mode === 'member' && capabilities.canManagePlans"
-                :plans="plans"
-                :current-plan-id="currentPlanId"
-                :course-id="courseId"
-                @plan-selected="handlePlanSelected"
-                @add-plan="openPlanSetupModal"
-                @edit-plan="openEditPlanModal"
-                @delete-plan="handlePlanDeleted"
-              />
-
-              <CourseActionsDropdown
-                v-if="course && mode === 'member'"
-                :course="course"
-                :current-plan="effectivePlanForTiming"
-                @edit-course="openCourseEditModal"
-                @download-file="downloadOriginalFile"
-                @export-plan-csv="exportPlanCsv"
-                @export-plan-pdf="exportPlanPdf"
-                @delete-course="deleteCourse"
-                @toggle-public="toggleCoursePublic"
-                @toggle-share="toggleCourseShare"
-                @toggle-plan-share="toggleCurrentPlanShare"
-                @copy-share-link="handleCopyShareLink"
-                @copy-plan-share-link="copyPlanShareLink"
-                @info-course="openCourseInfoModal"
-                @show-pace-explanation="openPaceExplanationModal"
-                @copy-course="cloneCourse"
-              />
-            </div>
-          </div>
-
-          <div class="hidden md:flex flex-col gap-4">
-            <!-- Course Metrics -->
-            <div class="flex items-center gap-2 text-sm">
-              <div
-                v-if="course.totalDistance != null"
-                class="flex items-center gap-2 text-(--main-color)"
-              >
-                <Icon
-                  name="lucide:map-pin"
-                  class="h-5 w-5 scale-150 -translate-y-0.5"
-                />
-                <div class="flex flex-col">
-                  <span class="font-medium">{{
-                    formatDistance(
-                      course.totalDistance,
-                      userSettingsStore.getDistanceUnitForCourse
-                        ? userSettingsStore.getDistanceUnitForCourse(
-                            course || undefined,
-                          )
-                        : (course?.defaultDistanceUnit ?? "miles"),
-                    )
-                  }}</span>
-                  <span class="text-xs text-(--sub-color)">Distance</span>
-                </div>
-              </div>
-              <div
-                v-if="course.elevationGain != null"
-                class="flex items-center gap-2 text-(--main-color)"
-              >
-                <Icon
-                  name="lucide:arrow-up"
-                  class="h-5 w-5 scale-150 -translate-y-0.5"
-                />
-                <div class="flex flex-col">
-                  <span class="font-medium">{{
-                    formatElevation(
-                      course.elevationGain,
-                      userSettingsStore.getElevationUnitForCourse
-                        ? userSettingsStore.getElevationUnitForCourse(
-                            course || undefined,
-                          )
-                        : (course?.defaultElevationUnit ?? "feet"),
-                    )
-                  }}</span>
-                  <span class="text-xs text-(--sub-color)">Elevation Gain</span>
-                </div>
-              </div>
-              <div
-                v-if="course.elevationLoss != null"
-                class="flex items-center gap-2 text-(--main-color)"
-              >
-                <Icon
-                  name="lucide:arrow-down"
-                  class="h-5 w-5 scale-150 -translate-y-0.5"
-                />
-                <div class="flex flex-col">
-                  <span class="font-medium">{{
-                    formatElevation(
-                      course.elevationLoss,
-                      userSettingsStore.getElevationUnitForCourse
-                        ? userSettingsStore.getElevationUnitForCourse(
-                            course || undefined,
-                          )
-                        : (course?.defaultElevationUnit ?? "feet"),
-                    )
-                  }}</span>
-                  <span class="text-xs text-(--sub-color)">Elevation Loss</span>
-                </div>
-              </div>
-              <div
-                v-if="formatRaceDate(course.raceDate)"
-                class="flex items-center gap-2 text-(--main-color)"
-              >
-                <Icon
-                  name="lucide:calendar-clock"
-                  class="h-5 w-5 scale-150 -translate-y-0.5"
-                />
-                <div class="flex flex-col">
-                  <span class="font-medium">{{
-                    formatRaceDate(course.raceDate)
-                  }}</span>
-                  <span class="text-xs text-(--sub-color)">Race Date</span>
-                </div>
-              </div>
-
-              <div
-                v-if="
-                  currentPlan &&
-                  (capabilities.canViewPlans ||
-                    (mode === 'public' && publicSharedPlan))
-                "
-                class="w-px h-8 bg-(--sub-color) opacity-60"
-              ></div>
-
-              <div
-                v-if="
-                  currentPlan &&
-                  (capabilities.canViewPlans ||
-                    (mode === 'public' && publicSharedPlan))
-                "
-                class="flex items-center gap-2 text-sm"
-              >
-                <div class="flex items-center gap-2 text-(--main-color)">
-                  <Icon
-                    name="lucide:timer"
-                    class="h-5 w-5 scale-150 -translate-y-0.5"
-                  />
-                  <div class="flex flex-col">
-                    <span class="font-medium">{{ planPaceDisplay }}</span>
-                    <span class="text-xs text-(--sub-color)">Target Pace</span>
-                  </div>
-                </div>
-
-                <div class="flex items-center gap-2 text-(--main-color)">
-                  <Icon
-                    name="lucide:clock-3"
-                    class="h-5 w-5 scale-150 -translate-y-0.5"
-                  />
-                  <div class="flex flex-col">
-                    <span class="font-medium">{{
-                      planEstimatedElapsedDisplay
-                    }}</span>
-                    <span class="text-xs text-(--sub-color)">Est. Elapsed</span>
-                  </div>
-                </div>
-
-                <div class="flex items-center gap-2 text-(--main-color)">
-                  <Icon
-                    name="lucide:notebook-pen"
-                    class="h-5 w-5 scale-150 -translate-y-0.5"
-                  />
-                  <div class="flex flex-col">
-                    <span class="font-medium">{{ planStrategyDisplay }}</span>
-                    <span class="text-xs text-(--sub-color)">Strategy</span>
-                  </div>
-                </div>
-              </div>
-              <p
-                v-if="planTargetInterpretationNote"
-                class="mt-1 text-xs text-(--sub-color)"
-              >
-                {{ planTargetInterpretationNote }}
-              </p>
-            </div>
-          </div>
-
-          <div
-            v-if="mode === 'member' && currentActivityInfo"
-            class="mt-2 flex flex-wrap gap-2 text-xs md:text-sm"
-          >
-            <div
-              class="px-3 py-2 rounded-lg border border-(--sub-color) bg-(--sub-alt-color) text-(--main-color)"
-            >
-              <span class="font-medium">Activity:</span>
-              {{ currentActivityInfo.sourceFileName }}
-            </div>
-            <div
-              class="px-3 py-2 rounded-lg border border-(--sub-color) bg-(--sub-alt-color) text-(--main-color)"
-            >
-              <span class="font-medium">Actual:</span>
-              {{
-                currentActivityInfo.elapsedTimeSeconds != null
-                  ? formatElapsedTime(currentActivityInfo.elapsedTimeSeconds)
-                  : "—"
-              }}
-            </div>
-            <div
-              class="px-3 py-2 rounded-lg border border-(--sub-color) bg-(--sub-alt-color) text-(--main-color)"
-            >
-              <span class="font-medium">Match:</span>
-              {{ currentActivityInfo.matchStatus }} ·
-              {{ currentActivityInfo.matchConfidence }}%
-            </div>
-            <div
-              v-if="currentActivityInfo && currentActivityId && currentActivityDetailPending"
-              class="px-3 py-2 rounded-lg border border-(--sub-color) bg-(--sub-alt-color) text-(--sub-color)"
-            >
-              Loading activity detail…
-            </div>
-            <div
-              v-if="currentPlan && activityPlanDetail"
-              class="px-3 py-2 rounded-lg border border-(--sub-color) bg-(--sub-alt-color) text-(--main-color)"
-            >
-              <span class="font-medium">Planned:</span>
-              {{
-                activityPlanDetail.plannedElapsedSeconds != null
-                  ? formatElapsedTime(activityPlanDetail.plannedElapsedSeconds)
-                  : "—"
-              }}
-            </div>
-            <div
-              v-if="currentPlan && activityPlanDetail"
-              class="px-3 py-2 rounded-lg border border-(--sub-color) bg-(--sub-alt-color) text-(--main-color)"
-            >
-              <span class="font-medium">Delta:</span>
-              {{ formatSignedDuration(activityPlanDetail.deltaSeconds) }}
-            </div>
-          </div>
-        </div>
-
-        <!-- Content Section -->
-        <!-- Mobile tabs -->
-        <div
-          class="md:hidden flex flex-col gap-2 border-b border-(--sub-color)"
-        >
-          <div class="flex items-center">
-            <button
-              class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
-              :class="{
-                'bg-(--main-color) text-(--bg-color)':
-                  mobilePanelTab === 'info',
-                'text-(--sub-color) hover:text-(--main-color)':
-                  mobilePanelTab !== 'info',
-              }"
-              @click="mobilePanelTab = 'info'"
-            >
-              Info
-            </button>
-
-            <button
-              class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
-              :class="{
-                'bg-(--main-color) text-(--bg-color)': mobilePanelTab === 'map',
-                'text-(--sub-color) hover:text-(--main-color)':
-                  mobilePanelTab !== 'map',
-              }"
-              @click="mobilePanelTab = 'map'"
-            >
-              Map
-            </button>
-            <button
-              class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
-              :class="{
-                'bg-(--main-color) text-(--bg-color)':
-                  mobilePanelTab === 'charts',
-                'text-(--sub-color) hover:text-(--main-color)':
-                  mobilePanelTab !== 'charts',
-              }"
-              @click="mobilePanelTab = 'charts'"
-            >
-              Charts
-            </button>
-            <button
-              class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
-              :class="{
-                'bg-(--main-color) text-(--bg-color)':
-                  mobilePanelTab === 'waypoints',
-                'text-(--sub-color) hover:text-(--main-color)':
-                  mobilePanelTab !== 'waypoints',
-              }"
-              @click="setMobileWaypointDetailTab('waypoints')"
-            >
-              Waypoints
-            </button>
-            <button
-              class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
-              :class="{
-                'bg-(--main-color) text-(--bg-color)':
-                  mobilePanelTab === 'splits',
-                'text-(--sub-color) hover:text-(--main-color)':
-                  mobilePanelTab !== 'splits',
-              }"
-              @click="setMobileWaypointDetailTab('splits')"
-            >
-              Splits
-            </button>
-          </div>
-        </div>
-
-        <!-- Mobile panels -->
-        <div class="md:hidden flex-1 flex flex-col overflow-hidden">
-          <div
-            v-if="mobilePanelTab === 'info'"
-            class="flex-1 flex flex-col overflow-y-auto p-4"
-          >
-            <div class="space-y-4">
-              <div v-if="mode === 'public'" class="text-xs text-(--sub-color)">
-                {{ publicViewLabel }}
-              </div>
-              <div
-                class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-(--main-color)"
-              >
-                <div
-                  v-if="course.totalDistance != null"
-                  class="flex items-center gap-2"
-                >
-                  <Icon name="lucide:map-pin" class="h-5 w-5" />
-                  <div class="flex flex-col">
-                    <span class="font-medium">
-                      {{
-                        formatDistance(
-                          course.totalDistance,
-                          userSettingsStore.getDistanceUnitForCourse
-                            ? userSettingsStore.getDistanceUnitForCourse(
-                                course || undefined,
-                              )
-                            : (course?.defaultDistanceUnit ?? "miles"),
-                        )
-                      }}
-                    </span>
-                    <span class="text-xs text-(--sub-color)">Distance</span>
-                  </div>
-                </div>
-
-                <div
-                  v-if="course.elevationGain != null"
-                  class="flex items-center gap-2"
-                >
-                  <Icon name="lucide:arrow-up" class="h-5 w-5" />
-                  <div class="flex flex-col">
-                    <span class="font-medium">
-                      {{
-                        formatElevation(
-                          course.elevationGain,
-                          userSettingsStore.getElevationUnitForCourse
-                            ? userSettingsStore.getElevationUnitForCourse(
-                                course || undefined,
-                              )
-                            : (course?.defaultElevationUnit ?? "feet"),
-                        )
-                      }}
-                    </span>
-                    <span class="text-xs text-(--sub-color)"
-                      >Elevation Gain</span
-                    >
-                  </div>
-                </div>
-
-                <div
-                  v-if="course.elevationLoss != null"
-                  class="flex items-center gap-2"
-                >
-                  <Icon name="lucide:arrow-down" class="h-5 w-5" />
-                  <div class="flex flex-col">
-                    <span class="font-medium">
-                      {{
-                        formatElevation(
-                          course.elevationLoss,
-                          userSettingsStore.getElevationUnitForCourse
-                            ? userSettingsStore.getElevationUnitForCourse(
-                                course || undefined,
-                              )
-                            : (course?.defaultElevationUnit ?? "feet"),
-                        )
-                      }}
-                    </span>
-                    <span class="text-xs text-(--sub-color)"
-                      >Elevation Loss</span
-                    >
-                  </div>
-                </div>
-
-                <div
-                  v-if="formatRaceDate(course.raceDate)"
-                  class="flex items-center gap-2"
-                >
-                  <Icon name="lucide:calendar-clock" class="h-5 w-5" />
-                  <div class="flex flex-col">
-                    <span class="font-medium">{{
-                      formatRaceDate(course.raceDate)
-                    }}</span>
-                    <span class="text-xs text-(--sub-color)">Race Date</span>
-                  </div>
-                </div>
-
-                <div class="flex items-center gap-2">
-                  <Icon
-                    :name="course.public ? 'lucide:globe' : 'lucide:lock'"
-                    class="h-5 w-5"
-                  />
-                  <div class="flex flex-col">
-                    <span class="font-medium">{{
-                      course.public ? "Public" : "Private"
-                    }}</span>
-                    <span class="text-xs text-(--sub-color)">Visibility</span>
-                  </div>
-                </div>
-
-                <div v-if="currentPlan" class="flex items-center gap-2">
-                  <Icon name="lucide:timer" class="h-5 w-5" />
-                  <div class="flex flex-col">
-                    <span class="font-medium">{{ planPaceDisplay }}</span>
-                    <span class="text-xs text-(--sub-color)">Target Pace</span>
-                  </div>
-                </div>
-
-                <div v-if="currentPlan" class="flex items-center gap-2">
-                  <Icon name="lucide:clock-3" class="h-5 w-5" />
-                  <div class="flex flex-col">
-                    <span class="font-medium">{{
-                      planEstimatedElapsedDisplay
-                    }}</span>
-                    <span class="text-xs text-(--sub-color)">Est. Elapsed</span>
-                  </div>
-                </div>
-
-                <div v-if="currentPlan" class="flex items-center gap-2">
-                  <Icon name="lucide:notebook-pen" class="h-5 w-5" />
-                  <div class="flex flex-col">
-                    <span class="font-medium">{{ planStrategyDisplay }}</span>
-                    <span class="text-xs text-(--sub-color)">Strategy</span>
-                  </div>
-                </div>
-              </div>
-              <p
-                v-if="planTargetInterpretationNote"
-                class="mt-1 text-xs text-(--sub-color)"
-              >
-                {{ planTargetInterpretationNote }}
-              </p>
-            </div>
-          </div>
-
-          <div
-            v-else-if="mobilePanelTab === 'map'"
-            class="flex-1 flex flex-col overflow-hidden"
-          >
-            <div class="flex-1 p-4">
-              <div class="h-full rounded-lg overflow-hidden">
-                <ClientOnly>
-                  <MapLibreCourseMap
-                    :key="courseViewerMapKey"
-                    :geo-json-data="geoJsonData"
-                    :overlay-geo-json-data="activityOverlayGeoJsonData"
-                    :waypoints="displayWaypoints"
-                    :display-markers-as-splits="waypointPanelTab === 'splits'"
-                    :selected-waypoint="selectedWaypoint"
-                    :elevation-hover-point="elevationHoverPoint"
-                    :highlight-segment="stableHighlightSegment"
-                    highlight-color="#ff0000"
-                    :fit-highlight="shouldFitHighlightSegment"
-                    @map-hover="handleMapHover"
-                    @map-leave="handleMapLeave"
-                    @waypoint-click="handleWaypointClick"
-                  />
-                  <template #fallback>
-                    <div
-                      class="w-full h-full bg-(--sub-alt-color) rounded-lg flex items-center justify-center"
-                    >
-                      <div class="text-center">
-                        <Icon
-                          name="svg-spinners:6-dots-scale"
-                          class="text-(--main-color) scale-200 mb-2"
-                        />
-                        <p class="text-(--sub-color)">Loading map...</p>
-                      </div>
-                    </div>
-                  </template>
-                </ClientOnly>
-              </div>
-            </div>
-          </div>
-
-          <div
-            v-else-if="mobilePanelTab === 'charts'"
-            class="flex-1 flex flex-col overflow-hidden"
-          >
-            <div
-              class="border-b border-(--sub-color) relative overflow-hidden"
-              :style="{ height: `${chartPanelHeight}px` }"
-            >
-              <div class="h-full p-2">
-                <ElevationPaceChart
-                  :geo-json-data="geoJsonData"
-                  :course-settings="smoothingConfig"
-                  :height="Math.max(0, chartPanelHeight - 16)"
-                  :map-hover-distances="mapHoverDistances"
-                  :selected-waypoint-distance="
-                    waypointPanelTab === 'waypoints'
-                      ? selectedWaypoint?.distance || null
-                      : null
-                  "
-                  :waypoints="displayWaypoints"
-                  :plan="effectivePlanForTiming"
-                  :activity="currentActivity"
-                  :show-pace-chart="!!currentPlan"
-                  :show-grade-explanation-modal="paceExplanationModalOpen"
-                  :zoom-range="chartZoomRange"
-                  :highlight-segment="stableHighlightSegment"
-                  highlight-color="#ff0000"
-                  @elevation-hover="handleElevationHover"
-                  @elevation-leave="handleElevationLeave"
-                  @pace-hover="handlePaceHover"
-                  @pace-leave="handlePaceLeave"
-                  @grade-explanation-close="closePaceExplanationModal"
-                  @range-select="handleChartRangeSelect"
-                  @zoom-reset="handleChartZoomReset"
-                  @waypoint-click="handleElevationWaypointClick"
-                />
-                <div
-                  class="absolute left-0 bottom-0 w-full h-1 cursor-row-resize transition-all duration-200 z-10 hover:h-[3px] hover:bg-(--main-color)"
-                  :class="{
-                    'h-2 bg-(--main-color)': chartIsResizing,
-                    'bg-transparent hover:bg-(--main-color)': !chartIsResizing,
-                  }"
-                  @mousedown="startChartResize"
-                  @touchstart.stop.prevent="startChartResize"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div
-            v-else-if="mobilePanelTab === 'waypoints'"
-            class="flex-1 overflow-hidden"
-          >
-            <WaypointList
-              :read-only="mode === 'public' || !capabilities.canEditWaypoints"
-              :course-settings="smoothingConfig"
-              :waypoints="waypoints"
-              :selected-waypoint="selectedWaypoint"
-              :selected-segment="selectedWaypointSegment"
-              :current-plan-id="currentPlanId"
-              :current-plan="effectivePlanForTiming"
-              :activity-comparison-waypoints="activityPlanDetail?.waypoints || []"
-              :activity-comparison-segments="activityPlanDetail?.segments || []"
-              :waypoint-stoppage-times="waypointStoppageTimes"
-              :get-waypoint-note="getWaypointNote"
-              :get-waypoint-custom-stoppage-time="
-                getWaypointCustomStoppageTime
-              "
-              :get-default-stoppage-time="getDefaultStoppageTime"
-              :geo-json-data="geoJsonData"
-              @waypoint-select="handleWaypointSelect"
-              @waypoint-hover="handleWaypointHover"
-              @waypoint-leave="handleWaypointLeave"
-              @segment-click="handleWaypointSegmentClick"
-              @segment-cancel="handleWaypointSegmentCancel"
-              @save-waypoint-note="saveWaypointNote"
-              @delete-waypoint-note="deleteWaypointNote"
-              @save-waypoint-stoppage-time="saveWaypointStoppageTime"
-              @delete-waypoint-stoppage-time="deleteWaypointStoppageTime"
-            />
-          </div>
-
-          <div v-else class="flex-1 overflow-hidden">
-            <SplitsTable
-              :read-only="mode === 'public'"
-              :course-settings="smoothingConfig"
-              :geo-json-data="geoJsonData"
-              :current-plan="effectivePlanForTiming"
-              :course-defaults="course || null"
-              :activity-comparison-splits="activityPlanDetail?.splits || []"
-              :waypoints="
-                waypoints.map((w) => ({
-                  id: w.id,
-                  distance: w.distance,
-                  order: w.order,
-                }))
-              "
-              :waypoint-stoppage-times="waypointStoppageTimes"
-              :get-default-stoppage-time="getDefaultStoppageTime"
-              :selected-split-index="selectedSplitIndex"
-              :selected-split-range="selectedSplitRange"
-              @split-click="handleSplitClick"
-              @split-range-click="handleSplitRangeClick"
-              @split-cancel="handleSplitCancel"
-            />
-          </div>
-        </div>
-
-        <!-- Desktop layout -->
-        <div class="hidden md:flex md:flex-1 md:overflow-hidden">
-          <!-- Left Panel: Charts and Map -->
-          <div class="flex-1 flex flex-col overflow-hidden">
-            <!-- Combined Charts Section -->
-            <div
-              class="border-b border-(--sub-color) relative overflow-hidden"
-              :style="{ height: `${chartPanelHeight}px` }"
-            >
-              <div class="h-full px-2 pt-2 pb-4">
-                <ElevationPaceChart
-                  :geo-json-data="geoJsonData"
-                  :course-settings="smoothingConfig"
-                  :height="Math.max(0, chartPanelHeight - 24)"
-                  :map-hover-distances="mapHoverDistances"
-                  :selected-waypoint-distance="
-                    waypointPanelTab === 'waypoints'
-                      ? selectedWaypoint?.distance || null
-                      : null
-                  "
-                  :waypoints="displayWaypoints"
-                  :plan="effectivePlanForTiming"
-                  :activity="currentActivity"
-                  :show-pace-chart="!!currentPlan"
-                  :show-grade-explanation-modal="paceExplanationModalOpen"
-                  :zoom-range="chartZoomRange"
-                  :highlight-segment="stableHighlightSegment"
-                  highlight-color="#ff0000"
-                  @elevation-hover="handleElevationHover"
-                  @elevation-leave="handleElevationLeave"
-                  @pace-hover="handlePaceHover"
-                  @pace-leave="handlePaceLeave"
-                  @grade-explanation-close="closePaceExplanationModal"
-                  @range-select="handleChartRangeSelect"
-                  @zoom-reset="handleChartZoomReset"
-                  @waypoint-click="handleElevationWaypointClick"
-                />
-                <div
-                  class="absolute left-0 bottom-0 w-full h-1 cursor-row-resize transition-all duration-200 z-10 hover:h-[3px] hover:bg-(--main-color)"
-                  :class="{
-                    'h-2 bg-(--main-color)': chartIsResizing,
-                    'bg-transparent hover:bg-(--main-color)': !chartIsResizing,
-                  }"
-                  @mousedown="startChartResize"
-                  @touchstart.stop.prevent="startChartResize"
-                />
-              </div>
-            </div>
-
-            <!-- Map Section -->
-            <div class="flex-1 p-4">
-              <div class="h-full rounded-lg overflow-hidden">
-                <ClientOnly>
-                  <MapLibreCourseMap
-                    :key="courseViewerMapKey"
-                    :geo-json-data="geoJsonData"
-                    :overlay-geo-json-data="activityOverlayGeoJsonData"
-                    :waypoints="displayWaypoints"
-                    :display-markers-as-splits="waypointPanelTab === 'splits'"
-                    :selected-waypoint="selectedWaypoint"
-                    :elevation-hover-point="elevationHoverPoint"
-                    :highlight-segment="stableHighlightSegment"
-                    highlight-color="#ff0000"
-                    :fit-highlight="shouldFitHighlightSegment"
-                    @map-hover="handleMapHover"
-                    @map-leave="handleMapLeave"
-                    @waypoint-click="handleWaypointClick"
-                  />
-                  <template #fallback>
-                    <div
-                      class="w-full h-full bg-(--sub-alt-color) rounded-lg flex items-center justify-center"
-                    >
-                      <div class="text-center">
-                        <Icon
-                          name="svg-spinners:6-dots-scale"
-                          class="text-(--main-color) scale-200 mb-2"
-                        />
-                        <p class="text-(--sub-color)">Loading map...</p>
-                      </div>
-                    </div>
-                  </template>
-                </ClientOnly>
-              </div>
-            </div>
-          </div>
-
-          <!-- Right Panel: Waypoints List -->
-          <div
-            class="border-l border-(--sub-color) flex flex-col relative"
-            :style="{ width: `${uiStore.waypointPanelWidth}px` }"
-          >
-            <!-- Resize handle -->
-            <div
-              class="absolute left-0 top-0 w-1 h-full cursor-col-resize transition-all duration-200 z-10 hover:w-[3px] hover:bg-(--main-color)"
-              :class="{
-                'w-2 bg-(--main-color)': isResizing,
-                'bg-transparent hover:bg-(--main-color)': !isResizing,
-              }"
-              @mousedown="startResize"
-            />
-
-            <div class="hidden md:block border-b border-(--sub-color)">
-              <div class="flex items-center">
-                <button
-                  class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
-                  :class="{
-                    'bg-(--main-color) text-(--bg-color)':
-                      waypointPanelTab === 'waypoints',
-                    'text-(--sub-color) hover:text-(--main-color)':
-                      waypointPanelTab !== 'waypoints',
-                  }"
-                  @click="setWaypointDetailTab('waypoints')"
-                >
-                  Waypoints
-                </button>
-                <button
-                  class="px-3 py-1 rounded-none! transition-colors m-0! outline-none!"
-                  :class="{
-                    'bg-(--main-color) text-(--bg-color)':
-                      waypointPanelTab === 'splits',
-                    'text-(--sub-color) hover:text-(--main-color)':
-                      waypointPanelTab !== 'splits',
-                  }"
-                  @click="setWaypointDetailTab('splits')"
-                >
-                  Splits
-                </button>
-              </div>
-            </div>
-            <div class="flex-1 overflow-hidden">
-              <div v-if="waypointPanelTab === 'waypoints'" class="h-full">
-                <WaypointList
-                  :read-only="
-                    mode === 'public' || !capabilities.canEditWaypoints
-                  "
-                  :course-settings="smoothingConfig"
-                  :waypoints="waypoints"
-                  :selected-waypoint="selectedWaypoint"
-                  :selected-segment="selectedWaypointSegment"
-                  :current-plan-id="currentPlanId"
-                  :current-plan="effectivePlanForTiming"
-                  :activity-comparison-waypoints="
-                    activityPlanDetail?.waypoints || []
-                  "
-                  :activity-comparison-segments="
-                    activityPlanDetail?.segments || []
-                  "
-                  :waypoint-stoppage-times="waypointStoppageTimes"
-                  :get-waypoint-note="getWaypointNote"
-                  :get-waypoint-custom-stoppage-time="
-                    getWaypointCustomStoppageTime
-                  "
-                  :get-default-stoppage-time="getDefaultStoppageTime"
-                  :geo-json-data="geoJsonData"
-                  @waypoint-select="handleWaypointSelect"
-                  @waypoint-hover="handleWaypointHover"
-                  @waypoint-leave="handleWaypointLeave"
-                  @segment-click="handleWaypointSegmentClick"
-                  @segment-cancel="handleWaypointSegmentCancel"
-                  @save-waypoint-note="saveWaypointNote"
-                  @delete-waypoint-note="deleteWaypointNote"
-                  @save-waypoint-stoppage-time="saveWaypointStoppageTime"
-                  @delete-waypoint-stoppage-time="deleteWaypointStoppageTime"
-                />
-              </div>
-              <div v-else class="h-full">
-                <SplitsTable
-                  :read-only="mode === 'public'"
-                  :course-settings="smoothingConfig"
-                  :geo-json-data="geoJsonData"
-                  :current-plan="effectivePlanForTiming"
-                  :course-defaults="course || null"
-                  :activity-comparison-splits="
-                    activityPlanDetail?.splits || []
-                  "
-                  :waypoints="
-                    waypoints.map((w) => ({
-                      id: w.id,
-                      distance: w.distance,
-                      order: w.order,
-                    }))
-                  "
-                  :waypoint-stoppage-times="waypointStoppageTimes"
-                  :get-default-stoppage-time="getDefaultStoppageTime"
-                  :selected-split-index="selectedSplitIndex"
-                  :selected-split-range="selectedSplitRange"
-                  @split-click="handleSplitClick"
-                  @split-range-click="handleSplitRangeClick"
-                  @split-cancel="handleSplitCancel"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+        <!-- Plan Setup Modal -->
+        <PlanSetupModal
+            v-if="mode === 'member' && capabilities.canManagePlans"
+            :is-open="planSetupModalOpen"
+            :course-id="courseId"
+            :course-total-distance="course?.totalDistance || null"
+            :course-default-distance-unit="
+                course?.defaultDistanceUnit || undefined
+            "
+            :intermediate-waypoint-count="intermediateWaypointCount"
+            :existing-plan="editingPlanPayload"
+            @close="closePlanSetupModal"
+            @plan-created="handlePlanCreated"
+            @plan-updated="handlePlanUpdated"
+        />
+        <CourseInfoModal
+            :open="courseInfoModalOpen"
+            :course="course || null"
+            :waypoint-count="waypoints.length"
+            @close="closeCourseInfoModal"
+        />
     </div>
-
-    <!-- Course Edit Modal -->
-    <CourseEditModal
-      :open="courseEditModalOpen"
-      :course="course || null"
-      :course-settings="smoothingConfig"
-      :waypoints="waypoints"
-      :geo-json-data="geoJsonData"
-      @close="closeCourseEditModal"
-      @course-updated="handleCourseUpdated"
-      @course-settings-updated="handleCourseSettingsUpdated"
-      @waypoint-updated="handleWaypointUpdated"
-      @waypoint-deleted="handleWaypointDeleted"
-      @waypoint-created="handleWaypointCreated"
-    />
-
-    <!-- Plan Setup Modal -->
-    <PlanSetupModal
-      v-if="mode === 'member' && capabilities.canManagePlans"
-      :is-open="planSetupModalOpen"
-      :course-id="courseId"
-      :course-total-distance="course?.totalDistance || null"
-      :course-default-distance-unit="course?.defaultDistanceUnit || undefined"
-      :intermediate-waypoint-count="intermediateWaypointCount"
-      :existing-plan="editingPlanPayload"
-      @close="closePlanSetupModal"
-      @plan-created="handlePlanCreated"
-      @plan-updated="handlePlanUpdated"
-    />
-    <CourseInfoModal
-      :open="courseInfoModalOpen"
-      :course="course || null"
-      :waypoint-count="waypoints.length"
-      @close="closeCourseInfoModal"
-    />
-  </div>
 </template>

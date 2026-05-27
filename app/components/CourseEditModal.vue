@@ -1836,7 +1836,7 @@ function canMoveBackward(waypoint: Waypoint): boolean {
         <div class="w-full h-full flex flex-col">
             <!-- Header -->
             <div class="flex items-center justify-between">
-                <div class="text-2xl font-bold text-(--main-color)">
+                <div class="text-2xl font-medium text-(--main-color)">
                     Edit Course
                 </div>
                 <button

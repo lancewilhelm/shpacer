@@ -24,8 +24,9 @@ const isUploading = ref(false);
 const currentActivity = computed(() => {
     if (!props.currentActivityId) return null;
     return (
-        props.activities.find((activity) => activity.id === props.currentActivityId) ||
-        null
+        props.activities.find(
+            (activity) => activity.id === props.currentActivityId,
+        ) || null
     );
 });
 
@@ -101,9 +102,12 @@ async function deleteActivity(activityId: string, event: Event) {
     }
 
     try {
-        await $fetch(`/api/courses/${props.courseId}/activities/${activityId}`, {
-            method: "DELETE",
-        });
+        await $fetch(
+            `/api/courses/${props.courseId}/activities/${activityId}`,
+            {
+                method: "DELETE",
+            },
+        );
         emit("activities-changed");
         if (props.currentActivityId === activityId) {
             emit("activity-selected", "");
@@ -160,14 +164,11 @@ onBeforeUnmount(() => {
 
         <div ref="dropdownRef" class="relative">
             <button
-                class="flex items-center gap-2 px-2 py-1 md:px-3 md:py-2 border border-(--main-color) text-(--main-color) rounded-sm hover:bg-(--main-color) hover:text-(--bg-color) transition-colors text-xs md:text-sm font-medium"
+                class="flex items-center gap-2 px-2 py-1 md:px-3 md:py-2 border border-(--main-color) text-(--main-color) rounded-sm hover:bg-(--main-color) hover:text-(--bg-color) transition-colors text-xs md:text-sm"
                 @click="dropdownOpen = !dropdownOpen"
             >
-                <Icon
-                    name="lucide:flag"
-                    class="h-3 w-3 md:h-4 md:w-4"
-                />
-                <span class="font-medium">
+                <Icon name="lucide:flag" class="h-3 w-3 md:h-4 md:w-4" />
+                <span>
                     {{
                         currentActivity
                             ? currentActivity.sourceFileName
@@ -199,7 +200,7 @@ onBeforeUnmount(() => {
                     >
                         <div class="flex items-center gap-2">
                             <Icon name="lucide:eye-off" class="h-4 w-4" />
-                            <span class="font-medium">No Activity</span>
+                            <span>No Activity</span>
                         </div>
                     </div>
 
@@ -217,7 +218,7 @@ onBeforeUnmount(() => {
                         @click="selectActivity(activity.id)"
                     >
                         <div class="flex-1 min-w-0">
-                            <div class="font-medium truncate">
+                            <div class="truncate">
                                 {{ activity.sourceFileName }}
                             </div>
                             <div class="text-xs mt-1 opacity-75">
@@ -240,10 +241,7 @@ onBeforeUnmount(() => {
                             class="p-1 rounded hover:bg-black/10 transition-colors text-(--error-color) ml-2"
                             @click="deleteActivity(activity.id, $event)"
                         >
-                            <Icon
-                                name="lucide:trash-2"
-                                class="h-3 w-3"
-                            />
+                            <Icon name="lucide:trash-2" class="h-3 w-3" />
                         </button>
                     </div>
 
@@ -262,8 +260,12 @@ onBeforeUnmount(() => {
                                 "
                                 class="h-4 w-4"
                             />
-                            <span class="font-medium">
-                                {{ isUploading ? "Uploading..." : "Upload Activity" }}
+                            <span>
+                                {{
+                                    isUploading
+                                        ? "Uploading..."
+                                        : "Upload Activity"
+                                }}
                             </span>
                         </div>
                     </div>
